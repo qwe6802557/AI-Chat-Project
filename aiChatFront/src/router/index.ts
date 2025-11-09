@@ -1,0 +1,82 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import HomeView from '../views/HomeView.vue'
+
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
+  routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('../views/Login/index.vue'),
+      meta: {
+        title: 'Login',
+        requiresAuth: false,
+      },
+    },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/Register/index.vue'),
+      meta: {
+        title: 'Sign Up',
+        requiresAuth: false,
+      },
+    },
+    {
+      path: '/',
+      redirect: '/chat',
+    },
+    {
+      path: '/chat',
+      name: 'chat',
+      component: () => import('../views/Chat/index.vue'),
+      meta: {
+        title: 'AI Chat',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/home',
+      name: 'home',
+      component: HomeView,
+      meta: {
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: () => import('../views/AboutView.vue'),
+    },
+    {
+      path: '/test',
+      name: 'test',
+      component: () => import('../views/TestView.vue'),
+    },
+  ],
+})
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  // 更新页面标题
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - AI Chat`
+  } else {
+    document.title = 'AI Chat'
+  }
+
+  // 检查是否需要认证
+  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true'
+
+  if (to.meta.requiresAuth && !isAuthenticated) {
+    // 需要认证但未登录，跳转到登录页
+    next({ name: 'login', query: { redirect: to.fullPath } })
+  } else if ((to.name === 'login' || to.name === 'register') && isAuthenticated) {
+    // 已登录用户访问登录/注册页，跳转到聊天页
+    next({ name: 'chat' })
+  } else {
+    next()
+  }
+})
+
+export default router

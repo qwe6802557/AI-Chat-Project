@@ -1,0 +1,69 @@
+# ============================================
+# AI Chat Projects - Git Ignore Configuration
+# ============================================
+
+# ===== 项目根目录下的 JSON 聊天记录文件 =====
+前端开发__*.json
+
+# ===== 所有子目录下的 README.md 文件 =====
+# 排除所有子目录中的 README.md（但保留根目录的 README.md）
+*/README.md
+**/README.md
+
+# ===== Node.js 相关 =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===== 构建输出 =====
+dist/
+dist-ssr/
+dist-electron/
+*.local
+
+# ===== 编辑器和 IDE =====
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# ===== 环境变量文件 =====
+.env
+.env.local
+.env.*.local
+
+# ===== 日志文件 =====
+logs/
+*.log
+
+# ===== 临时文件 =====
+*.tmp
+*.temp
+.cache/
+
+# ===== 操作系统文件 =====
+Thumbs.db
+.DS_Store
+
+# ===== 测试覆盖率 =====
+coverage/
+*.lcov
+.nyc_output/
+
+# ===== 打包文件 =====
+*.tgz
+*.zip
+*.tar.gz
+
+# ===== Electron 相关 =====
+out/
+release/
+
