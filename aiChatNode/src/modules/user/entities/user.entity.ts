@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { ChatMessage } from '../../chat/entities/chat.entity';
+import { ChatSession } from '../../chat/entities/chat-session.entity';
 
 /**
  * 用户角色枚举
@@ -83,6 +84,12 @@ export class User {
    */
   @OneToMany(() => ChatMessage, (chatMessage) => chatMessage.user)
   chatMessages: ChatMessage[];
+
+  /**
+   * 关联的聊天会话
+   */
+  @OneToMany(() => ChatSession, (chatSession) => chatSession.user)
+  chatSessions: ChatSession[];
 
   /**
    * 创建时间

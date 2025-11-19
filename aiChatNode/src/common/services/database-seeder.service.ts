@@ -3,7 +3,7 @@ import { UserService } from '../../modules/user/user.service';
 
 /**
  * 数据库初始化服务
- * 在应用启动时自动执行数据初始化
+ * 应用启动时自动执行数据初始化
  */
 @Injectable()
 export class DatabaseSeederService implements OnModuleInit {

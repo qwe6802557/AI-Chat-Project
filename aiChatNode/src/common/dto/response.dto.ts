@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+
 /**
  * 统一响应数据结构
  */
@@ -5,16 +7,31 @@ export class ResponseDto<T = any> {
   /**
    * 状态码：0 表示成功，非 0 表示失败
    */
+  @ApiProperty({
+    description: '状态码：0 表示成功，非 0 表示失败',
+    example: 0,
+    type: Number,
+  })
   code: number;
 
   /**
    * 响应数据
    */
+  @ApiProperty({
+    description: '响应数据',
+    example: {},
+    required: false,
+  })
   data?: T | null;
 
   /**
    * 提示信息
    */
+  @ApiProperty({
+    description: '提示信息',
+    example: '操作成功',
+    type: String,
+  })
   message: string;
 
   constructor(code: number, data?: T, message?: string) {
@@ -37,4 +54,3 @@ export class ResponseDto<T = any> {
     return new ResponseDto(code, data, message);
   }
 }
-

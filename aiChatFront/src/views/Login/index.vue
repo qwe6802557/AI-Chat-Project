@@ -68,6 +68,34 @@
             </div>
           </a-form-item>
 
+          <!-- 验证码 -->
+          <a-form-item name="captcha" class="form-item">
+            <div class="captcha-wrapper">
+              <div class="input-wrapper captcha-input">
+                <SafetyOutlined class="input-icon" />
+                <a-input
+                  v-model:value="formState.captcha"
+                  placeholder="验证码"
+                  size="large"
+                  class="custom-input"
+                  maxlength="6"
+                />
+              </div>
+              <div class="captcha-image-wrapper" @click="handleRefreshCaptcha">
+                <img
+                  v-if="captchaImage"
+                  :src="captchaImage"
+                  alt="验证码"
+                  class="captcha-image"
+                />
+                <div v-else class="captcha-loading">
+                  <LoadingOutlined />
+                </div>
+                <div class="captcha-refresh-hint">点击刷新</div>
+              </div>
+            </div>
+          </a-form-item>
+
           <!-- 记住和忘记密码 -->
           <div class="form-options">
             <a-checkbox v-model:checked="formState.remember">记住我</a-checkbox>
@@ -110,7 +138,11 @@ import {
   UserOutlined,
   LockOutlined,
   RightOutlined,
+  SafetyOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons-vue'
+import { getCaptcha, login } from '@/api/auth'
+import type { LoginParams } from '@/api/auth'
 
 // 定义组件名称
 defineOptions({
@@ -120,12 +152,35 @@ defineOptions({
 const router = useRouter()
 const loading = ref(false)
 
+// 验证码相关
+const captchaImage = ref<string>('')
+const captchaId = ref<string>('')
+
 // 表单数据
 const formState = reactive({
   username: '',
   password: '',
+  captcha: '',
   remember: false,
 })
+
+// 获取验证码
+const fetchCaptcha = async () => {
+  try {
+    const response = await getCaptcha()
+    captchaImage.value = response.data.captchaImage
+    captchaId.value = response.data.captchaId
+  } catch (error) {
+    console.error('获取验证码失败:', error)
+    message.error('获取验证码失败，请刷新页面重试')
+  }
+}
+
+// 刷新验证码
+const handleRefreshCaptcha = () => {
+  formState.captcha = ''
+  fetchCaptcha()
+}
 
 // 初始化
 onMounted(() => {
@@ -139,6 +194,9 @@ onMounted(() => {
       formState.remember = true
     }
   }
+
+  // 加载验证码
+  fetchCaptcha()
 })
 
 // 表单验证规则
@@ -151,20 +209,35 @@ const rules = {
     { required: true, message: '请输入密码!', trigger: 'blur' },
     { min: 6, message: '密码不能小于6位!', trigger: 'blur' },
   ],
+  captcha: [
+    { required: true, message: '请输入验证码!', trigger: 'blur' },
+    { min: 4, message: '验证码不能少于4位!', trigger: 'blur' },
+    { max: 6, message: '验证码不能超过6位!', trigger: 'blur' },
+  ],
 }
 
 // 登录处理
 const handleLogin = async () => {
   loading.value = true
   try {
-    // 调用后端 API
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    // 准备登录参数
+    const loginParams: LoginParams = {
+      username: formState.username,
+      password: formState.password,
+      captcha: formState.captcha,
+      captchaId: captchaId.value,
+    }
 
-    // 模拟登录
+    // 调用后端登录 API
+    const response = await login(loginParams)
+
+    // 保存 token 和用户信息
+    localStorage.setItem('token', response.data.token)
     localStorage.setItem('isAuthenticated', 'true')
-    localStorage.setItem('username', formState.username)
+    localStorage.setItem('username', response.data.user.username)
+    localStorage.setItem('userId', response.data.user.id)
 
-    // 保存到localStorage
+    // 保存记住的用户名
     if (formState.remember) {
       localStorage.setItem('rememberedUsername', formState.username)
     } else {
@@ -176,9 +249,14 @@ const handleLogin = async () => {
     // 跳转到之前的页面或聊天页
     const redirect = router.currentRoute.value.query.redirect as string
     router.push(redirect || '/chat')
-  } catch (err) {
-    console.log(err)
-    message.error('登录失败!请检查凭证')
+  } catch (err: any) {
+    console.error('登录失败:', err)
+
+    // 登录失败后刷新验证码
+    fetchCaptcha()
+    formState.captcha = ''
+
+    // 错误信息已经在 axios 拦截器中处理，这里不需要再次提示
   } finally {
     loading.value = false
   }
@@ -186,7 +264,7 @@ const handleLogin = async () => {
 
 // 忘记密码
 const handleForgotPassword = () => {
-  message.info('忘记密码开发中!')
+  router.push('/forgot-password')
 }
 
 // 跳转到注册
@@ -411,6 +489,76 @@ const handleGoToRegister = () => {
         &:hover .input-icon,
         &:focus-within .input-icon {
           color: #53b1fd;
+        }
+      }
+
+      // 验证码容器
+      .captcha-wrapper {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+
+        .captcha-input {
+          flex: 1;
+        }
+
+        .captcha-image-wrapper {
+          position: relative;
+          width: 120px;
+          height: 64px;
+          background: #f2f4f7;
+          border-radius: 10px;
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 0.3s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+
+            .captcha-refresh-hint {
+              opacity: 1;
+            }
+          }
+
+          .captcha-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+          }
+
+          .captcha-loading {
+            font-size: 24px;
+            color: #98a2b3;
+            animation: spin 1s linear infinite;
+          }
+
+          .captcha-refresh-hint {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffffff;
+            font-size: 12px;
+            text-align: center;
+            padding: 4px;
+            opacity: 0;
+            transition: opacity 0.3s;
+          }
+        }
+      }
+
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
         }
       }
 

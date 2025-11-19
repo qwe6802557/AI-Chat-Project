@@ -38,7 +38,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           (exceptionResponse as any).message ||
           (exceptionResponse as any).error ||
           message;
-        
+
         // 如果 message 是数组（如验证错误），取第一个
         if (Array.isArray(message)) {
           message = message[0];
@@ -46,7 +46,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
 
       code = status;
-    } 
+    }
     // 处理普通 Error
     else if (exception instanceof Error) {
       message = exception.message;
@@ -65,4 +65,3 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 }
-

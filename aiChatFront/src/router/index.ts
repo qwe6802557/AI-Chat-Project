@@ -23,6 +23,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('../views/ForgotPassword/index.vue'),
+      meta: {
+        title: 'Forgot Password',
+        requiresAuth: false,
+      },
+    },
+    {
       path: '/',
       redirect: '/chat',
     },
@@ -71,8 +80,8 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth && !isAuthenticated) {
     // 需要认证但未登录，跳转到登录页
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if ((to.name === 'login' || to.name === 'register') && isAuthenticated) {
-    // 已登录用户访问登录/注册页，跳转到聊天页
+  } else if ((to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') && isAuthenticated) {
+    // 已登录用户访问登录/注册/忘记密码页，跳转到聊天页
     next({ name: 'chat' })
   } else {
     next()

@@ -70,6 +70,28 @@ export class UserService {
   }
 
   /**
+   * 根据手机号查找用户
+   */
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { phone } });
+  }
+
+  /**
+   * 根据邮箱查找用户
+   */
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepository.findOne({ where: { email } });
+  }
+
+  /**
+   * 更新用户密码
+   */
+  async updatePassword(userId: string, hashedPassword: string): Promise<void> {
+    await this.userRepository.update(userId, { password: hashedPassword });
+    this.logger.log(`用户密码更新成功: ${userId}`);
+  }
+
+  /**
    * 查找所有用户
    */
   async findAll(): Promise<User[]> {
@@ -104,7 +126,7 @@ export class UserService {
     const admin = this.userRepository.create({
       username: adminUsername,
       password: 'admin666', // BeforeInsert 钩子中自动加密
-      phone: '13372604414',
+      phone: '13800138000',
       email: 'admin@example.com',
       role: UserRole.ADMIN,
       preferences: {

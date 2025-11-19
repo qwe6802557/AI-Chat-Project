@@ -1,7 +1,9 @@
 import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
 
+@ApiTags('聊天消息')
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
@@ -10,18 +12,127 @@ export class ChatController {
    * 创建聊天对话
    */
   @Post('create')
+  @ApiOperation({
+    summary: '发送聊天消息',
+    description:
+      '发送聊天消息给 AI。如果不提供 sessionId，系统会自动创建新会话。' +
+      '系统会自动加载该会话的历史消息（最近 10 条）作为上下文。',
+  })
+  @ApiBody({ type: CreateChatDto })
+  @ApiResponse({
+    status: 200,
+    description: '发送成功',
+    schema: {
+      example: {
+        code: 0,
+        data: {
+          id: 'message-uuid',
+          sessionId: 'session-uuid',
+          message: 'NestJS 是一个用于构建高效、可扩展的 Node.js 服务器端应用程序的框架...',
+          model: 'gpt-4o',
+          usage: {
+            promptTokens: 15,
+            completionTokens: 50,
+            totalTokens: 65,
+          },
+          createdAt: '2025-11-16T21:10:53.000Z',
+        },
+        message: '操作成功',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: '参数错误',
+    schema: {
+      example: {
+        code: 1,
+        data: null,
+        message: '用户不存在',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'OpenAI API 错误',
+    schema: {
+      example: {
+        code: 1,
+        data: null,
+        message: 'OpenAI API Error: 403 预扣费额度失败',
+      },
+    },
+  })
   async create(@Body() createChatDto: CreateChatDto) {
     return this.chatService.create(createChatDto);
   }
 
   /**
-   * 获取用户聊天历史
+   * 获取聊天历史
    */
   @Get('history')
+  @ApiOperation({
+    summary: '获取聊天历史',
+    description: '获取指定会话或用户的聊天历史记录。优先使用 sessionId 查询。',
+  })
+  @ApiQuery({
+    name: 'sessionId',
+    required: false,
+    description: '会话 ID（推荐使用）',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    description: '用户 ID（已废弃，建议使用 sessionId）',
+    example: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: '返回记录数量限制',
+    example: 50,
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: '获取成功',
+    schema: {
+      example: {
+        code: 0,
+        data: [
+          {
+            id: 'message-uuid-1',
+            userId: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
+            sessionId: 'session-uuid',
+            userMessage: '你好',
+            aiMessage: '你好！有什么可以帮助你的吗？',
+            model: 'gpt-4o',
+            usage: {
+              promptTokens: 10,
+              completionTokens: 20,
+              totalTokens: 30,
+            },
+            createdAt: '2025-11-16T21:10:53.000Z',
+          },
+        ],
+        message: '操作成功',
+      },
+    },
+  })
   async getHistory(
-    @Query('userId') userId: string,
+    @Query('userId') userId?: string,
+    @Query('sessionId') sessionId?: string,
     @Query('limit') limit?: number,
   ) {
-    return this.chatService.getUserChatHistory(userId, limit);
+    // 优先使用 sessionId 查询
+    if (sessionId) {
+      return this.chatService.getSessionHistory(sessionId, limit);
+    }
+    // 兼容旧接口，使用 userId 查询
+    if (userId) {
+      return this.chatService.getUserChatHistory(userId, limit);
+    }
+    return [];
   }
 }

@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { ChatSession } from './chat-session.entity';
 
 /**
  * 聊天记录实体
@@ -32,6 +33,22 @@ export class ChatMessage {
    */
   @Column({ type: 'uuid' })
   userId: string;
+
+  /**
+   * 关联的会话
+   */
+  @ManyToOne(() => ChatSession, (session) => session.chatMessages, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
+  @JoinColumn({ name: 'sessionId' })
+  session: ChatSession;
+
+  /**
+   * 会话 ID
+   */
+  @Column({ type: 'uuid' })
+  sessionId: string;
 
   /**
    * 用户消息

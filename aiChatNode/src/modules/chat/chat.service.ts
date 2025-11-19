@@ -5,6 +5,7 @@ import { OpenAIService } from './openai.service';
 import { CreateChatDto } from './dto';
 import { ChatMessage } from './entities/chat.entity';
 import { UserService } from '../user/user.service';
+import { ChatSessionService } from './chat-session.service';
 
 @Injectable()
 export class ChatService {
@@ -15,6 +16,7 @@ export class ChatService {
     @InjectRepository(ChatMessage)
     private chatMessageRepository: Repository<ChatMessage>,
     private readonly userService: UserService,
+    private readonly chatSessionService: ChatSessionService,
   ) {}
 
   /**
@@ -30,11 +32,33 @@ export class ChatService {
       throw new NotFoundException('用户不存在');
     }
 
+    // 处理会话：如果没有提供 sessionId，则创建新会话
+    let sessionId = createChatDto.sessionId;
+    if (!sessionId) {
+      this.logger.log('未提供会话ID，创建新会话');
+      const newSession = await this.chatSessionService.create({
+        userId: createChatDto.userId,
+        title: '新对话',
+      });
+      sessionId = newSession.id;
+    } else {
+      // 验证会话是否存在
+      await this.chatSessionService.findById(sessionId);
+    }
+
     // 构建消息数组
     const messages: any[] = [];
 
-    // 添加历史消息（可选）
-    if (createChatDto.history && createChatDto.history.length > 0) {
+    // 如果没有提供历史消息，从数据库加载该会话的历史消息
+    if (!createChatDto.history || createChatDto.history.length === 0) {
+      const historyMessages = await this.getSessionHistory(sessionId, 10);
+      historyMessages.forEach((msg) => {
+        messages.push(
+          { role: 'user', content: msg.userMessage },
+          { role: 'assistant', content: msg.aiMessage },
+        );
+      });
+    } else {
       messages.push(...createChatDto.history);
     }
 
@@ -44,7 +68,7 @@ export class ChatService {
       content: createChatDto.message,
     });
 
-    // 调用API
+    // 调用 OpenAI API
     const completion = await this.openaiService.createChatCompletion(messages, {
       model: createChatDto.model,
       temperature: createChatDto.temperature,
@@ -59,6 +83,7 @@ export class ChatService {
     // 保存聊天记录到数据库
     const chatMessage = this.chatMessageRepository.create({
       userId: createChatDto.userId,
+      sessionId: sessionId,
       userMessage: createChatDto.message,
       aiMessage: assistantMessage,
       model: completion.model,
@@ -73,9 +98,17 @@ export class ChatService {
 
     this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
 
-    // 由拦截器处理封装返回值
+    // 更新会话的最后活跃时间和消息预览
+    const preview =
+      createChatDto.message.length > 50
+        ? createChatDto.message.substring(0, 50) + '...'
+        : createChatDto.message;
+    await this.chatSessionService.updateLastActivity(sessionId, preview);
+
+    // 由拦截器统一包装返回值
     return {
       id: savedMessage.id,
+      sessionId: sessionId,
       message: assistantMessage,
       model: completion.model,
       usage: {
@@ -88,12 +121,26 @@ export class ChatService {
   }
 
   /**
-   * 获取用户的聊天历史
+   * 获取用户的聊天历史（已废弃，建议使用 getSessionHistory）
    */
   async getUserChatHistory(userId: string, limit: number = 50) {
     return this.chatMessageRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
+
+  /**
+   * 获取指定会话的聊天历史
+   */
+  async getSessionHistory(
+    sessionId: string,
+    limit: number = 50,
+  ): Promise<ChatMessage[]> {
+    return this.chatMessageRepository.find({
+      where: { sessionId },
+      order: { createdAt: 'ASC' }, // 按时间正序，方便构建上下文
       take: limit,
     });
   }

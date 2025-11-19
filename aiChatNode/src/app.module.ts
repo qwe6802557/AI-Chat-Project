@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ChatModule } from './modules/chat/chat.module';
 import { UserModule } from './modules/user/user.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import databaseConfig from './config/database.config';
 
@@ -33,6 +34,7 @@ import databaseConfig from './config/database.config';
       }),
     }),
     UserModule,
+    AuthModule,
     ChatModule,
   ],
   controllers: [AppController],

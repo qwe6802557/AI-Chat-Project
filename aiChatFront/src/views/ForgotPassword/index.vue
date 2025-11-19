@@ -1,6 +1,6 @@
 <template>
-  <div class="register-container">
-    <!-- 左侧背景区域 -->
+  <div class="forgot-password-container">
+    <!-- 左侧背景 -->
     <div class="left-section">
       <div class="background-overlay"></div>
 
@@ -30,54 +30,28 @@
       <div class="form-wrapper">
         <!-- 标题 -->
         <div class="header-text">
-          <h1 class="title">注册</h1>
-          <p class="subtitle">请完善您的用户信息</p>
+          <h1 class="title">忘记密码</h1>
+          <p class="subtitle">请输入您的手机号码，通过发送验证码来重置您的密码</p>
         </div>
 
-        <!-- 注册 -->
+        <!-- 忘记密码表单 -->
         <a-form
           :model="formState"
           :rules="rules"
-          @finish="handleRegister"
+          @finish="handleResetPassword"
           layout="vertical"
-          class="register-form"
+          class="forgot-password-form"
         >
-          <!-- 用户名-->
-          <a-form-item name="name" class="form-item">
-            <div class="input-wrapper">
-              <UserOutlined class="input-icon" />
-              <a-input
-                v-model:value="formState.name"
-                placeholder="用户名"
-                size="large"
-                class="custom-input"
-              />
-            </div>
-          </a-form-item>
-
-          <!-- 密码输入框 -->
-          <a-form-item name="password" class="form-item">
-            <div class="input-wrapper">
-              <LockOutlined class="input-icon" />
-              <a-input-password
-                v-model:value="formState.password"
-                placeholder="密码"
-                size="large"
-                class="custom-input"
-              />
-            </div>
-          </a-form-item>
-
           <!-- 手机号输入框 -->
           <a-form-item name="mobile" class="form-item">
             <div class="input-wrapper mobile-input">
               <MobileOutlined class="input-icon" />
-              <div class="mobile-label">手机号码</div>
+              <div v-if="formState.mobile" class="mobile-label">手机号码</div>
               <a-input
                 v-model:value="formState.mobile"
                 placeholder="手机号码"
                 size="large"
-                class="custom-input mobile-filled"
+                :class="['custom-input', formState.mobile ? 'mobile-filled' : '']"
                 @input="handleMobileInput"
               />
             </div>
@@ -92,6 +66,7 @@
                 placeholder="验证码"
                 size="large"
                 class="custom-input verify-code-input"
+                maxlength="6"
               />
               <a-button
                 :disabled="!canSendCode || countdown > 0"
@@ -104,25 +79,51 @@
             </div>
           </a-form-item>
 
-          <!-- Next 按钮 -->
+          <!-- 新密码输入框 -->
+          <a-form-item name="newPassword" class="form-item">
+            <div class="input-wrapper">
+              <LockOutlined class="input-icon" />
+              <a-input-password
+                v-model:value="formState.newPassword"
+                placeholder="新密码"
+                size="large"
+                class="custom-input"
+              />
+            </div>
+          </a-form-item>
+
+          <!-- 确认密码输入框 -->
+          <a-form-item name="confirmPassword" class="form-item">
+            <div class="input-wrapper">
+              <LockOutlined class="input-icon" />
+              <a-input-password
+                v-model:value="formState.confirmPassword"
+                placeholder="确认新密码"
+                size="large"
+                class="custom-input"
+              />
+            </div>
+          </a-form-item>
+
+          <!-- 重置密码按钮 -->
           <a-form-item class="form-item">
             <a-button
               type="primary"
               html-type="submit"
               size="large"
               :loading="loading"
-              class="next-button"
+              class="reset-button"
             >
-              注册
+              重置密码
               <RightOutlined />
             </a-button>
           </a-form-item>
         </a-form>
 
-        <!-- 底部登录链接 -->
+        <!-- 底部返回登录链接 -->
         <div class="footer-text">
-          <span class="footer-label">已经有账号？</span>
-          <a class="footer-link" @click="handleGoToLogin">登录您的账号</a>
+          <span class="footer-label">已经想起密码？</span>
+          <a class="footer-link" @click="handleGoToLogin">返回登录</a>
         </div>
       </div>
     </div>
@@ -137,17 +138,16 @@ import {
   FacebookOutlined,
   InstagramOutlined,
   TwitterOutlined,
-  UserOutlined,
   MobileOutlined,
   LockOutlined,
   SafetyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
-import { sendSmsCode, register, type RegisterParams } from '@/api/auth'
+import { sendSmsCode, resetPassword } from '@/api/auth'
 
 // 定义组件名称
 defineOptions({
-  name: 'RegisterPage'
+  name: 'ForgotPasswordPage'
 })
 
 const router = useRouter()
@@ -158,35 +158,42 @@ const canSendCode = ref(false)
 
 // 表单数据
 const formState = reactive({
-  name: '',
-  password: '',
   mobile: '',
   verifyCode: '',
+  newPassword: '',
+  confirmPassword: '',
 })
 
 // 表单验证规则
 const rules = {
-  name: [
-    { required: true, message: '请输入您的用户名!', trigger: 'blur' },
-    { min: 3, message: '用户名不得少于3个字符!', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码!', trigger: 'blur' },
-    { min: 6, message: '密码不能少于6位!', trigger: 'blur' },
-  ],
   mobile: [
-    { required: true, message: '请输入您的电话号码!', trigger: 'blur' },
+    { required: true, message: '请输入您的手机号码!', trigger: 'blur' },
     { pattern: /^1[3-9]\d{9}$/, message: '手机号码格式不正确!', trigger: 'blur' },
   ],
   verifyCode: [
     { required: true, message: '请输入验证码!', trigger: 'blur' },
     { pattern: /^\d{6}$/, message: '验证码为6位数字!', trigger: 'blur' },
   ],
+  newPassword: [
+    { required: true, message: '请输入新密码!', trigger: 'blur' },
+    { min: 6, message: '密码不能少于6位!', trigger: 'blur' },
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码!', trigger: 'blur' },
+    {
+      validator: (_rule: never, value: string) => {
+        if (value !== formState.newPassword) {
+          return Promise.reject('两次输入的密码不一致!')
+        }
+        return Promise.resolve()
+      },
+      trigger: 'blur',
+    },
+  ],
 }
 
-// 手机号输入处理
+// 验证手机号格式
 const handleMobileInput = () => {
-  // 验证手机号格式
   const mobilePattern = /^1[3-9]\d{9}$/
   canSendCode.value = mobilePattern.test(formState.mobile)
 }
@@ -197,13 +204,12 @@ const handleSendCode = async () => {
 
   sendingCode.value = true
   try {
-    // 调用后端 API 发送验证码
+    // 发送验证码
     const res = await sendSmsCode({ phone: formState.mobile })
 
-    // 发送成功提示
     message.success('验证码已发送到您的手机!')
 
-    // 开发环境下显示验证码(便于测试)
+    // 开发环境下显示验证码
     if (import.meta.env.DEV && res.data?.code) {
       message.info(`开发模式 - 验证码: ${res.data.code}`, 5)
       console.log('验证码:', res.data.code)
@@ -217,71 +223,52 @@ const handleSendCode = async () => {
         clearInterval(timer)
       }
     }, 1000)
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('发送验证码失败:', err)
-    message.error(err?.message || '验证码发送失败，请稍后重试')
   } finally {
     sendingCode.value = false
   }
 }
 
-// 注册处理
-const handleRegister = async () => {
+// 重置密码处理
+const handleResetPassword = async () => {
   loading.value = true
   try {
-    // 调用后端注册 API
-    const params: RegisterParams = {
-      username: formState.name,
-      password: formState.password,
+    // 调用后端重置密码 API
+    await resetPassword({
       phone: formState.mobile,
       smsCode: formState.verifyCode,
-    }
+      newPassword: formState.newPassword,
+    })
 
-    const res = await register(params)
+    message.success('密码重置成功! 请重新登录')
 
-    message.success('注册成功! 正在跳转到登录页...')
-
-    // 保存用户信息到 localStorage
-    if (res.data?.token) {
-      localStorage.setItem('token', res.data.token)
-      localStorage.setItem('isAuthenticated', 'true')
-
-      // 注册成功后直接跳转到聊天页
-      setTimeout(() => {
-        router.push({ name: 'chat' })
-      }, 1000)
-    } else {
-      // 没有返回 token，跳转到登录页并预填用户名
-      setTimeout(() => {
-        router.push({
-          name: 'login',
-          query: { username: formState.name }
-        })
-      }, 1000)
-    }
-  } catch (err: any) {
-    console.error('注册失败:', err)
-    message.error(err?.message || '注册失败，请稍后重试')
+    // 跳转到登录页
+    setTimeout(() => {
+      router.push({ name: 'login' })
+    }, 1000)
+  } catch (err: unknown) {
+    console.error('重置密码失败:', err)
   } finally {
     loading.value = false
   }
 }
 
-// 跳转到登录
+// 返回登录
 const handleGoToLogin = () => {
   router.push('/login')
 }
 </script>
 
 <style scoped lang="scss">
-.register-container {
+.forgot-password-container {
   display: flex;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
 }
 
-/* 左侧背景区域 */
+/* 左侧背景 */
 .left-section {
   position: relative;
   width: 655px;
@@ -298,32 +285,6 @@ const handleGoToLogin = () => {
     width: 100%;
     height: 100%;
     background: linear-gradient(180deg, rgba(49, 49, 49, 0.3) 0%, rgba(0, 0, 0, 0.55) 100%);
-  }
-
-  .menu-bar {
-    position: absolute;
-    top: 72px;
-    left: 94px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    z-index: 10;
-
-    .menu-icon {
-      width: 50px;
-      height: 50px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .menu-text {
-      font-family: 'Poppins', sans-serif;
-      font-weight: 500;
-      font-size: 24px;
-      line-height: 38px;
-      color: #ffffff;
-    }
   }
 
   .logo-social-wrapper {
@@ -361,12 +322,10 @@ const handleGoToLogin = () => {
           0 2px 10px rgba(0, 0, 0, 0.3),
           0 0 20px rgba(21, 112, 239, 0.4),
           0 0 30px rgba(83, 177, 253, 0.3);
-        /* 可选：添加渐变效果 */
         background: linear-gradient(135deg, #ffffff 0%, #53B1FD 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        /* 添加描边效果增强可见性 */
         filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
       }
     }
@@ -397,7 +356,7 @@ const handleGoToLogin = () => {
   }
 }
 
-/* 右侧表单区域 */
+/* 右侧表单 */
 .right-section {
   flex: 1;
   display: flex;
@@ -437,7 +396,7 @@ const handleGoToLogin = () => {
       }
     }
 
-    .register-form {
+    .forgot-password-form {
       display: flex;
       flex-direction: column;
       gap: 26px;
@@ -457,8 +416,8 @@ const handleGoToLogin = () => {
           font-size: 20px;
           color: #98a2b3;
           z-index: 10;
-          pointer-events: none; // 防止图标阻挡输入框点击
-          transition: color 0.3s ease; // 添加过渡效果
+          pointer-events: none;
+          transition: color 0.3s ease;
         }
 
         :deep(.custom-input) {
@@ -470,7 +429,7 @@ const handleGoToLogin = () => {
           font-family: 'Inter', sans-serif;
           font-weight: 500;
           font-size: 16px;
-          color: #98a2b3;
+          color: #101828;
 
           &::placeholder {
             color: #98a2b3;
@@ -513,7 +472,7 @@ const handleGoToLogin = () => {
           position: relative;
 
           :deep(.verify-code-input) {
-            padding-right: 140px; // 为按钮留出空间
+            padding-right: 140px;
           }
 
           .send-code-button {
@@ -555,7 +514,6 @@ const handleGoToLogin = () => {
           }
         }
 
-        // 密码输入框样式
         :deep(.ant-input-password) {
           height: 64px;
           background: #f2f4f7;
@@ -583,15 +541,14 @@ const handleGoToLogin = () => {
           }
         }
 
-        // 当输入框获得焦点或悬停时，图标颜色变化
         &:hover .input-icon,
         &:focus-within .input-icon {
           color: #53b1fd;
         }
       }
 
-      .next-button {
-        width: auto;
+      .reset-button {
+        width: 100%;
         height: 56px;
         background: #1570ef;
         border: none;
@@ -605,10 +562,8 @@ const handleGoToLogin = () => {
         align-items: center;
         justify-content: center;
         gap: 12px;
-        padding: 16px 28px;
         box-shadow: 0px 1px 2px 0px rgba(16, 24, 40, 0.05);
         transition: all 0.3s;
-        align-self: flex-end;
 
         &:hover {
           background: #1366d9;
@@ -653,7 +608,7 @@ const handleGoToLogin = () => {
   }
 }
 
-/* 响应式设计 */
+/* 响应式 */
 @media (max-width: 1200px) {
   .left-section {
     width: 400px;
@@ -661,7 +616,7 @@ const handleGoToLogin = () => {
 }
 
 @media (max-width: 768px) {
-  .register-container {
+  .forgot-password-container {
     flex-direction: column;
   }
 
@@ -672,11 +627,6 @@ const handleGoToLogin = () => {
     .logo-social-wrapper {
       gap: 40px;
       bottom: 20px;
-    }
-
-    .menu-bar {
-      top: 20px;
-      left: 20px;
     }
   }
 
@@ -689,4 +639,3 @@ const handleGoToLogin = () => {
   }
 }
 </style>
-
