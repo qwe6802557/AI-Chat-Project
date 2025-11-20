@@ -78,7 +78,7 @@
                   placeholder="验证码"
                   size="large"
                   class="custom-input"
-                  maxlength="6"
+                  :maxlength="6"
                 />
               </div>
               <div class="captcha-image-wrapper" @click="handleRefreshCaptcha">
@@ -492,7 +492,7 @@ const handleGoToRegister = () => {
         }
       }
 
-      // 验证码容器
+      // 验证码
       .captcha-wrapper {
         display: flex;
         gap: 12px;
@@ -516,7 +516,6 @@ const handleGoToRegister = () => {
           justify-content: center;
 
           &:hover {
-            transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 
             .captcha-refresh-hint {

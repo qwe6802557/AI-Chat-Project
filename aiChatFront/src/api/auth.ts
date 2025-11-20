@@ -44,9 +44,9 @@ export interface LoginResponse {
 export interface RegisterParams {
   username: string
   password: string
-  phone: string
-  smsCode: string
-  email?: string
+  email: string
+  emailCode: string
+  phone?: string
 }
 
 /**
@@ -57,11 +57,18 @@ export interface SendSmsParams {
 }
 
 /**
+ * 发送邮件验证码参数
+ */
+export interface SendEmailParams {
+  email: string
+}
+
+/**
  * 重置密码请求参数
  */
 export interface ResetPasswordParams {
-  phone: string
-  smsCode: string
+  email: string
+  emailCode: string
   newPassword: string
 }
 
@@ -91,6 +98,13 @@ export function register(data: RegisterParams) {
  */
 export function sendSmsCode(data: SendSmsParams) {
   return request.post<never, ResponseData<{ message: string; code?: string }>>('/auth/sms/send', data)
+}
+
+/**
+ * 发送邮件验证码
+ */
+export function sendEmailCode(data: SendEmailParams) {
+  return request.post<never, ResponseData<{ message: string; code?: string }>>('/auth/email/send', data)
 }
 
 /**

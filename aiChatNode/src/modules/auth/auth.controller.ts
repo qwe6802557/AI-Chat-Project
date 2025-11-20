@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, SendSmsDto, ResetPasswordDto } from './dto';
+import { LoginDto, RegisterDto, SendSmsDto, SendEmailDto, ResetPasswordDto } from './dto';
 
 /**
  * 认证控制器
@@ -73,6 +73,44 @@ export class AuthController {
   })
   async sendSmsCode(@Body(ValidationPipe) sendSmsDto: SendSmsDto) {
     return this.authService.sendSmsCode(sendSmsDto.phone);
+  }
+
+  /**
+   * 发送邮件验证码
+   */
+  @Post('email/send')
+  @ApiOperation({
+    summary: '发送邮件验证码',
+    description: '发送邮件验证码到指定邮箱，同一邮箱1分钟内只能发送一次',
+  })
+  @ApiBody({ type: SendEmailDto })
+  @ApiResponse({
+    status: 200,
+    description: '发送成功',
+    schema: {
+      example: {
+        code: 0,
+        data: {
+          message: '验证码已发送到您的邮箱',
+          code: '123456', // 仅开发环境返回
+        },
+        message: '操作成功',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: '发送失败',
+    schema: {
+      example: {
+        code: 1,
+        data: null,
+        message: '请60秒后再试',
+      },
+    },
+  })
+  async sendEmailCode(@Body(ValidationPipe) sendEmailDto: SendEmailDto) {
+    return this.authService.sendEmailCode(sendEmailDto.email);
   }
 
   /**

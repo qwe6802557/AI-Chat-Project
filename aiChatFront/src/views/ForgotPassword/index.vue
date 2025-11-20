@@ -25,16 +25,16 @@
       </div>
     </div>
 
-    <!-- 右侧表单区域 -->
+    <!-- 右侧表单 -->
     <div class="right-section">
       <div class="form-wrapper">
         <!-- 标题 -->
         <div class="header-text">
           <h1 class="title">忘记密码</h1>
-          <p class="subtitle">请输入您的手机号码，通过发送验证码来重置您的密码</p>
+          <p class="subtitle">请输入您的邮箱地址，通过发送验证码来重置您的密码</p>
         </div>
 
-        <!-- 忘记密码表单 -->
+        <!-- 忘记密码 -->
         <a-form
           :model="formState"
           :rules="rules"
@@ -42,17 +42,17 @@
           layout="vertical"
           class="forgot-password-form"
         >
-          <!-- 手机号输入框 -->
-          <a-form-item name="mobile" class="form-item">
-            <div class="input-wrapper mobile-input">
-              <MobileOutlined class="input-icon" />
-              <div v-if="formState.mobile" class="mobile-label">手机号码</div>
+          <!-- 邮箱输入框 -->
+          <a-form-item name="email" class="form-item">
+            <div class="input-wrapper email-input">
+              <MailOutlined class="input-icon" />
+              <div v-if="formState.email" class="email-label">邮箱地址</div>
               <a-input
-                v-model:value="formState.mobile"
-                placeholder="手机号码"
+                v-model:value="formState.email"
+                placeholder="邮箱地址"
                 size="large"
-                :class="['custom-input', formState.mobile ? 'mobile-filled' : '']"
-                @input="handleMobileInput"
+                :class="['custom-input', formState.email ? 'email-filled' : '']"
+                @input="handleEmailInput"
               />
             </div>
           </a-form-item>
@@ -120,7 +120,7 @@
           </a-form-item>
         </a-form>
 
-        <!-- 底部返回登录链接 -->
+        <!-- 底部返回登录 -->
         <div class="footer-text">
           <span class="footer-label">已经想起密码？</span>
           <a class="footer-link" @click="handleGoToLogin">返回登录</a>
@@ -138,12 +138,12 @@ import {
   FacebookOutlined,
   InstagramOutlined,
   TwitterOutlined,
-  MobileOutlined,
+  MailOutlined,
   LockOutlined,
   SafetyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
-import { sendSmsCode, resetPassword } from '@/api/auth'
+import { sendEmailCode, resetPassword } from '@/api/auth'
 
 // 定义组件名称
 defineOptions({
@@ -158,7 +158,7 @@ const canSendCode = ref(false)
 
 // 表单数据
 const formState = reactive({
-  mobile: '',
+  email: '',
   verifyCode: '',
   newPassword: '',
   confirmPassword: '',
@@ -166,9 +166,9 @@ const formState = reactive({
 
 // 表单验证规则
 const rules = {
-  mobile: [
-    { required: true, message: '请输入您的手机号码!', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '手机号码格式不正确!', trigger: 'blur' },
+  email: [
+    { required: true, message: '请输入您的邮箱!', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确!', trigger: 'blur' },
   ],
   verifyCode: [
     { required: true, message: '请输入验证码!', trigger: 'blur' },
@@ -192,10 +192,10 @@ const rules = {
   ],
 }
 
-// 验证手机号格式
-const handleMobileInput = () => {
-  const mobilePattern = /^1[3-9]\d{9}$/
-  canSendCode.value = mobilePattern.test(formState.mobile)
+// 验证邮箱格式
+const handleEmailInput = () => {
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  canSendCode.value = emailPattern.test(formState.email)
 }
 
 // 发送验证码
@@ -205,9 +205,9 @@ const handleSendCode = async () => {
   sendingCode.value = true
   try {
     // 发送验证码
-    const res = await sendSmsCode({ phone: formState.mobile })
+    const res = await sendEmailCode({ email: formState.email })
 
-    message.success('验证码已发送到您的手机!')
+    message.success('验证码已发送到您的邮箱!')
 
     // 开发环境下显示验证码
     if (import.meta.env.DEV && res.data?.code) {
@@ -215,7 +215,7 @@ const handleSendCode = async () => {
       console.log('验证码:', res.data.code)
     }
 
-    // 开始倒计时
+    // 倒计时
     countdown.value = 60
     const timer = setInterval(() => {
       countdown.value--
@@ -224,31 +224,30 @@ const handleSendCode = async () => {
       }
     }, 1000)
   } catch (err: unknown) {
-    console.error('发送验证码失败:', err)
+    console.log('发送验证码失败:', err)
   } finally {
     sendingCode.value = false
   }
 }
 
-// 重置密码处理
+// 重置密码
 const handleResetPassword = async () => {
   loading.value = true
   try {
-    // 调用后端重置密码 API
     await resetPassword({
-      phone: formState.mobile,
-      smsCode: formState.verifyCode,
+      email: formState.email,
+      emailCode: formState.verifyCode,
       newPassword: formState.newPassword,
     })
 
     message.success('密码重置成功! 请重新登录')
 
-    // 跳转到登录页
+    // 跳转登录
     setTimeout(() => {
       router.push({ name: 'login' })
     }, 1000)
   } catch (err: unknown) {
-    console.error('重置密码失败:', err)
+    console.log('重置密码失败:', err)
   } finally {
     loading.value = false
   }
@@ -443,8 +442,8 @@ const handleGoToLogin = () => {
           }
         }
 
-        &.mobile-input {
-          .mobile-label {
+        &.email-input {
+          .email-label {
             position: absolute;
             top: -7px;
             left: 23px;
@@ -458,7 +457,7 @@ const handleGoToLogin = () => {
             z-index: 2;
           }
 
-          :deep(.mobile-filled) {
+          :deep(.email-filled) {
             border: 3px solid #53b1fd;
             background: #ffffff;
             color: #101828;

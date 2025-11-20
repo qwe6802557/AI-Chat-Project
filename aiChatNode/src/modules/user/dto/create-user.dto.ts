@@ -27,24 +27,24 @@ export class CreateUserDto {
   password: string;
 
   /**
-   * 手机号
+   * 邮箱（必填）
    */
   @ApiProperty({
-    description: '手机号（唯一）',
-    example: '13900139000',
-    pattern: '^1[3-9]\\d{9}$',
+    description: '邮箱（必填，唯一）',
+    example: 'test@example.com',
   })
-  phone: string;
+  email: string;
 
   /**
-   * 邮箱（可选）
+   * 手机号（可选）
    */
   @ApiProperty({
-    description: '邮箱（可选，唯一）',
-    example: 'test@example.com',
+    description: '手机号（可选，唯一）',
+    example: '13900139000',
+    pattern: '^1[3-9]\\d{9}$',
     required: false,
   })
-  email?: string;
+  phone?: string;
 
   /**
    * 用户角色（可选，默认为普通用户）

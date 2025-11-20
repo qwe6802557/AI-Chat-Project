@@ -6,25 +6,21 @@ import { IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
  */
 export class ResetPasswordDto {
   /**
-   * 手机号
+   * 邮箱地址
    */
   @ApiProperty({
-    description: '手机号（11位数字，符合中国手机号格式）',
-    example: '13900139001',
-    pattern: '^1[3-9]\\d{9}$',
+    description: '邮箱地址',
+    example: 'user@example.com',
   })
-  @IsNotEmpty({ message: '手机号不能为空' })
-  @IsString({ message: '手机号必须是字符串' })
-  @Matches(/^1[3-9]\d{9}$/, {
-    message: '手机号格式不正确',
-  })
-  phone: string;
+  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsString({ message: '邮箱必须是字符串' })
+  email: string;
 
   /**
-   * 短信验证码
+   * 邮箱验证码
    */
   @ApiProperty({
-    description: '短信验证码（6位数字）',
+    description: '邮箱验证码（6位数字）',
     example: '123456',
     minLength: 6,
     maxLength: 6,
@@ -34,7 +30,7 @@ export class ResetPasswordDto {
   @Matches(/^\d{6}$/, {
     message: '验证码格式不正确，必须是6位数字',
   })
-  smsCode: string;
+  emailCode: string;
 
   /**
    * 新密码

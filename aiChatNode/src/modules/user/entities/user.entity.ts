@@ -41,16 +41,16 @@ export class User {
   password: string;
 
   /**
-   * 手机号
+   * 手机号（可选）
    */
-  @Column({ type: 'varchar', length: 20, unique: true })
-  phone: string;
+  @Column({ type: 'varchar', length: 20, unique: true, nullable: true })
+  phone?: string;
 
   /**
-   * 邮箱（可选）
+   * 邮箱（必填）
    */
-  @Column({ type: 'varchar', length: 100, unique: true, nullable: true })
-  email?: string;
+  @Column({ type: 'varchar', length: 100, unique: true })
+  email: string;
 
   /**
    *角色

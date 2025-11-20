@@ -1,11 +1,11 @@
 /**
  * Axios 请求封装
  */
-import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 
 // 响应数据接口
-export interface ResponseData<T = any> {
+export interface ResponseData<T = never> {
   code: number
   data: T
   message: string
@@ -39,14 +39,14 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse<ResponseData>) => {
-    const { code, data, message: msg } = response.data
+    const { code, message: msg } = response.data
 
-    // code = 0 表示成功
+    // 成功
     if (code === 0) {
       return response.data
     }
 
-    // code != 0 表示业务错误
+    // 非成功
     message.error(msg || '操作失败')
     return Promise.reject(new Error(msg || '操作失败'))
   },
@@ -54,14 +54,14 @@ request.interceptors.response.use(
     // HTTP 错误处理
     if (error.response) {
       const { status, data } = error.response
-      
+
       switch (status) {
         case 400:
           message.error(data?.message || '请求参数错误')
           break
         case 401:
           message.error('未授权，请重新登录')
-          // 清除 token 并跳转到登录页
+          // 清除
           localStorage.removeItem('token')
           localStorage.removeItem('isAuthenticated')
           window.location.href = '/login'

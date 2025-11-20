@@ -19,7 +19,7 @@ export interface JwtPayload {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private readonly userService: UserService) {
     super({
-      // 从请求头的 Authorization 字段中提取 Bearer token
+      // 提取 Bearer token
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       // 不忽略过期时间
       ignoreExpiration: false,
@@ -52,4 +52,3 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return userWithoutPassword;
   }
 }
-

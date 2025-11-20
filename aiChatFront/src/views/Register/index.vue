@@ -68,17 +68,17 @@
             </div>
           </a-form-item>
 
-          <!-- 手机号输入框 -->
-          <a-form-item name="mobile" class="form-item">
-            <div class="input-wrapper mobile-input">
-              <MobileOutlined class="input-icon" />
-              <div class="mobile-label">手机号码</div>
+          <!-- 邮箱输入框 -->
+          <a-form-item name="email" class="form-item">
+            <div class="input-wrapper email-input">
+              <MailOutlined class="input-icon" />
+              <div class="email-label">邮箱地址</div>
               <a-input
-                v-model:value="formState.mobile"
-                placeholder="手机号码"
+                v-model:value="formState.email"
+                placeholder="邮箱地址"
                 size="large"
-                class="custom-input mobile-filled"
-                @input="handleMobileInput"
+                class="custom-input email-filled"
+                @input="handleEmailInput"
               />
             </div>
           </a-form-item>
@@ -138,12 +138,12 @@ import {
   InstagramOutlined,
   TwitterOutlined,
   UserOutlined,
-  MobileOutlined,
+  MailOutlined,
   LockOutlined,
   SafetyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
-import { sendSmsCode, register, type RegisterParams } from '@/api/auth'
+import { sendEmailCode, register, type RegisterParams } from '@/api/auth'
 
 // 定义组件名称
 defineOptions({
@@ -160,7 +160,7 @@ const canSendCode = ref(false)
 const formState = reactive({
   name: '',
   password: '',
-  mobile: '',
+  email: '',
   verifyCode: '',
 })
 
@@ -174,9 +174,9 @@ const rules = {
     { required: true, message: '请输入密码!', trigger: 'blur' },
     { min: 6, message: '密码不能少于6位!', trigger: 'blur' },
   ],
-  mobile: [
-    { required: true, message: '请输入您的电话号码!', trigger: 'blur' },
-    { pattern: /^1[3-9]\d{9}$/, message: '手机号码格式不正确!', trigger: 'blur' },
+  email: [
+    { required: true, message: '请输入您的邮箱!', trigger: 'blur' },
+    { type: 'email', message: '邮箱格式不正确!', trigger: 'blur' },
   ],
   verifyCode: [
     { required: true, message: '请输入验证码!', trigger: 'blur' },
@@ -184,11 +184,11 @@ const rules = {
   ],
 }
 
-// 手机号输入处理
-const handleMobileInput = () => {
-  // 验证手机号格式
-  const mobilePattern = /^1[3-9]\d{9}$/
-  canSendCode.value = mobilePattern.test(formState.mobile)
+// 邮箱输入处理
+const handleEmailInput = () => {
+  // 验证邮箱格式
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  canSendCode.value = emailPattern.test(formState.email)
 }
 
 // 发送验证码
@@ -198,10 +198,10 @@ const handleSendCode = async () => {
   sendingCode.value = true
   try {
     // 调用后端 API 发送验证码
-    const res = await sendSmsCode({ phone: formState.mobile })
+    const res = await sendEmailCode({ email: formState.email })
 
     // 发送成功提示
-    message.success('验证码已发送到您的手机!')
+    message.success('验证码已发送到您的邮箱!')
 
     // 开发环境下显示验证码(便于测试)
     if (import.meta.env.DEV && res.data?.code) {
@@ -233,8 +233,8 @@ const handleRegister = async () => {
     const params: RegisterParams = {
       username: formState.name,
       password: formState.password,
-      phone: formState.mobile,
-      smsCode: formState.verifyCode,
+      email: formState.email,
+      emailCode: formState.verifyCode,
     }
 
     const res = await register(params)
@@ -484,8 +484,8 @@ const handleGoToLogin = () => {
           }
         }
 
-        &.mobile-input {
-          .mobile-label {
+        &.email-input {
+          .email-label {
             position: absolute;
             top: -7px;
             left: 23px;
@@ -499,7 +499,7 @@ const handleGoToLogin = () => {
             z-index: 2;
           }
 
-          :deep(.mobile-filled) {
+          :deep(.email-filled) {
             border: 3px solid #53b1fd;
             background: #ffffff;
             color: #101828;

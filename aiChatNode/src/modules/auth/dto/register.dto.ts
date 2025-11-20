@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsEmail, IsOptional, Matches, MinLength, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsEmail,
+  IsOptional,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * 注册 DTO
@@ -44,46 +52,45 @@ export class RegisterDto {
   password: string;
 
   /**
-   * 手机号
+   * 邮箱（必填）
    */
   @ApiProperty({
-    description: '手机号（11位数字，符合中国手机号格式）',
-    example: '13900139001',
-    pattern: '^1[3-9]\\d{9}$',
+    description: '邮箱地址',
+    example: 'newuser@example.com',
   })
-  @IsNotEmpty({ message: '手机号不能为空' })
-  @IsString({ message: '手机号必须是字符串' })
-  @Matches(/^1[3-9]\d{9}$/, {
-    message: '手机号格式不正确',
-  })
-  phone: string;
+  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsEmail({}, { message: '邮箱格式不正确' })
+  email: string;
 
   /**
-   * 短信验证码
+   * 邮箱验证码
    */
   @ApiProperty({
-    description: '短信验证码（6位数字）',
+    description: '邮箱验证码（6位数字）',
     example: '123456',
     minLength: 6,
     maxLength: 6,
   })
-  @IsNotEmpty({ message: '短信验证码不能为空' })
-  @IsString({ message: '短信验证码必须是字符串' })
+  @IsNotEmpty({ message: '邮箱验证码不能为空' })
+  @IsString({ message: '邮箱验证码必须是字符串' })
   @Matches(/^\d{6}$/, {
-    message: '短信验证码必须是6位数字',
+    message: '邮箱验证码必须是6位数字',
   })
-  smsCode: string;
+  emailCode: string;
 
   /**
-   * 邮箱（可选）
+   * 手机号（可选）
    */
   @ApiProperty({
-    description: '邮箱（可选）',
-    example: 'newuser@example.com',
+    description: '手机号（可选，11位数字，符合中国手机号格式）',
+    example: '13900139001',
     required: false,
+    pattern: '^1[3-9]\\d{9}$',
   })
   @IsOptional()
-  @IsEmail({}, { message: '邮箱格式不正确' })
-  email?: string;
+  @IsString({ message: '手机号必须是字符串' })
+  @Matches(/^1[3-9]\d{9}$/, {
+    message: '手机号格式不正确',
+  })
+  phone?: string;
 }
-

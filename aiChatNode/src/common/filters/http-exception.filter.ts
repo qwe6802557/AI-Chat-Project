@@ -24,7 +24,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = '服务器内部错误';
-    let code = 500;
 
     // 处理 HttpException
     if (exception instanceof HttpException) {
@@ -44,13 +43,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
           message = message[0];
         }
       }
-
-      code = status;
     }
     // 处理普通 Error
     else if (exception instanceof Error) {
       message = exception.message;
-      code = 500;
     }
 
     // 记录错误日志
@@ -59,9 +55,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : '',
     );
 
-    // 返回统一格式的错误响应
-    const errorResponse = ResponseDto.error(message, code);
+    // 返回统一格式的错误响应（code 固定为 1 表示失败）
+    const errorResponse = ResponseDto.error(message, 1);
 
-    response.status(status).json(errorResponse);
+    // HTTP 状态码仍然使用 200，让前端通过 code 字段判断成功或失败
+    response.status(HttpStatus.OK).json(errorResponse);
   }
 }

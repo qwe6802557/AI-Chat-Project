@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CaptchaService } from './services/captcha.service';
 import { SmsService } from './services/sms.service';
+import { EmailService } from './services/email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
 
@@ -26,7 +27,7 @@ import { UserModule } from '../user/user.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, CaptchaService, SmsService, JwtStrategy],
+  providers: [AuthService, CaptchaService, SmsService, EmailService, JwtStrategy],
   exports: [AuthService, JwtStrategy, PassportModule],
 })
 export class AuthModule {}

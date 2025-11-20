@@ -26,25 +26,25 @@ export class UserService {
       throw new ConflictException('用户名已存在');
     }
 
-    // 检查手机号是否已存在
-    const existingPhone = await this.userRepository.findOne({
-      where: { phone: createUserDto.phone },
+    // 检查邮箱是否已存在
+    const existingEmail = await this.userRepository.findOne({
+      where: { email: createUserDto.email },
     });
 
-    if (existingPhone) {
-      throw new ConflictException('手机号已存在');
+    if (existingEmail) {
+      throw new ConflictException('邮箱已存在');
     }
 
-    // 检查邮箱是否已存在
-    if (createUserDto.email) {
-      const existingEmail = await this.userRepository.findOne({
-        where: { email: createUserDto.email },
-      });
-
-      if (existingEmail) {
-        throw new ConflictException('邮箱已存在');
-      }
-    }
+    // 检查手机号是否已存在（可选-留做后续发短信注册）
+    // if (createUserDto.phone) {
+    //   const existingPhone = await this.userRepository.findOne({
+    //     where: { phone: createUserDto.phone },
+    //   });
+    //
+    //   if (existingPhone) {
+    //     throw new ConflictException('手机号已存在');
+    //   }
+    // }
 
     // 创建用户
     const user = this.userRepository.create(createUserDto);
@@ -126,8 +126,8 @@ export class UserService {
     const admin = this.userRepository.create({
       username: adminUsername,
       password: 'admin666', // BeforeInsert 钩子中自动加密
-      phone: '13800138000',
-      email: 'admin@example.com',
+      email: '425160813@qq.com',
+      phone: '13800138000', // 可选
       role: UserRole.ADMIN,
       preferences: {
         theme: 'dark',
