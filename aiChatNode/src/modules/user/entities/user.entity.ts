@@ -104,13 +104,13 @@ export class User {
   updatedAt: Date;
 
   /**
-   * 插入前自动加密密码
+   * 插入前自动加密
    */
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword() {
     if (this.password && !this.password.startsWith('$2b$')) {
-      // 不是已加密的格式才加密
+      // 非加密的格式才加密
       const salt = await bcrypt.genSalt(10);
       this.password = await bcrypt.hash(this.password, salt);
     }

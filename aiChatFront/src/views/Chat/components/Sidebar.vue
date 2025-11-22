@@ -64,12 +64,20 @@ defineOptions({
   name: 'SidebarComponent',
 })
 
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+}
+
 interface Conversation {
   id: string
   title: string
-  messages: never[]
+  messages: Message[]
   createdAt: number
   updatedAt: number
+  sessionId?: string
 }
 
 interface Props {

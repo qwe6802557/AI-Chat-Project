@@ -1,5 +1,20 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  Res,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
+import type { Response } from 'express';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
 
@@ -28,7 +43,8 @@ export class ChatController {
         data: {
           id: 'message-uuid',
           sessionId: 'session-uuid',
-          message: 'NestJS 是一个用于构建高效、可扩展的 Node.js 服务器端应用程序的框架...',
+          message:
+            'NestJS 是一个用于构建高效、可扩展的 Node.js 服务器端应用程序的框架...',
           model: 'gpt-4o',
           usage: {
             promptTokens: 15,
@@ -65,6 +81,95 @@ export class ChatController {
   })
   async create(@Body() createChatDto: CreateChatDto) {
     return this.chatService.create(createChatDto);
+  }
+
+  /**
+   * 创建流式聊天对话
+   */
+  @Post('stream')
+  @ApiOperation({
+    summary: '发送流式聊天消息',
+    description:
+      '发送聊天消息给 AI，使用 SSE 返回流式响应。' +
+      '适用于需要逐字显示 AI 回复的场景。',
+  })
+  @ApiBody({ type: CreateChatDto })
+  @ApiResponse({
+    status: 200,
+    description: '流式传输成功',
+    schema: {
+      type: 'string',
+      example:
+        'data: {"delta":"你好","finish_reason":null}\n\ndata: {"delta":"！","finish_reason":null}\n\ndata: {"delta":"","finish_reason":"stop"}',
+    },
+  })
+  async createStream(
+    @Body() createChatDto: CreateChatDto,
+    @Res() res: Response,
+  ) {
+    // 设置 SSE 响应头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // 禁用 Nginx 缓冲
+
+    try {
+      // 获取流和上下文信息
+      const { stream, sessionId, userId, userMessage, modelId } =
+        await this.chatService.createStream(createChatDto);
+
+      let fullMessage = '';
+
+      // 遍历流式响应
+      for await (const chunk of stream) {
+        const delta = chunk.delta?.content || '';
+        fullMessage += delta;
+
+        // 发送 SSE 事件
+        const sseData = JSON.stringify({
+          delta,
+          finish_reason: chunk.finish_reason,
+          sessionId,
+        });
+
+        res.write(`data: ${sseData}\n\n`);
+
+        // 如果流结束，保存完整消息
+        if (chunk.finish_reason) {
+          // 保存到数据库
+          await this.chatService.saveStreamMessage(
+            userId,
+            sessionId,
+            userMessage,
+            fullMessage,
+            modelId,
+          );
+
+          // 发送最终的完成事件
+          const finalData = JSON.stringify({
+            delta: '',
+            finish_reason: chunk.finish_reason,
+            sessionId,
+            message: fullMessage,
+            model: modelId,
+          });
+
+          res.write(`data: ${finalData}\n\n`);
+          break;
+        }
+      }
+
+      // 结束响应
+      res.end();
+    } catch (error) {
+      // 发送错误事件
+      const errorData = JSON.stringify({
+        error: error.message || '流式请求失败',
+      });
+
+      res.write(`data: ${errorData}\n\n`);
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
+    }
   }
 
   /**

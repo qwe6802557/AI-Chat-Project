@@ -42,7 +42,7 @@
     </div>
 
     <!-- 消息 -->
-    <div v-else class="messages-list">
+    <div v-else ref="messagesListRef" class="messages-list">
       <div v-for="message in messages" :key="message.id" :class="['message-item', message.role]">
         <div class="message-avatar">
           <a-avatar
@@ -61,7 +61,14 @@
           </a-avatar>
         </div>
         <div class="message-content">
-          <div class="message-text">{{ message.content }}</div>
+          <!-- AI 消息：渲染 Markdown -->
+          <div
+            v-if="message.role === 'assistant'"
+            class="markdown-content"
+            v-html="renderMarkdownSimple(message.content)"
+          />
+          <!-- 用户消息：纯文本显示 -->
+          <div v-else class="message-text">{{ message.content }}</div>
         </div>
       </div>
 
@@ -81,39 +88,53 @@
           </div>
         </div>
       </div>
+
+      <!-- 回到底部按钮 -->
+      <transition name="fade">
+        <button
+          v-show="showScrollButton"
+          @click="scrollToBottom(true)"
+          class="scroll-to-bottom-btn"
+          title="回到底部"
+        >
+          <DownOutlined />
+        </button>
+      </transition>
     </div>
 
     <!-- 输入 -->
-    <div class="input-area">
-      <div class="input-wrapper">
-        <a-button type="text" class="input-icon-btn">
-          <PictureOutlined />
-        </a-button>
-        <a-textarea
-          v-model:value="inputMessage"
-          placeholder="发送消息..."
-          :auto-size="{ minRows: 1, maxRows: 5 }"
-          @keydown.enter.exact.prevent="handleSend"
-          class="message-input"
-        />
-        <a-button type="text" class="input-icon-btn">
-          <AudioOutlined />
-        </a-button>
-        <a-button
-          type="primary"
-          :disabled="!inputMessage.trim() || loading"
-          @click="handleSend"
-          class="send-btn"
-        >
-          <SendOutlined />
-        </a-button>
+    <div class="input-area-container">
+      <div class="input-area">
+        <div class="input-wrapper">
+          <a-button type="text" class="input-icon-btn">
+            <PictureOutlined />
+          </a-button>
+          <a-textarea
+            v-model:value="inputMessage"
+            placeholder="发送消息..."
+            :auto-size="{ minRows: 1, maxRows: 5 }"
+            @keydown.enter.exact.prevent="handleSend"
+            class="message-input"
+          />
+          <a-button type="text" class="input-icon-btn">
+            <AudioOutlined />
+          </a-button>
+          <a-button
+            type="primary"
+            :disabled="!inputMessage.trim() || loading"
+            @click="handleSend"
+            class="send-btn"
+          >
+            <SendOutlined />
+          </a-button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
 import {
   UserOutlined,
   RobotOutlined,
@@ -122,8 +143,10 @@ import {
   ThunderboltOutlined,
   WarningOutlined,
   PictureOutlined,
-  AudioOutlined
+  AudioOutlined,
+  DownOutlined
 } from '@ant-design/icons-vue'
+import { renderMarkdownSimple } from '@/utils/markdown'
 
 defineOptions({
   name: 'ChatAreaComponent',
@@ -148,13 +171,209 @@ const emit = defineEmits<{
 }>()
 
 const inputMessage = ref('')
+const messagesListRef = ref<HTMLElement | null>(null)
+const isUserScrolling = ref(false) // 用户是否手动滚动
+const isProgrammaticScroll = ref(false) // 是否为程序化滚动（非用户手动）
+const scrollTimeout = ref<number | null>(null)
+const distanceFromBottom = ref(0) // 距离底部的距离
+const rafId = ref<number | null>(null) // requestAnimationFrame ID
 
+// 是否显示"回到底部"按钮
+const showScrollButton = computed(() => distanceFromBottom.value > 200)
+
+/**
+ * 检查是否在底部附近（阈值 100px）
+ */
+const isNearBottom = (): boolean => {
+  if (!messagesListRef.value) return true
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesListRef.value
+  const distance = scrollHeight - scrollTop - clientHeight
+
+  // 更新距离状态
+  distanceFromBottom.value = distance
+
+  return distance < 100 // 距离底部小于100px视为在底部附近
+}
+
+/**
+ * 滚动到底部
+ * @param smooth 是否平滑滚动
+ */
+const scrollToBottom = (smooth = true) => {
+  if (!messagesListRef.value) return
+
+  // 标记为程序化滚动
+  isProgrammaticScroll.value = true
+
+  nextTick(() => {
+    if (!messagesListRef.value) return
+
+    if (smooth) {
+      // 平滑滚动
+      messagesListRef.value.scrollTo({
+        top: messagesListRef.value.scrollHeight,
+        behavior: 'smooth'
+      })
+    } else {
+      // 立即滚动
+      messagesListRef.value.scrollTop = messagesListRef.value.scrollHeight
+    }
+
+    // 滚动完成后重置标记
+    setTimeout(() => {
+      isProgrammaticScroll.value = false
+    }, smooth ? 500 : 100) // 平滑滚动需要更长的等待时间
+  })
+}
+
+/**
+ * 监听滚动事件，判断用户是否手动滚动
+ */
+const handleScroll = () => {
+  if (!messagesListRef.value) return
+
+  // 程序化滚动忽略事件
+  if (isProgrammaticScroll.value) {
+    return
+  }
+
+  // 清除之前的定时器
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value)
+  }
+
+  // 检查是否在底部
+  const atBottom = isNearBottom()
+
+  // 不在底部说明在查看历史消息
+  isUserScrolling.value = !atBottom
+
+  // 500ms 后重置标记
+  scrollTimeout.value = window.setTimeout(() => {
+    if (isNearBottom()) {
+      isUserScrolling.value = false
+    }
+  }, 500)
+}
+
+/**
+ * 监听消息变化自动滚动
+ */
+watch(
+  () => props.messages,
+  (newMessages, oldMessages) => {
+
+    // 只有在不是用户手动滚动时才自动滚动
+    if (!isUserScrolling.value) {
+      // 新增消息时滚动
+      if (newMessages.length > (oldMessages?.length || 0)) {
+        scrollToBottom(true)
+      } else if (newMessages.length === oldMessages?.length && newMessages.length > 0) {
+        handleStreamingScroll()
+      }
+    }
+  },
+  { deep: true }
+)
+
+/**
+ * 处理流式输出时的滚动
+ */
+const handleStreamingScroll = () => {
+  // 取消RAF
+  if (rafId.value !== null) {
+    cancelAnimationFrame(rafId.value)
+  }
+
+  // 等待DOM更新完成后再滚动
+  nextTick(() => {
+    rafId.value = requestAnimationFrame(() => {
+      if (!messagesListRef.value) {
+        return
+      }
+
+      // 标记为程序化滚动
+      isProgrammaticScroll.value = true
+
+      // 直接滚动到底部
+      messagesListRef.value.scrollTop = messagesListRef.value.scrollHeight
+
+      // 滚动完成后重置标记
+      setTimeout(() => {
+        isProgrammaticScroll.value = false
+      }, 100)
+    })
+  })
+}
+
+/**
+ * 监听 loading 状态变化
+ */
+watch(
+  () => props.loading,
+  (newLoading) => {
+    // loading时滚动到底部
+    if (newLoading && !isUserScrolling.value) {
+      scrollToBottom(true)
+    }
+  }
+)
+
+/**
+ * 发送消息
+ */
 const handleSend = () => {
   if (inputMessage.value.trim() && !props.loading) {
     emit('send-message', inputMessage.value.trim())
     inputMessage.value = ''
+
+    // 发送消息后立即滚动到底部
+    isUserScrolling.value = false
+    nextTick(() => {
+      scrollToBottom(true)
+    })
   }
 }
+
+/**
+ * 组件挂载后获取 DOM 引用
+ */
+onMounted(() => {
+  // 等待 DOM 渲染完成
+  nextTick(() => {
+    if (messagesListRef.value) {
+      // 添加滚动监听
+      messagesListRef.value.addEventListener('scroll', handleScroll)
+
+      // 初始滚动到底部
+      setTimeout(() => {
+        scrollToBottom(false)
+      }, 100)
+    }
+  })
+})
+
+/**
+ * 组件卸载前清理
+ */
+onBeforeUnmount(() => {
+  // 移除滚动监听
+  if (messagesListRef.value) {
+    messagesListRef.value.removeEventListener('scroll', handleScroll)
+  }
+
+  // 清理定时器
+  if (scrollTimeout.value) {
+    clearTimeout(scrollTimeout.value)
+  }
+
+  // 取消 RAF
+  if (rafId.value !== null) {
+    cancelAnimationFrame(rafId.value)
+    rafId.value = null
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -284,10 +503,12 @@ $input-height: 50px;
   .messages-list {
     flex: 1;
     overflow-y: auto;
-    padding: $spacing-xl $spacing-lg 120px;
-    max-width: 800px;
+    overflow-x: hidden;
+    padding: 40px 40px 12px 40px;
+    //max-width: 800px;
     width: 100%;
     margin: 0 auto;
+    scroll-behavior: smooth; // CSS 原生平滑滚动支持
 
     @media (max-width: 768px) {
       padding: $spacing-lg $spacing-md 120px;
@@ -330,7 +551,280 @@ $input-height: 50px;
           white-space: pre-wrap;
           padding: 12px $spacing-md;
           border-radius: $radius-md;
-          transition: all 0.2s ease;
+          // 移除过渡效果，避免打字机效果时的闪烁
+          // transition: all 0.2s ease;
+        }
+
+        // Markdown 内容样式
+        .markdown-content {
+          color: $color-text-primary;
+          font-size: $font-size-base;
+          line-height: 1.7;
+          word-wrap: break-word;
+          padding: 12px $spacing-md;
+          border-radius: $radius-md;
+          background: $color-bg-message;
+          width: 100%;
+
+          // 段落
+          :deep(p) {
+            margin: 8px 0;
+
+            &:first-child {
+              margin-top: 0;
+            }
+
+            &:last-child {
+              margin-bottom: 0;
+            }
+          }
+
+          // 标题
+          :deep(h1),
+          :deep(h2),
+          :deep(h3),
+          :deep(h4),
+          :deep(h5),
+          :deep(h6) {
+            margin: 16px 0 8px 0;
+            font-weight: 600;
+            line-height: 1.4;
+            color: $color-text-primary;
+
+            &:first-child {
+              margin-top: 0;
+            }
+          }
+
+          :deep(h1) {
+            font-size: 24px;
+          }
+          :deep(h2) {
+            font-size: 20px;
+          }
+          :deep(h3) {
+            font-size: 18px;
+          }
+          :deep(h4) {
+            font-size: 16px;
+          }
+          :deep(h5) {
+            font-size: 14px;
+          }
+          :deep(h6) {
+            font-size: 13px;
+          }
+
+          // 行内代码
+          :deep(code:not(pre code)) {
+            background: rgba(0, 0, 0, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 13px;
+            color: #d73a49;
+          }
+
+          // 代码块容器
+          :deep(.code-block) {
+            background: #282c34;
+            border-radius: 8px;
+            margin: 12px 0;
+            overflow: hidden;
+            position: relative;
+
+            .code-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              background: rgba(0, 0, 0, 0.2);
+              padding: 6px 12px;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+              .code-language {
+                color: #abb2bf;
+                font-size: 12px;
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+              }
+
+              .copy-btn {
+                background: rgba(255, 255, 255, 0.1);
+                border: none;
+                color: #abb2bf;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+
+                &:hover {
+                  background: rgba(255, 255, 255, 0.2);
+                  color: #fff;
+                }
+              }
+            }
+
+            code {
+              display: block;
+              padding: 12px;
+              overflow-x: auto;
+              color: #abb2bf;
+              font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+              font-size: 13px;
+              line-height: 1.5;
+              background: transparent;
+
+              &::-webkit-scrollbar {
+                height: 6px;
+              }
+
+              &::-webkit-scrollbar-track {
+                background: rgba(0, 0, 0, 0.1);
+              }
+
+              &::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 3px;
+
+                &:hover {
+                  background: rgba(255, 255, 255, 0.3);
+                }
+              }
+            }
+          }
+
+          // 列表
+          :deep(ul),
+          :deep(ol) {
+            margin: 12px 0;
+            padding-left: 24px;
+
+            li {
+              margin: 4px 0;
+              line-height: 1.6;
+
+              &::marker {
+                color: $color-text-secondary;
+              }
+            }
+
+            // 嵌套列表
+            ul,
+            ol {
+              margin: 4px 0;
+            }
+          }
+
+          // 引用块
+          :deep(blockquote) {
+            border-left: 3px solid #ddd;
+            margin: 12px 0;
+            padding: 8px 0 8px 12px;
+            color: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 0 4px 4px 0;
+
+            p {
+              margin: 4px 0;
+            }
+          }
+
+          // 表格容器
+          :deep(.table-wrapper) {
+            overflow-x: auto;
+            margin: 12px 0;
+
+            &::-webkit-scrollbar {
+              height: 6px;
+            }
+
+            &::-webkit-scrollbar-track {
+              background: rgba(0, 0, 0, 0.05);
+            }
+
+            &::-webkit-scrollbar-thumb {
+              background: rgba(0, 0, 0, 0.2);
+              border-radius: 3px;
+
+              &:hover {
+                background: rgba(0, 0, 0, 0.3);
+              }
+            }
+          }
+
+          // 表格
+          :deep(.markdown-table) {
+            width: 100%;
+            border-collapse: collapse;
+            border-spacing: 0;
+            font-size: 14px;
+
+            th,
+            td {
+              border: 1px solid #ddd;
+              padding: 8px 12px;
+              text-align: left;
+            }
+
+            th {
+              background: rgba(0, 0, 0, 0.04);
+              font-weight: 600;
+              color: $color-text-primary;
+            }
+
+            tr:nth-child(even) {
+              background: rgba(0, 0, 0, 0.02);
+            }
+          }
+
+          // 水平线
+          :deep(hr) {
+            border: none;
+            height: 1px;
+            background: #ddd;
+            margin: 16px 0;
+          }
+
+          // 链接
+          :deep(a) {
+            color: #0969da;
+            text-decoration: none;
+            transition: all 0.2s ease;
+
+            &:hover {
+              text-decoration: underline;
+              color: #0550ae;
+            }
+          }
+
+          // 图片
+          :deep(img) {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 8px 0;
+            display: block;
+          }
+
+          // 强调
+          :deep(strong) {
+            font-weight: 600;
+            color: $color-text-primary;
+          }
+
+          :deep(em) {
+            font-style: italic;
+          }
+
+          :deep(del) {
+            text-decoration: line-through;
+            opacity: 0.7;
+          }
+
+          // 流式输出时的未完成文本
+          :deep(.streaming-text) {
+            opacity: 0.7;
+          }
         }
 
         .typing-indicator {
@@ -398,13 +892,18 @@ $input-height: 50px;
     }
   }
 
+  .input-area-container {
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    margin-bottom: 24px;
+  }
+
   .input-area {
-    position: absolute;
-    bottom: $spacing-xl;
-    left: 50%;
-    transform: translateX(-50%);
     width: calc(100% - 40px);
     max-width: 760px;
+    margin: 0 auto;
 
     @media (max-width: 768px) {
       bottom: $spacing-lg;
@@ -537,6 +1036,57 @@ $input-height: 50px;
     &:hover {
       background: rgba(0, 0, 0, 0.2);
     }
+  }
+
+  // 回到底部按钮
+  .scroll-to-bottom-btn {
+    position: fixed;
+    bottom: 140px;
+    right: $spacing-xl;
+    width: 40px;
+    height: 40px;
+    background: $color-bg-primary;
+    border: 1px solid $color-border;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 8px $color-shadow;
+    transition: all 0.3s ease;
+    z-index: 10;
+
+    &:hover {
+      background: $color-bg-message;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    :deep(.anticon) {
+      font-size: $font-size-lg;
+      color: $color-text-primary;
+    }
+
+    @media (max-width: 768px) {
+      right: $spacing-lg;
+      bottom: 120px;
+    }
+  }
+
+  // 过渡动画
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }
 </style>

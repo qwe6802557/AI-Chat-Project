@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { ChatModule } from './modules/chat/chat.module';
 import { UserModule } from './modules/user/user.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import databaseConfig from './config/database.config';
 
@@ -36,6 +37,7 @@ import databaseConfig from './config/database.config';
     UserModule,
     AuthModule,
     ChatModule,
+    AiProviderModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

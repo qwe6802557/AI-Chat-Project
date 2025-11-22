@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, IsUUID, IsOptional, IsArray, IsNumber, Min, Max, IsBoolean } from 'class-validator';
 
 export class CreateChatDto {
   /**
@@ -9,6 +10,8 @@ export class CreateChatDto {
     example: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
     format: 'uuid',
   })
+  @IsNotEmpty({ message: '用户ID不能为空' })
+  @IsString({ message: '用户ID必须是字符串' })
   userId: string;
 
   /**
@@ -20,6 +23,8 @@ export class CreateChatDto {
     required: false,
     format: 'uuid',
   })
+  @IsOptional()
+  @IsString({ message: '会话ID必须是字符串' })
   sessionId?: string;
 
   /**
@@ -30,6 +35,8 @@ export class CreateChatDto {
     example: '你好，请介绍一下 NestJS 框架',
     minLength: 1,
   })
+  @IsNotEmpty({ message: '消息内容不能为空' })
+  @IsString({ message: '消息内容必须是字符串' })
   message: string;
 
   /**
@@ -51,6 +58,8 @@ export class CreateChatDto {
       },
     },
   })
+  @IsOptional()
+  @IsArray({ message: '对话历史必须是数组' })
   history?: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -65,6 +74,8 @@ export class CreateChatDto {
     required: false,
     default: 'gpt-4o',
   })
+  @IsOptional()
+  @IsString({ message: '模型名称必须是字符串' })
   model?: string;
 
   /**
@@ -78,6 +89,10 @@ export class CreateChatDto {
     maximum: 2,
     default: 0.7,
   })
+  @IsOptional()
+  @IsNumber({}, { message: '温度参数必须是数字' })
+  @Min(0, { message: '温度参数最小值为0' })
+  @Max(2, { message: '温度参数最大值为2' })
   temperature?: number;
 
   /**
@@ -90,6 +105,9 @@ export class CreateChatDto {
     minimum: 1,
     default: 1000,
   })
+  @IsOptional()
+  @IsNumber({}, { message: '最大token数必须是数字' })
+  @Min(1, { message: '最大token数最小值为1' })
   maxTokens?: number;
 
   /**
@@ -101,5 +119,7 @@ export class CreateChatDto {
     required: false,
     default: false,
   })
+  @IsOptional()
+  @IsBoolean({ message: '流式响应标志必须是布尔值' })
   stream?: boolean;
 }

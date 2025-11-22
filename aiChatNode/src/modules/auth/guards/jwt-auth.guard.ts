@@ -1,4 +1,8 @@
-import { Injectable, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Observable } from 'rxjs';
 
@@ -9,7 +13,9 @@ import { Observable } from 'rxjs';
  */
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+  canActivate(
+    context: ExecutionContext,
+  ): boolean | Promise<boolean> | Observable<boolean> {
     // 调用父类的 canActivate 方法
     return super.canActivate(context);
   }
@@ -18,11 +24,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
    * 处理认证失败的情况
    */
   handleRequest(err: any, user: any, info: any) {
-    // 如果有错误或用户不存在，抛出未授权异常
+    // 抛出未授权异常
     if (err || !user) {
       throw err || new UnauthorizedException('未授权，请先登录');
     }
     return user;
   }
 }
-

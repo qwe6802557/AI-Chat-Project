@@ -8,9 +8,9 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 启用 CORS（允许前端跨域请求）
+  // 跨域处理
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // 允许的前端地址
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // 允许的地址
     credentials: true, // 允许携带凭证
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 允许的请求方法
     allowedHeaders: ['Content-Type', 'Authorization'], // 允许的请求头

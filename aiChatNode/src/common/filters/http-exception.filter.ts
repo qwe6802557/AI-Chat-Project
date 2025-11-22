@@ -55,8 +55,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : '',
     );
 
-    // 返回统一格式的错误响应（code 固定为 1 表示失败）
-    const errorResponse = ResponseDto.error(message, 1);
+    // 根据 HTTP 状态码返回对应的业务错误码
+    // 401/403 → code: 1 (权限错误)
+    // 其他 → code: 500 (业务/参数/系统错误)
+    const errorResponse = ResponseDto.errorByStatus(status, message);
 
     // HTTP 状态码仍然使用 200，让前端通过 code 字段判断成功或失败
     response.status(HttpStatus.OK).json(errorResponse);

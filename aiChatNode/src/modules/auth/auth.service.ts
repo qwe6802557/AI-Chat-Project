@@ -77,7 +77,7 @@ export class AuthService {
   async register(registerDto: RegisterDto) {
     const { username, password, email, emailCode, phone } = registerDto;
 
-    // 1. 验证邮箱验证码
+    // 验证邮箱验证码
     const isEmailCodeValid = this.emailService.verifyEmailCode(
       email,
       emailCode,
@@ -86,28 +86,28 @@ export class AuthService {
       throw new BadRequestException('邮箱验证码错误或已过期');
     }
 
-    // 2. 检查用户名是否已存在
+    // 检查用户名是否已存在
     const existingUserByUsername =
       await this.userService.findByUsername(username);
     if (existingUserByUsername) {
       throw new BadRequestException('用户名已存在');
     }
 
-    // 3. 检查邮箱是否已存在
+    // 检查邮箱是否已存在
     const existingUserByEmail = await this.userService.findByEmail(email);
     if (existingUserByEmail) {
       throw new BadRequestException('邮箱已被注册');
     }
 
-    // 4. 检查手机号是否已存在（如果提供了手机号）
-    if (phone) {
-      const existingUserByPhone = await this.userService.findByPhone(phone);
-      if (existingUserByPhone) {
-        throw new BadRequestException('手机号已被注册');
-      }
-    }
+    // 检查手机号是否已存在（可选-留作后期发短信验证码注册）
+    // if (phone) {
+    //   const existingUserByPhone = await this.userService.findByPhone(phone);
+    //   if (existingUserByPhone) {
+    //     throw new BadRequestException('手机号已被注册');
+    //   }
+    // }
 
-    // 创建用户（密码会在 UserService 中自动加密）
+    // 创建用户
     const user = await this.userService.create({
       username,
       password,
@@ -116,7 +116,7 @@ export class AuthService {
       role: UserRole.USER, // 默认角色为普通用户
     });
 
-    // 自动登录：生成 JWT token
+    // 生成token
     const token = this.generateToken(user);
 
     // 返回用户信息（排除密码）

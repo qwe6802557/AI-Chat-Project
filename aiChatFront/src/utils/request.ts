@@ -38,7 +38,7 @@ request.interceptors.request.use(
 
 // 响应拦截器
 request.interceptors.response.use(
-  (response: AxiosResponse<ResponseData>) => {
+  (response: AxiosResponse<ResponseData>): any => {
     const { code, message: msg } = response.data
 
     // 成功
@@ -51,7 +51,7 @@ request.interceptors.response.use(
     return Promise.reject(new Error(msg || '操作失败'))
   },
   (error) => {
-    // HTTP 错误处理
+    // 错误处理
     if (error.response) {
       const { status, data } = error.response
 
