@@ -1,5 +1,35 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsOptional, IsArray, IsNumber, Min, Max, IsBoolean } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, IsOptional, IsArray, IsNumber, Min, Max, IsBoolean, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+/**
+ * 文件数据 DTO（用于多模态输入）
+ */
+export class FileDataDto {
+  @ApiProperty({
+    description: '文件 Base64 数据（包含 data:xxx;base64, 前缀）',
+    example: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
+  })
+  @IsNotEmpty({ message: '文件数据不能为空' })
+  @IsString({ message: '文件数据必须是字符串' })
+  base64: string;
+
+  @ApiProperty({
+    description: '文件 MIME 类型',
+    example: 'image/jpeg',
+  })
+  @IsNotEmpty({ message: '文件类型不能为空' })
+  @IsString({ message: '文件类型必须是字符串' })
+  type: string;
+
+  @ApiProperty({
+    description: '文件名',
+    example: 'photo.jpg',
+  })
+  @IsNotEmpty({ message: '文件名不能为空' })
+  @IsString({ message: '文件名必须是字符串' })
+  name: string;
+}
 
 export class CreateChatDto {
   /**
@@ -122,4 +152,25 @@ export class CreateChatDto {
   @IsOptional()
   @IsBoolean({ message: '流式响应标志必须是布尔值' })
   stream?: boolean;
+
+  /**
+   * 附件文件列表（可选，用于多模态输入）
+   */
+  @ApiProperty({
+    description: '附件文件列表（图片、PDF、文档等）',
+    example: [
+      {
+        base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
+        type: 'image/jpeg',
+        name: 'photo.jpg',
+      },
+    ],
+    required: false,
+    type: [FileDataDto],
+  })
+  @IsOptional()
+  @IsArray({ message: '文件列表必须是数组' })
+  @ValidateNested({ each: true })
+  @Type(() => FileDataDto)
+  files?: FileDataDto[];
 }

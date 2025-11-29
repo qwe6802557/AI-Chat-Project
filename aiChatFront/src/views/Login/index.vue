@@ -8,7 +8,7 @@
       <div class="logo-social-wrapper">
         <div class="logo-section">
           <div class="logo-icon"></div>
-          <span class="logo-text">AI CHAT</span>
+          <span class="logo-text">ERJ CHAT</span>
         </div>
 
         <div class="social-login">
@@ -51,6 +51,7 @@
                 placeholder="用户名"
                 size="large"
                 class="custom-input"
+                autocomplete="username"
               />
             </div>
           </a-form-item>
@@ -64,6 +65,7 @@
                 placeholder="密码"
                 size="large"
                 class="custom-input"
+                autocomplete="current-password"
               />
             </div>
           </a-form-item>
@@ -78,6 +80,7 @@
                   placeholder="验证码"
                   size="large"
                   class="custom-input"
+                  autocomplete="off"
                   :maxlength="6"
                 />
               </div>

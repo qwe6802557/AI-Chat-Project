@@ -14,10 +14,48 @@
         v-for="conversation in conversations"
         :key="conversation.id"
         :class="['conversation-item', { active: conversation.id === currentConversationId }]"
-        @click="$emit('select-conversation', conversation.id)"
+        @click="handleConversationClick(conversation.id)"
       >
         <MessageOutlined class="conversation-icon" />
-        <span class="conversation-title">{{ conversation.title }}</span>
+
+        <!-- 编辑模式 -->
+        <input
+          v-if="editingId === conversation.id"
+          :ref="el => editInputRef = el as HTMLInputElement"
+          v-model="editingTitle"
+          class="conversation-title-input"
+          @blur="handleEditConfirm"
+          @keydown.enter="handleEditConfirm"
+          @keydown.escape="handleEditCancel"
+          @click.stop
+        />
+
+        <!-- 正常模式 -->
+        <span v-else class="conversation-title">{{ conversation.title }}</span>
+
+        <!-- 操作按钮 -->
+        <a-dropdown
+          v-if="editingId !== conversation.id"
+          :trigger="['click']"
+          placement="bottomRight"
+          @click.stop
+        >
+          <span class="more-btn" @click.stop>
+            <MoreOutlined />
+          </span>
+          <template #overlay>
+            <a-menu @click="handleMenuClick($event, conversation)">
+              <a-menu-item key="rename">
+                <EditOutlined />
+                <span style="margin-left: 6px;">重命名</span>
+              </a-menu-item>
+              <a-menu-item key="delete" class="danger-item">
+                <DeleteOutlined />
+                <span style="margin-left: 6px;">删除</span>
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
       </div>
     </div>
 
@@ -27,10 +65,10 @@
         <DeleteOutlined class="menu-icon" />
         <span>清空对话</span>
       </div>
-      <div class="menu-item">
-        <BulbOutlined class="menu-icon" />
-        <span>浅色模式</span>
-      </div>
+<!--      <div class="menu-item">-->
+<!--        <BulbOutlined class="menu-icon" />-->
+<!--        <span>浅色模式</span>-->
+<!--      </div>-->
       <div class="menu-item">
         <UserOutlined class="menu-icon" />
         <span>我的账户</span>
@@ -48,6 +86,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
@@ -57,28 +96,15 @@ import {
   UserOutlined,
   LogoutOutlined,
   BulbOutlined,
-  QuestionCircleOutlined
+  QuestionCircleOutlined,
+  MoreOutlined,
+  EditOutlined
 } from '@ant-design/icons-vue'
+import type { Conversation } from '../hooks/useConversationManager'
 
 defineOptions({
   name: 'SidebarComponent',
 })
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: number
-}
-
-interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: number
-  updatedAt: number
-  sessionId?: string
-}
 
 interface Props {
   conversations: Conversation[]
@@ -91,9 +117,97 @@ const emit = defineEmits<{
   'new-chat': []
   'select-conversation': [id: string]
   'clear-conversations': []
+  'rename-conversation': [id: string, title: string, callback: (success: boolean) => void]
+  'delete-conversation': [id: string]
 }>()
 
 const router = useRouter()
+
+// 编辑状态
+const editingId = ref<string | null>(null)
+const editingTitle = ref('')
+const originalTitle = ref('')  // 保存原标题用于恢复
+const editInputRef = ref<HTMLInputElement | null>(null)
+
+// 点击会话项
+const handleConversationClick = (id: string) => {
+  // 如果正在编辑，不触发选择
+  if (editingId.value) return
+  emit('select-conversation', id)
+}
+
+// 菜单点击
+const handleMenuClick = (e: { key: string }, conversation: Conversation) => {
+  if (e.key === 'rename') {
+    startEditing(conversation)
+  } else if (e.key === 'delete') {
+    handleDeleteConversation(conversation)
+  }
+}
+
+// 开始编辑
+const startEditing = (conversation: Conversation) => {
+  editingId.value = conversation.id
+  editingTitle.value = conversation.title
+  originalTitle.value = conversation.title  // 保存原标题
+  nextTick(() => {
+    editInputRef.value?.focus()
+    editInputRef.value?.select()
+  })
+}
+
+// 确认编辑
+const handleEditConfirm = () => {
+  if (!editingId.value) return
+
+  const newTitle = editingTitle.value.trim()
+  const currentEditingId = editingId.value
+  const savedOriginalTitle = originalTitle.value
+
+  // 标题没有变化或为空则取消编辑
+  if (!newTitle || newTitle === savedOriginalTitle) {
+    editingId.value = null
+    editingTitle.value = ''
+    originalTitle.value = ''
+    return
+  }
+
+  // 清除编辑状态
+  editingId.value = null
+  editingTitle.value = ''
+  originalTitle.value = ''
+
+  // 传入回调处理结果
+  emit('rename-conversation', currentEditingId, newTitle, (success: boolean) => {
+    if (success) {
+      message.success('重命名成功')
+    } else {
+      message.error('重命名失败')
+    }
+  })
+}
+
+// 取消编辑
+const handleEditCancel = () => {
+  editingId.value = null
+  editingTitle.value = ''
+  originalTitle.value = ''
+}
+
+// 删除会话
+const handleDeleteConversation = (conversation: Conversation) => {
+  Modal.confirm({
+    title: '删除对话',
+    content: `确定要删除对话「${conversation.title}」吗？`,
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk() {
+      emit('delete-conversation', conversation.id)
+      message.success('对话已删除')
+    }
+  })
+}
 
 const handleClearConversations = () => {
   Modal.confirm({
@@ -198,13 +312,22 @@ const handleLogout = () => {
       transition: all 0.2s;
       color: #000000;
       font-size: 14px;
+      position: relative;
 
       &:hover {
         background: #0000000f;
+
+        .more-btn {
+          opacity: 1;
+        }
       }
 
       &.active {
         background: #0000000f;
+
+        .more-btn {
+          opacity: 1;
+        }
       }
 
       .conversation-icon {
@@ -218,6 +341,43 @@ const handleLogout = () => {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .conversation-title-input {
+        flex: 1;
+        border: 1px solid #1890ff;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 14px;
+        outline: none;
+        background: #fff;
+        color: #000;
+
+        &:focus {
+          border-color: #1890ff;
+          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+        }
+      }
+
+      .more-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        opacity: 0;
+        transition: all 0.2s;
+        flex-shrink: 0;
+
+        &:hover {
+          background: rgba(0, 0, 0, 0.1);
+        }
+
+        :deep(.anticon) {
+          font-size: 14px;
+          color: rgba(0, 0, 0, 0.6);
+        }
       }
     }
   }
@@ -247,6 +407,39 @@ const handleLogout = () => {
       .menu-icon {
         font-size: 24px;
         color: rgba(0, 0, 0, 0.6);
+      }
+    }
+  }
+}
+
+// 下拉菜单样式
+:deep(.ant-dropdown-menu) {
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 120px;
+
+  .ant-dropdown-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+
+    .anticon {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    &.danger-item {
+      color: #ff4d4f;
+
+      &:hover {
+        background: rgba(255, 77, 79, 0.1);
       }
     }
   }

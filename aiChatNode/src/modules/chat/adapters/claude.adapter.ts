@@ -54,7 +54,8 @@ export class ClaudeAdapter implements IProviderAdapter {
 
       const completion = await this.client.chat.completions.create({
         model,
-        messages,
+        // 类型断言
+        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 4096,
         stream: false,
@@ -79,7 +80,7 @@ export class ClaudeAdapter implements IProviderAdapter {
 
       const stream = await this.client.chat.completions.create({
         model,
-        messages,
+        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 4096,
         stream: true,

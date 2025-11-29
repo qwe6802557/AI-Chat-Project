@@ -234,7 +234,7 @@ export class ChatController {
     if (sessionId) {
       return this.chatService.getSessionHistory(sessionId, limit);
     }
-    // 兼容旧接口，使用 userId 查询
+    // 兼容旧接口-使用userId查询
     if (userId) {
       return this.chatService.getUserChatHistory(userId, limit);
     }

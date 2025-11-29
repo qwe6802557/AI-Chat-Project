@@ -27,8 +27,13 @@ import { UserModule } from '../user/user.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, CaptchaService, SmsService, EmailService, JwtStrategy],
+  providers: [
+    AuthService,
+    CaptchaService,
+    SmsService,
+    EmailService,
+    JwtStrategy,
+  ],
   exports: [AuthService, JwtStrategy, PassportModule],
 })
 export class AuthModule {}
-

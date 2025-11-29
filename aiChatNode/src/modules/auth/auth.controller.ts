@@ -1,7 +1,13 @@
 import { Controller, Post, Get, Body, ValidationPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, SendSmsDto, SendEmailDto, ResetPasswordDto } from './dto';
+import {
+  LoginDto,
+  RegisterDto,
+  SendSmsDto,
+  SendEmailDto,
+  ResetPasswordDto,
+} from './dto';
 
 /**
  * 认证控制器
@@ -27,7 +33,8 @@ export class AuthController {
         code: 0,
         data: {
           captchaId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-          captchaImage: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iNDAiPi4uLjwvc3ZnPg==',
+          captchaImage:
+            'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iNDAiPi4uLjwvc3ZnPg==',
         },
         message: '操作成功',
       },
@@ -92,7 +99,7 @@ export class AuthController {
         code: 0,
         data: {
           message: '验证码已发送到您的邮箱',
-          code: '123456', // 仅开发环境返回
+          code: '123456', // 开发环境返回
         },
         message: '操作成功',
       },
@@ -119,7 +126,8 @@ export class AuthController {
   @Post('login')
   @ApiOperation({
     summary: '用户登录',
-    description: '用户登录，验证用户名、密码和图片验证码，登录成功返回 JWT token',
+    description:
+      '用户登录，验证用户名、密码和图片验证码，登录成功返回 JWT token',
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({
@@ -262,8 +270,9 @@ export class AuthController {
       },
     },
   })
-  async resetPassword(@Body(ValidationPipe) resetPasswordDto: ResetPasswordDto) {
+  async resetPassword(
+    @Body(ValidationPipe) resetPasswordDto: ResetPasswordDto,
+  ) {
     return this.authService.resetPassword(resetPasswordDto);
   }
 }
-

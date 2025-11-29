@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, Logger } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -7,7 +7,8 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { ChatSessionService } from './chat-session.service';
-import { CreateSessionDto } from './dto';
+import { ChatService } from './chat.service';
+import { CreateSessionDto, GetSessionMessagesDto } from './dto';
 import { UpdateSessionBodyDto } from './dto/update-session-body.dto';
 
 /**
@@ -16,7 +17,12 @@ import { UpdateSessionBodyDto } from './dto/update-session-body.dto';
 @ApiTags('聊天会话')
 @Controller('chat/session')
 export class ChatSessionController {
-  constructor(private readonly chatSessionService: ChatSessionService) {}
+  private readonly logger = new Logger(ChatSessionController.name);
+
+  constructor(
+    private readonly chatSessionService: ChatSessionService,
+    private readonly chatService: ChatService,
+  ) {}
 
   /**
    * 创建新会话
@@ -49,6 +55,8 @@ export class ChatSessionController {
     },
   })
   async create(@Body() createSessionDto: CreateSessionDto) {
+    this.logger.log(`[create] 收到请求 Body: ${JSON.stringify(createSessionDto)}`);
+    this.logger.log(`[create] userId 值: ${createSessionDto.userId}, 类型: ${typeof createSessionDto.userId}`);
     return this.chatSessionService.create(createSessionDto);
   }
 
@@ -105,6 +113,84 @@ export class ChatSessionController {
   }
 
   /**
+   * 分页获取会话消息
+   */
+  @Get('messages')
+  @ApiOperation({
+    summary: '获取会话消息',
+    description: '分页获取指定会话的消息列表，按创建时间正序排列',
+  })
+  @ApiQuery({
+    name: 'sessionId',
+    required: true,
+    description: '会话 ID',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    description: '页码（从 1 开始）',
+    example: '1',
+  })
+  @ApiQuery({
+    name: 'pageSize',
+    required: false,
+    description: '每页数量（默认 20，最大 100）',
+    example: '20',
+  })
+  @ApiQuery({
+    name: 'order',
+    required: false,
+    description: '排序方式：asc 正序，desc 倒序',
+    example: 'desc',
+    enum: ['asc', 'desc'],
+  })
+  @ApiResponse({
+    status: 200,
+    description: '获取成功',
+    schema: {
+      example: {
+        code: 0,
+        data: {
+          messages: [
+            {
+              id: 'message-uuid',
+              userId: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
+              sessionId: 'session-uuid',
+              userMessage: '你好',
+              aiMessage: '你好！有什么可以帮助你的吗？',
+              model: 'claude-sonnet-4-5-20250929',
+              usage: {
+                promptTokens: 10,
+                completionTokens: 20,
+                totalTokens: 30,
+              },
+              createdAt: '2025-11-16T21:10:53.000Z',
+              updatedAt: '2025-11-16T21:10:53.000Z',
+            },
+          ],
+          total: 50,
+          page: 1,
+          pageSize: 20,
+          totalPages: 3,
+        },
+        message: '操作成功',
+      },
+    },
+  })
+  async getMessages(
+    @Query('sessionId') sessionId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('order') order?: 'asc' | 'desc',
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
+    const orderValue = order === 'asc' ? 'asc' : 'desc'; // 默认 desc
+    return this.chatService.getSessionMessages(sessionId, pageNum, pageSizeNum, orderValue);
+  }
+
+  /**
    * 获取会话详情
    */
   @Get('detail')
@@ -145,7 +231,7 @@ export class ChatSessionController {
   }
 
   /**
-   * 删除会话（软删除）
+   * 删除会话-软删除
    */
   @Post('delete')
   @ApiOperation({

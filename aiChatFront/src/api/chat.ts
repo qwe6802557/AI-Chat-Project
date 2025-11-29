@@ -3,6 +3,55 @@
  */
 import request, { type ResponseData } from '@/utils/request'
 
+// ---数据类型---
+
+/**
+ * 聊天消息
+ */
+export interface BackendChatMessage {
+  id: string
+  userId: string
+  sessionId: string
+  userMessage: string
+  aiMessage: string
+  model: string
+  usage: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * 后端会话数据
+ */
+export interface BackendChatSession {
+  id: string
+  userId: string
+  title: string
+  isArchived: boolean
+  isDeleted: boolean
+  lastMessagePreview: string | null
+  lastActiveAt: string | null
+  messageCount: number
+  createdAt: string
+  updatedAt: string
+  chatMessages?: BackendChatMessage[]
+}
+
+// ---请求参数类型---
+
+/**
+ * 文件数据接口
+ */
+export interface FileDataParam {
+  base64: string  // data:xxx;base64,...
+  type: string    // MIME type
+  name: string    // 文件名
+}
+
 /**
  * 发送聊天消息请求参数
  */
@@ -13,6 +62,7 @@ export interface SendMessageParams {
   model?: string
   temperature?: number
   maxTokens?: number
+  files?: FileDataParam[] // 附件文件列表（图片、PDF、文档等）
 }
 
 /**
@@ -99,7 +149,7 @@ export function sendStreamMessage(
         // 解码数据块
         buffer += decoder.decode(value, { stream: true })
 
-        // 处理 SSE 数据（可能包含多条消息）
+        // 处理SSE数据-可能包含多条消息
         const lines = buffer.split('\n')
         buffer = lines.pop() || '' // 保留最后一行不完整的数据
 
@@ -148,7 +198,7 @@ export function sendStreamMessage(
   // 启动流式请求
   fetchStream()
 
-  // 返回一个虚拟的 EventSource 对象（用于兼容）
+  // 虚拟EventSource对象-用于兼容
   return {} as EventSource
 }
 
@@ -162,7 +212,7 @@ export interface GetHistoryParams {
 }
 
 export function getHistory(params: GetHistoryParams) {
-  return request.get<never, ResponseData<any[]>>('/chat/history', { params })
+  return request.get<never, ResponseData<never[]>>('/chat/history', { params })
 }
 
 /**
@@ -174,7 +224,7 @@ export interface GetSessionListParams {
 }
 
 export function getSessionList(params: GetSessionListParams) {
-  return request.get<never, ResponseData<any[]>>('/chat/session/list', { params })
+  return request.get<never, ResponseData<BackendChatSession[]>>('/chat/session/list', { params })
 }
 
 /**
@@ -186,7 +236,7 @@ export interface CreateSessionParams {
 }
 
 export function createSession(data: CreateSessionParams) {
-  return request.post<never, ResponseData<any>>('/chat/session/create', data)
+  return request.post<never, ResponseData<BackendChatSession>>('/chat/session/create', data)
 }
 
 /**
@@ -198,4 +248,39 @@ export interface DeleteSessionParams {
 
 export function deleteSession(data: DeleteSessionParams) {
   return request.post<never, ResponseData<void>>('/chat/session/delete', data)
+}
+
+/**
+ * 获取会话消息
+ */
+export interface GetSessionMessagesParams {
+  sessionId: string
+  page?: number
+  pageSize?: number
+  /** 排序方式：asc正序，desc倒序 */
+  order?: 'asc' | 'desc'
+}
+
+export interface SessionMessagesResponse {
+  messages: BackendChatMessage[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export function getSessionMessages(params: GetSessionMessagesParams) {
+  return request.get<never, ResponseData<SessionMessagesResponse>>('/chat/session/messages', { params })
+}
+
+/**
+ * 更新会话标题
+ */
+export interface UpdateSessionTitleParams {
+  id: string
+  title: string
+}
+
+export function updateSessionTitle(data: UpdateSessionTitleParams) {
+  return request.post<never, ResponseData<BackendChatSession>>('/chat/session/update', data)
 }

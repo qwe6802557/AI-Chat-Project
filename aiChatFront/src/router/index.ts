@@ -40,7 +40,7 @@ const router = createRouter({
       name: 'chat',
       component: () => import('../views/Chat/index.vue'),
       meta: {
-        title: 'AI Chat',
+        title: 'ERJ Chat',
         requiresAuth: true,
       },
     },
@@ -69,9 +69,9 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   // 更新页面标题
   if (to.meta.title) {
-    document.title = `${to.meta.title} - AI Chat`
+    document.title = `${to.meta.title} - ERJ Chat`
   } else {
-    document.title = 'AI Chat'
+    document.title = 'ERJ Chat'
   }
 
   // 检查是否需要认证

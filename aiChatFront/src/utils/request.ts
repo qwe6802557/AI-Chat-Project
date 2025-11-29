@@ -5,7 +5,7 @@ import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 
 // 响应数据接口
-export interface ResponseData<T = never> {
+export interface ResponseData<T = unknown> {
   code: number
   data: T
   message: string
@@ -38,12 +38,12 @@ request.interceptors.request.use(
 
 // 响应拦截器
 request.interceptors.response.use(
-  (response: AxiosResponse<ResponseData>): any => {
+  (response: AxiosResponse<ResponseData>) => {
     const { code, message: msg } = response.data
 
     // 成功
     if (code === 0) {
-      return response.data
+      return response.data as never
     }
 
     // 非成功

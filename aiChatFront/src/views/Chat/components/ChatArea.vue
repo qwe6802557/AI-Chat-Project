@@ -1,5 +1,21 @@
 <template>
-  <div class="chat-area">
+  <div
+    class="chat-area"
+    @dragover.prevent="handleDragOver"
+    @dragleave.prevent="handleDragLeave"
+    @drop.prevent="handleDrop"
+  >
+    <!-- 拖拽遮罩 -->
+    <transition name="fade">
+      <div v-if="isDragging" class="drag-overlay">
+        <div class="drag-content">
+          <CloudUploadOutlined class="drag-icon" />
+          <p>释放以上传文件</p>
+          <span>支持图片、PDF、Word 文档</span>
+        </div>
+      </div>
+    </transition>
+
     <div v-if="messages.length === 0" class="welcome-screen">
       <div class="welcome-content">
         <div class="logo-section">
@@ -43,6 +59,12 @@
 
     <!-- 消息 -->
     <div v-else ref="messagesListRef" class="messages-list">
+      <!-- 加载更多指示器 -->
+      <div v-if="isLoadingMore" class="loading-more-indicator">
+        <LoadingOutlined class="loading-icon" spin />
+        <span class="loading-text">加载历史消息...</span>
+      </div>
+
       <div v-for="message in messages" :key="message.id" :class="['message-item', message.role]">
         <div class="message-avatar">
           <a-avatar
@@ -67,8 +89,30 @@
             class="markdown-content"
             v-html="renderMarkdownSimple(message.content)"
           />
-          <!-- 用户消息：纯文本显示 -->
-          <div v-else class="message-text">{{ message.content }}</div>
+          <!-- 用户消息：支持图片 + 文本 -->
+          <div v-else class="user-message-content">
+            <!-- 用户发送的图片 -->
+            <div v-if="message.attachments?.length" class="message-attachments">
+              <div
+                v-for="(att, idx) in message.attachments"
+                :key="idx"
+                :class="['attachment-item', att.type]"
+              >
+                <img
+                  v-if="att.type === 'image'"
+                  :src="att.preview"
+                  :alt="att.name"
+                  class="attachment-image"
+                />
+                <div v-else class="attachment-file">
+                  <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
+                  <FileTextOutlined v-else class="file-icon doc" />
+                  <span class="file-name">{{ att.name }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="message.content" class="message-text">{{ message.content }}</div>
+          </div>
         </div>
       </div>
 
@@ -105,15 +149,42 @@
     <!-- 输入 -->
     <div class="input-area-container">
       <div class="input-area">
+        <!-- 文件预览区域 -->
+        <FilePreview
+          v-if="uploadedFiles.length > 0"
+          :files="uploadedFiles"
+          @remove="handleRemoveFile"
+        />
+
         <div class="input-wrapper">
-          <a-button type="text" class="input-icon-btn">
+          <!-- 上传按钮 -->
+          <a-button
+            type="text"
+            class="input-icon-btn"
+            @click="triggerFileInput"
+            :disabled="loading"
+            title="上传图片或文件"
+          >
             <PictureOutlined />
           </a-button>
+
+          <!-- 隐藏的文件输入 -->
+          <input
+            ref="fileInputRef"
+            type="file"
+            multiple
+            accept="image/*,.pdf,.doc,.docx,.txt"
+            class="hidden-file-input"
+            @change="handleFileInputChange"
+          />
+
           <a-textarea
+            ref="textareaRef"
             v-model:value="inputMessage"
-            placeholder="发送消息..."
+            placeholder="发送消息，或拖拽/粘贴图片..."
             :auto-size="{ minRows: 1, maxRows: 5 }"
             @keydown.enter.exact.prevent="handleSend"
+            @paste="handlePaste"
             class="message-input"
           />
           <a-button type="text" class="input-icon-btn">
@@ -121,7 +192,7 @@
           </a-button>
           <a-button
             type="primary"
-            :disabled="!inputMessage.trim() || loading"
+            :disabled="!canSend"
             @click="handleSend"
             class="send-btn"
           >
@@ -134,7 +205,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
+import { ref, computed, watch, nextTick, toRef } from 'vue'
 import {
   UserOutlined,
   RobotOutlined,
@@ -144,236 +215,225 @@ import {
   WarningOutlined,
   PictureOutlined,
   AudioOutlined,
-  DownOutlined
+  DownOutlined,
+  LoadingOutlined,
+  CloudUploadOutlined,
+  FilePdfOutlined,
+  FileTextOutlined
 } from '@ant-design/icons-vue'
 import { renderMarkdownSimple } from '@/utils/markdown'
+import { useScrollManager } from '@/hooks/useScrollManager'
+import { useFileUpload } from '@/hooks/useFileUpload'
+import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import FilePreview from './FilePreview.vue'
+import type { Message } from '../hooks/useConversationManager'
 
 defineOptions({
   name: 'ChatAreaComponent',
 })
 
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: number
-}
-
 interface Props {
   messages: Message[]
   loading: boolean
+  currentSessionId?: string
+  hasMoreMessages?: boolean
+  /** 加载更多消息的函数 */
+  loadMoreMessages?: (sessionId: string, page: number) => Promise<void>
 }
 
 const props = defineProps<Props>()
 
+// 默认值
+const hasMoreMessagesComputed = computed(() => props.hasMoreMessages ?? true)
+
 const emit = defineEmits<{
-  'send-message': [content: string]
+  'send-message': [content: string, files?: { base64: string; type: string; name: string }[]]
 }>()
 
 const inputMessage = ref('')
 const messagesListRef = ref<HTMLElement | null>(null)
-const isUserScrolling = ref(false) // 用户是否手动滚动
-const isProgrammaticScroll = ref(false) // 是否为程序化滚动（非用户手动）
-const scrollTimeout = ref<number | null>(null)
-const distanceFromBottom = ref(0) // 距离底部的距离
-const rafId = ref<number | null>(null) // requestAnimationFrame ID
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const textareaRef = ref<HTMLElement | null>(null)
 
-// 是否显示"回到底部"按钮
-const showScrollButton = computed(() => distanceFromBottom.value > 200)
+// 拖拽状态
+const isDragging = ref(false)
+let dragCounter = 0
 
-/**
- * 检查是否在底部附近（阈值 100px）
- */
-const isNearBottom = (): boolean => {
-  if (!messagesListRef.value) return true
+// 文件上传 Hook
+const {
+  files: uploadedFiles,
+  addFiles,
+  removeFile,
+  clearFiles,
+  getFilesForSend,
+  hasFiles
+} = useFileUpload()
 
-  const { scrollTop, scrollHeight, clientHeight } = messagesListRef.value
-  const distance = scrollHeight - scrollTop - clientHeight
-
-  // 更新距离状态
-  distanceFromBottom.value = distance
-
-  return distance < 100 // 距离底部小于100px视为在底部附近
-}
-
-/**
- * 滚动到底部
- * @param smooth 是否平滑滚动
- */
-const scrollToBottom = (smooth = true) => {
-  if (!messagesListRef.value) return
-
-  // 标记为程序化滚动
-  isProgrammaticScroll.value = true
-
-  nextTick(() => {
-    if (!messagesListRef.value) return
-
-    if (smooth) {
-      // 平滑滚动
-      messagesListRef.value.scrollTo({
-        top: messagesListRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
-    } else {
-      // 立即滚动
-      messagesListRef.value.scrollTop = messagesListRef.value.scrollHeight
-    }
-
-    // 滚动完成后重置标记
-    setTimeout(() => {
-      isProgrammaticScroll.value = false
-    }, smooth ? 500 : 100) // 平滑滚动需要更长的等待时间
-  })
-}
-
-/**
- * 监听滚动事件，判断用户是否手动滚动
- */
-const handleScroll = () => {
-  if (!messagesListRef.value) return
-
-  // 程序化滚动忽略事件
-  if (isProgrammaticScroll.value) {
-    return
-  }
-
-  // 清除之前的定时器
-  if (scrollTimeout.value) {
-    clearTimeout(scrollTimeout.value)
-  }
-
-  // 检查是否在底部
-  const atBottom = isNearBottom()
-
-  // 不在底部说明在查看历史消息
-  isUserScrolling.value = !atBottom
-
-  // 500ms 后重置标记
-  scrollTimeout.value = window.setTimeout(() => {
-    if (isNearBottom()) {
-      isUserScrolling.value = false
-    }
-  }, 500)
-}
-
-/**
- * 监听消息变化自动滚动
- */
-watch(
-  () => props.messages,
-  (newMessages, oldMessages) => {
-
-    // 只有在不是用户手动滚动时才自动滚动
-    if (!isUserScrolling.value) {
-      // 新增消息时滚动
-      if (newMessages.length > (oldMessages?.length || 0)) {
-        scrollToBottom(true)
-      } else if (newMessages.length === oldMessages?.length && newMessages.length > 0) {
-        handleStreamingScroll()
-      }
-    }
-  },
-  { deep: true }
+// 是否可以发送（有内容或有文件）
+const canSend = computed(() =>
+  (inputMessage.value.trim() || hasFiles.value) && !props.loading
 )
 
-/**
- * 处理流式输出时的滚动
- */
-const handleStreamingScroll = () => {
-  // 取消RAF
-  if (rafId.value !== null) {
-    cancelAnimationFrame(rafId.value)
-  }
+// 分页状态
+const currentPage = ref(1)
 
-  // 等待DOM更新完成后再滚动
-  nextTick(() => {
-    rafId.value = requestAnimationFrame(() => {
-      if (!messagesListRef.value) {
-        return
-      }
+// 滚动管理 Hook
+const scrollManager = useScrollManager(messagesListRef)
+const {
+  showScrollButton,
+  scrollToBottom,
+  resetUserScrolling
+} = scrollManager
 
-      // 标记为程序化滚动
-      isProgrammaticScroll.value = true
-
-      // 直接滚动到底部
-      messagesListRef.value.scrollTop = messagesListRef.value.scrollHeight
-
-      // 滚动完成后重置标记
-      setTimeout(() => {
-        isProgrammaticScroll.value = false
-      }, 100)
-    })
-  })
-}
-
-/**
- * 监听 loading 状态变化
- */
-watch(
-  () => props.loading,
-  (newLoading) => {
-    // loading时滚动到底部
-    if (newLoading && !isUserScrolling.value) {
-      scrollToBottom(true)
-    }
-  }
+// 消息列表监听Hook
+useMessageListWatcher(
+  toRef(props, 'messages'),
+  toRef(props, 'loading'),
+  scrollManager
 )
+
+// 向上滚动加载更多消息
+const { isLoading: isLoadingMore } = useInfiniteScroll(messagesListRef, {
+  threshold: 300, // 阈值
+  throttleDelay: 150,
+  disabled: toRef(props, 'loading'),
+  hasMore: hasMoreMessagesComputed,
+  onLoadMore: async () => {
+    if (!props.currentSessionId || !props.loadMoreMessages) {
+      return
+    }
+
+    // 加载下一页
+    const nextPage = currentPage.value + 1
+
+    // 等待加载完成
+    await props.loadMoreMessages(props.currentSessionId, nextPage)
+
+    // 更新页码
+    currentPage.value = nextPage
+  }
+})
+
+// 监听会话切换-重置分页状态
+watch(() => props.currentSessionId, () => {
+  currentPage.value = 1
+})
 
 /**
  * 发送消息
  */
 const handleSend = () => {
-  if (inputMessage.value.trim() && !props.loading) {
-    emit('send-message', inputMessage.value.trim())
-    inputMessage.value = ''
+  const content = inputMessage.value.trim()
+  const filesData = hasFiles.value ? getFilesForSend() : undefined
 
-    // 发送消息后立即滚动到底部
-    isUserScrolling.value = false
-    nextTick(() => {
-      scrollToBottom(true)
-    })
+  // 必须有内容或文件
+  if (!content && !filesData?.length) return
+  if (props.loading) return
+
+  // 发送消息
+  emit('send-message', content, filesData)
+
+  // 清空输入和文件
+  inputMessage.value = ''
+  clearFiles()
+
+  // 发送消息后立即滚动到底部
+  resetUserScrolling()
+  nextTick(() => {
+    scrollToBottom(true)
+  })
+}
+
+// ==================== 文件上传相关方法 ====================
+
+/**
+ * 触发文件选择
+ */
+const triggerFileInput = () => {
+  fileInputRef.value?.click()
+}
+
+/**
+ * 文件输入变化
+ */
+const handleFileInputChange = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    addFiles(target.files)
+    // 重置 input，允许重复选择同一文件
+    target.value = ''
   }
 }
 
 /**
- * 组件挂载后获取 DOM 引用
+ * 移除文件
  */
-onMounted(() => {
-  // 等待 DOM 渲染完成
-  nextTick(() => {
-    if (messagesListRef.value) {
-      // 添加滚动监听
-      messagesListRef.value.addEventListener('scroll', handleScroll)
-
-      // 初始滚动到底部
-      setTimeout(() => {
-        scrollToBottom(false)
-      }, 100)
-    }
-  })
-})
+const handleRemoveFile = (id: string) => {
+  removeFile(id)
+}
 
 /**
- * 组件卸载前清理
+ * 处理拖拽进入
  */
-onBeforeUnmount(() => {
-  // 移除滚动监听
-  if (messagesListRef.value) {
-    messagesListRef.value.removeEventListener('scroll', handleScroll)
+const handleDragOver = (event: DragEvent) => {
+  // 检查是否包含文件
+  if (event.dataTransfer?.types.includes('Files')) {
+    dragCounter++
+    isDragging.value = true
+  }
+}
+
+/**
+ * 处理拖拽离开
+ */
+const handleDragLeave = () => {
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    isDragging.value = false
+  }
+}
+
+/**
+ * 处理文件放置
+ */
+const handleDrop = (event: DragEvent) => {
+  dragCounter = 0
+  isDragging.value = false
+
+  const files = event.dataTransfer?.files
+  if (files && files.length > 0) {
+    addFiles(files)
+  }
+}
+
+/**
+ * 处理粘贴（支持粘贴图片）
+ */
+const handlePaste = (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  const files: File[] = []
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    // 检查是否是文件类型
+    if (item.kind === 'file') {
+      const file = item.getAsFile()
+      if (file) {
+        files.push(file)
+      }
+    }
   }
 
-  // 清理定时器
-  if (scrollTimeout.value) {
-    clearTimeout(scrollTimeout.value)
+  if (files.length > 0) {
+    // 阻止默认粘贴行为（避免粘贴文件名）
+    event.preventDefault()
+    addFiles(files)
   }
-
-  // 取消 RAF
-  if (rafId.value !== null) {
-    cancelAnimationFrame(rafId.value)
-    rafId.value = null
-  }
-})
+}
 </script>
 
 <style scoped lang="scss">
@@ -417,6 +477,49 @@ $input-height: 50px;
   flex-direction: column;
   position: relative;
   overflow: hidden;
+
+  // 拖拽遮罩
+  .drag-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(91, 91, 214, 0.1);
+    border: 2px dashed #5B5BD6;
+    border-radius: $radius-md;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+
+    .drag-content {
+      text-align: center;
+      color: #5B5BD6;
+
+      .drag-icon {
+        font-size: 48px;
+        margin-bottom: $spacing-md;
+      }
+
+      p {
+        font-size: $font-size-lg;
+        font-weight: 600;
+        margin: 0 0 $spacing-xs;
+      }
+
+      span {
+        font-size: $font-size-sm;
+        opacity: 0.8;
+      }
+    }
+  }
+
+  // 隐藏的文件输入
+  .hidden-file-input {
+    display: none;
+  }
 
   .welcome-screen {
     flex: 1;
@@ -514,6 +617,30 @@ $input-height: 50px;
       padding: $spacing-lg $spacing-md 120px;
     }
 
+    // 加载更多指示器
+    .loading-more-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: $spacing-sm;
+      padding: $spacing-md 0;
+      margin-bottom: $spacing-md;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0));
+      position: sticky;
+      top: 0;
+      z-index: 5;
+
+      .loading-icon {
+        font-size: 16px;
+        color: $color-text-secondary;
+      }
+
+      .loading-text {
+        color: $color-text-secondary;
+        font-size: $font-size-sm;
+      }
+    }
+
     .message-item {
       display: flex;
       gap: $spacing-md;
@@ -542,6 +669,7 @@ $input-height: 50px;
         min-width: 0;
         max-width: 70%;
         display: flex;
+        flex-direction: column;
 
         .message-text {
           color: $color-text-primary;
@@ -551,8 +679,70 @@ $input-height: 50px;
           white-space: pre-wrap;
           padding: 12px $spacing-md;
           border-radius: $radius-md;
-          // 移除过渡效果，避免打字机效果时的闪烁
-          // transition: all 0.2s ease;
+        }
+
+        // 用户消息内容（支持附件）
+        .user-message-content {
+          display: flex;
+          flex-direction: column;
+          gap: $spacing-sm;
+
+          .message-attachments {
+            display: flex;
+            flex-wrap: wrap;
+            gap: $spacing-sm;
+            justify-content: flex-end;
+
+            .attachment-item {
+              border-radius: $radius-sm;
+              overflow: hidden;
+
+              &.image {
+                .attachment-image {
+                  max-width: 200px;
+                  max-height: 200px;
+                  object-fit: cover;
+                  border-radius: $radius-sm;
+                  cursor: pointer;
+                  transition: transform 0.2s ease;
+
+                  &:hover {
+                    transform: scale(1.02);
+                  }
+                }
+              }
+
+              .attachment-file {
+                display: flex;
+                align-items: center;
+                gap: $spacing-xs;
+                padding: $spacing-sm $spacing-md;
+                background: rgba(0, 0, 0, 0.04);
+                border-radius: $radius-sm;
+
+                .file-icon {
+                  font-size: 20px;
+
+                  &.pdf {
+                    color: #ff5722;
+                  }
+
+                  &.doc {
+                    color: #2196f3;
+                  }
+                }
+
+                .file-name {
+                  font-size: $font-size-sm;
+                  color: $color-text-secondary;
+                  max-width: 150px;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                }
+              }
+            }
+          }
         }
 
         // Markdown 内容样式

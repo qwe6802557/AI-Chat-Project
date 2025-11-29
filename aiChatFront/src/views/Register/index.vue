@@ -8,7 +8,7 @@
       <div class="logo-social-wrapper">
         <div class="logo-section">
           <div class="logo-icon"></div>
-          <span class="logo-text">AI CHAT</span>
+          <span class="logo-text">ERJ CHAT</span>
         </div>
 
         <div class="social-login">
@@ -41,6 +41,7 @@
           @finish="handleRegister"
           layout="vertical"
           class="register-form"
+          autocomplete="off"
         >
           <!-- 用户名-->
           <a-form-item name="name" class="form-item">
@@ -51,6 +52,7 @@
                 placeholder="用户名"
                 size="large"
                 class="custom-input"
+                autocomplete="off"
               />
             </div>
           </a-form-item>
@@ -64,6 +66,7 @@
                 placeholder="密码"
                 size="large"
                 class="custom-input"
+                autocomplete="new-password"
               />
             </div>
           </a-form-item>
@@ -78,6 +81,7 @@
                 placeholder="邮箱地址"
                 size="large"
                 class="custom-input email-filled"
+                autocomplete="off"
                 @input="handleEmailInput"
               />
             </div>
@@ -92,6 +96,7 @@
                 placeholder="验证码"
                 size="large"
                 class="custom-input verify-code-input"
+                autocomplete="off"
               />
               <a-button
                 :disabled="!canSendCode || countdown > 0"
@@ -229,7 +234,7 @@ const handleSendCode = async () => {
 const handleRegister = async () => {
   loading.value = true
   try {
-    // 调用后端注册 API
+    // 调用注册
     const params: RegisterParams = {
       username: formState.name,
       password: formState.password,
@@ -261,7 +266,6 @@ const handleRegister = async () => {
     }
   } catch (err: any) {
     console.error('注册失败:', err)
-    message.error(err?.message || '注册失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -536,7 +540,7 @@ const handleGoToLogin = () => {
 
             &:hover:not(:disabled) {
               background: #0f5fd1;
-              transform: translateY(-50%) scale(1.02);
+              //transform: translateY(-50%) scale(1.02);
             }
 
             &:active:not(:disabled) {

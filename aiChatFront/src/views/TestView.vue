@@ -30,18 +30,18 @@ if (window.electronAPI) {
 
 <template>
   <div class="test-container">
-    <a-card title="AI Chat 测试页面" style="max-width: 800px; margin: 40px auto">
+    <a-card title="ERJ Chat 测试页面" style="max-width: 800px; margin: 40px auto">
       <!-- Electron 环境检测 -->
       <a-alert
         v-if="isElectron"
-        message="✅ 运行在 Electron 环境"
+        message="运行在 Electron 环境"
         type="success"
         show-icon
         style="margin-bottom: 20px"
       />
       <a-alert
         v-else
-        message="🌐 运行在 Web 浏览器环境"
+        message="运行在 Web 浏览器环境"
         type="info"
         show-icon
         style="margin-bottom: 20px"

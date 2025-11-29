@@ -8,7 +8,7 @@
       <div class="logo-social-wrapper">
         <div class="logo-section">
           <div class="logo-icon"></div>
-          <span class="logo-text">AI CHAT</span>
+          <span class="logo-text">ERJ CHAT</span>
         </div>
 
         <div class="social-login">
@@ -41,6 +41,7 @@
           @finish="handleResetPassword"
           layout="vertical"
           class="forgot-password-form"
+          autocomplete="off"
         >
           <!-- 邮箱输入框 -->
           <a-form-item name="email" class="form-item">
@@ -52,6 +53,7 @@
                 placeholder="邮箱地址"
                 size="large"
                 :class="['custom-input', formState.email ? 'email-filled' : '']"
+                autocomplete="off"
                 @input="handleEmailInput"
               />
             </div>
@@ -66,6 +68,7 @@
                 placeholder="验证码"
                 size="large"
                 class="custom-input verify-code-input"
+                autocomplete="off"
                 maxlength="6"
               />
               <a-button
@@ -88,6 +91,7 @@
                 placeholder="新密码"
                 size="large"
                 class="custom-input"
+                autocomplete="new-password"
               />
             </div>
           </a-form-item>
@@ -101,6 +105,7 @@
                 placeholder="确认新密码"
                 size="large"
                 class="custom-input"
+                autocomplete="new-password"
               />
             </div>
           </a-form-item>

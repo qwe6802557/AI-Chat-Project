@@ -5,11 +5,9 @@
 
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js'
-
-// 导入highlight.js样式
 import 'highlight.js/styles/atom-one-dark.css'
 
-// ==================== 配置 marked ====================
+// ---配置marked---
 
 // 自定义渲染器
 const renderer = new marked.Renderer()
@@ -66,7 +64,7 @@ marked.setOptions({
   gfm: true, // 启用GitHub风格Markdown
 })
 
-// ==================== 工具函数 ====================
+// --- 工具函数 ---
 
 /**
  * HTML 转义函数
@@ -136,8 +134,8 @@ export function renderMarkdown(content: string): string {
 /**
  * 流式渲染 Markdown
  * 使用混合渲染策略：
- * - 当内容完整时，进行完整渲染
- * - 当内容不完整时，返回上一次的渲染结果 + 原始文本
+ * - 当内容完整时-进行完整渲染
+ * - 当内容不完整时-返回上一次的渲染结果 + 原始文本
  */
 export function renderStreamingMarkdown(
   content: string,
@@ -222,11 +220,11 @@ function findLastCompleteBlock(content: string): number {
 }
 
 /**
- * 简单渲染（不进行完整性检查-用于非流式场景）
+ * 简单渲染-不进行完整性检查-用于非流式场景
  */
 export function renderMarkdownSimple(content: string): string {
   return renderMarkdown(content)
 }
 
-// 导出 hljs 用于手动高亮（可选）
+// 导出 hljs 用于手动高亮-可选
 export { hljs }

@@ -3,14 +3,25 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AIClientService } from './services/ai-client.service';
-import { CreateChatDto } from './dto';
+import { CreateChatDto, FileDataDto } from './dto';
 import { ChatMessage } from './entities/chat.entity';
 import { UserService } from '../user/user.service';
 import { ChatSessionService } from './chat-session.service';
+import { MultimodalContent } from './types/completion.types';
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+
+  /**
+   * 支持的图片 MIME 类型
+   */
+  private readonly SUPPORTED_IMAGE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ];
 
   constructor(
     private readonly aiClientService: AIClientService,
@@ -20,6 +31,71 @@ export class ChatService {
     private readonly chatSessionService: ChatSessionService,
     private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * 构建多模态消息内容
+   * @param textContent 文本内容
+   * @param files 文件列表
+   * @returns 纯文本或多模态内容数组
+   */
+  private buildMultimodalContent(
+    textContent: string,
+    files?: FileDataDto[],
+  ): string | MultimodalContent[] {
+    // 没有文件，返回纯文本
+    if (!files || files.length === 0) {
+      return textContent;
+    }
+
+    const contentParts: MultimodalContent[] = [];
+
+    // 处理文件
+    for (const file of files) {
+      if (this.SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+        // 图片：使用 image_url 格式
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: file.base64, // Base64 数据 URL
+            detail: 'auto', // 自动选择细节级别
+          },
+        });
+        this.logger.debug(`添加图片: ${file.name} (${file.type})`);
+      } else if (file.type === 'application/pdf') {
+        // PDF：尝试作为图片发送（Claude 支持 PDF）
+        contentParts.push({
+          type: 'image_url',
+          image_url: {
+            url: file.base64,
+            detail: 'auto',
+          },
+        });
+        this.logger.debug(`添加 PDF: ${file.name}`);
+      } else {
+        // 其他文档：作为文本描述添加
+        contentParts.push({
+          type: 'text',
+          text: `[附件: ${file.name} (${file.type})]`,
+        });
+        this.logger.debug(`添加文档描述: ${file.name}`);
+      }
+    }
+
+    // 添加文本内容
+    if (textContent && textContent.trim()) {
+      contentParts.push({
+        type: 'text',
+        text: textContent,
+      });
+    }
+
+    // 如果只有文本-返回纯文本格式
+    if (contentParts.length === 1 && contentParts[0].type === 'text') {
+      return (contentParts[0] as { type: 'text'; text: string }).text;
+    }
+
+    return contentParts;
+  }
 
   /**
    * 创建聊天对话
@@ -34,7 +110,7 @@ export class ChatService {
       throw new NotFoundException('用户不存在');
     }
 
-    // 处理会话：如果没有提供 sessionId，则创建新会话
+    // 没有提供sessionId-则创建新会话
     let sessionId = createChatDto.sessionId;
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
@@ -51,7 +127,7 @@ export class ChatService {
     // 构建消息数组
     const messages: any[] = [];
 
-    // 如果没有提供历史消息，从数据库加载该会话的历史消息
+    // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
       const historyMessages = await this.getSessionHistory(sessionId, 10);
       historyMessages.forEach((msg) => {
@@ -64,11 +140,24 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    // 构建当前用户消息内容（支持多模态）
+    const userContent = this.buildMultimodalContent(
+      createChatDto.message,
+      createChatDto.files,
+    );
+
     // 添加当前用户消息
     messages.push({
       role: 'user',
-      content: createChatDto.message,
+      content: userContent,
     });
+
+    // 记录文件信息
+    if (createChatDto.files && createChatDto.files.length > 0) {
+      this.logger.log(
+        `包含 ${createChatDto.files.length} 个附件: ${createChatDto.files.map((f) => f.name).join(', ')}`,
+      );
+    }
 
     // 获取默认模型
     const defaultModel =
@@ -109,14 +198,13 @@ export class ChatService {
 
     this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
 
-    // 更新会话的最后活跃时间和消息预览
+    // 更新最后活跃时间和消息预览
     const preview =
       createChatDto.message.length > 50
         ? createChatDto.message.substring(0, 50) + '...'
         : createChatDto.message;
     await this.chatSessionService.updateLastActivity(sessionId, preview);
 
-    // 由拦截器统一包装返回值
     return {
       id: savedMessage.id,
       sessionId: sessionId,
@@ -132,7 +220,7 @@ export class ChatService {
   }
 
   /**
-   * 获取用户的聊天历史（已废弃，建议使用 getSessionHistory）
+   * 获取用户的聊天历史-旧
    */
   async getUserChatHistory(userId: string, limit: number = 50) {
     return this.chatMessageRepository.find({
@@ -143,7 +231,7 @@ export class ChatService {
   }
 
   /**
-   * 获取指定会话的聊天历史
+   * 获取指定会话的聊天历史-新
    */
   async getSessionHistory(
     sessionId: string,
@@ -151,9 +239,52 @@ export class ChatService {
   ): Promise<ChatMessage[]> {
     return this.chatMessageRepository.find({
       where: { sessionId },
-      order: { createdAt: 'ASC' }, // 按时间正序，方便构建上下文
+      order: { createdAt: 'ASC' }, // 时间正序
       take: limit,
     });
+  }
+
+  /**
+   * 分页获取会话消息
+   * @param sessionId 会话 ID
+   * @param page 页码
+   * @param pageSize 每页数量
+   * @param order 排序方式：asc正序，desc倒序
+   */
+  async getSessionMessages(
+    sessionId: string,
+    page: number = 1,
+    pageSize: number = 20,
+    order: 'asc' | 'desc' = 'desc',
+  ): Promise<{
+    messages: ChatMessage[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    // 验证会话是否存在
+    await this.chatSessionService.findById(sessionId);
+
+    const skip = (page - 1) * pageSize;
+
+    const [messages, total] = await this.chatMessageRepository.findAndCount({
+      where: { sessionId },
+      order: { createdAt: order === 'desc' ? 'DESC' : 'ASC' },
+      skip,
+      take: pageSize,
+    });
+
+    // 如果是倒序查询-反转数组使消息按时间正序显示
+    const orderedMessages = order === 'desc' ? messages.reverse() : messages;
+
+    return {
+      messages: orderedMessages,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
   }
 
   /**
@@ -169,7 +300,7 @@ export class ChatService {
       throw new NotFoundException('用户不存在');
     }
 
-    // 处理会话：如果没有提供 sessionId，则创建新会话
+    // 没有提供sessionId-则创建新会话
     let sessionId = createChatDto.sessionId;
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
@@ -186,7 +317,7 @@ export class ChatService {
     // 构建消息数组
     const messages: any[] = [];
 
-    // 如果没有提供历史消息，从数据库加载该会话的历史消息
+    // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
       const historyMessages = await this.getSessionHistory(sessionId, 10);
       historyMessages.forEach((msg) => {
@@ -199,19 +330,32 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    // 构建当前用户消息内容-支持多模态
+    const userContent = this.buildMultimodalContent(
+      createChatDto.message,
+      createChatDto.files,
+    );
+
     // 添加当前用户消息
     messages.push({
       role: 'user',
-      content: createChatDto.message,
+      content: userContent,
     });
 
-    // 获取默认模型（如果未指定）
+    // 记录文件信息
+    if (createChatDto.files && createChatDto.files.length > 0) {
+      this.logger.log(
+        `包含 ${createChatDto.files.length} 个附件: ${createChatDto.files.map((f) => f.name).join(', ')}`,
+      );
+    }
+
+    // 获取默认模型
     const defaultModel =
       this.configService.get<string>('CLAUDE_MODEL') ||
       'claude-sonnet-4-5-20250929';
     const modelId = createChatDto.model || defaultModel;
 
-    // 调用 AI 客户端服务（流式）
+    // 调用 AI 客户端服务-流式
     const stream = await this.aiClientService.createStreamChatCompletion(
       modelId,
       messages,

@@ -22,7 +22,13 @@ export class ChatSessionService {
    * 创建新会话
    */
   async create(createSessionDto: CreateSessionDto): Promise<ChatSession> {
-    this.logger.log(`创建新会话: userId=${createSessionDto.userId}`);
+    this.logger.log(`创建新会话: userId=${createSessionDto.userId}, dto=${JSON.stringify(createSessionDto)}`);
+
+    // 验证 userId 是否有效
+    if (!createSessionDto.userId) {
+      this.logger.error('创建会话失败: userId 为空');
+      throw new NotFoundException('用户 ID 不能为空');
+    }
 
     // 验证用户是否存在
     const user = await this.userService.findById(createSessionDto.userId);
@@ -35,6 +41,8 @@ export class ChatSessionService {
       title: createSessionDto.title || '新对话',
       lastActiveAt: new Date(),
     });
+
+    this.logger.log(`准备保存会话: ${JSON.stringify(session)}`);
 
     const savedSession = await this.chatSessionRepository.save(session);
     this.logger.log(`会话创建成功: ${savedSession.id}`);
@@ -53,7 +61,7 @@ export class ChatSessionService {
 
     const queryBuilder = this.chatSessionRepository
       .createQueryBuilder('session')
-      .leftJoinAndSelect('session.chatMessages', 'messages')
+      .loadRelationCountAndMap('session.messageCount', 'session.chatMessages')
       .where('session.userId = :userId', { userId })
       .andWhere('session.isDeleted = :isDeleted', { isDeleted: false });
 
@@ -67,11 +75,6 @@ export class ChatSessionService {
       .orderBy('session.lastActiveAt', 'DESC')
       .addOrderBy('session.createdAt', 'DESC')
       .getMany();
-
-    // 计算每个会话的消息数量
-    sessions.forEach((session) => {
-      session.messageCount = session.chatMessages?.length || 0;
-    });
 
     return sessions;
   }
@@ -100,9 +103,16 @@ export class ChatSessionService {
     sessionId: string,
     updateSessionDto: UpdateSessionDto,
   ): Promise<ChatSession> {
-    this.logger.log(`更新会话: sessionId=${sessionId}`);
+    this.logger.log(`更新会话: sessionId=${sessionId}, dto=${JSON.stringify(updateSessionDto)}`);
 
-    const session = await this.findById(sessionId);
+    // 查询会话（不加载 chatMessages 关联，节省性能）
+    const session = await this.chatSessionRepository.findOne({
+      where: { id: sessionId, isDeleted: false },
+    });
+
+    if (!session) {
+      throw new NotFoundException('会话不存在');
+    }
 
     // 更新字段
     if (updateSessionDto.title !== undefined) {
@@ -115,7 +125,10 @@ export class ChatSessionService {
       session.isDeleted = updateSessionDto.isDeleted;
     }
 
-    return this.chatSessionRepository.save(session);
+    const savedSession = await this.chatSessionRepository.save(session);
+    this.logger.log(`会话更新成功: ${savedSession.id}, title=${savedSession.title}`);
+
+    return savedSession;
   }
 
   /**

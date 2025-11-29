@@ -6,240 +6,156 @@
       @new-chat="handleNewChat"
       @select-conversation="handleSelectConversation"
       @clear-conversations="handleClearConversations"
+      @rename-conversation="handleRenameConversation"
+      @delete-conversation="handleDeleteConversation"
     />
     <ChatArea
       :messages="currentMessages"
       :loading="loading"
+      :current-session-id="currentConversationId"
+      :has-more-messages="hasMoreMessages"
+      :load-more-messages="handleLoadMoreMessages"
       @send-message="handleSendMessage"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
-import { sendStreamMessage } from '@/api/chat'
+import { useConversationManager } from './hooks/useConversationManager'
+import { useStreamChat } from './hooks/useStreamChat'
 
 // 定义组件名称
 defineOptions({
   name: 'ChatPage'
 })
 
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: number
-}
+// 对话管理
+const {
+  conversations,
+  currentConversationId,
+  currentMessages,
+  createConversation,
+  selectConversation,
+  clearAllConversations,
+  deleteConversation,
+  updateConversationTitle,
+  addMessage,
+  updateMessageContent,
+  deleteMessageByIndex,
+  updateSessionId,
+  saveConversations,
+  ensureServerSession,
+  initializeFromServer,
+  loadMessagesForSession
+} = useConversationManager()
 
-interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
-  createdAt: number
-  updatedAt: number
-  sessionId?: string // 后端会话 ID
-}
-
-const conversations = ref<Conversation[]>([])
-const currentConversationId = ref('')
-const loading = ref(false)
+// 流式聊天
+const { loading, sendMessage } = useStreamChat(
+  {
+    addMessage,
+    updateMessageContent,
+    deleteMessageByIndex,
+    updateSessionId,
+    saveConversations,
+    ensureServerSession
+  },
+  () => currentMessages.value,
+  () => conversations.value.find(c => c.id === currentConversationId.value)?.sessionId
+)
 
 // 获取当前用户 ID
-const getUserId = () => {
-  return localStorage.getItem('userId') || ''
-}
+const getUserId = (): string => {
+  const userId = localStorage.getItem('userId')
 
-// 当前对话的消息
-const currentMessages = computed(() => {
-  const conversation = conversations.value.find(c => c.id === currentConversationId.value)
-  return conversation?.messages || []
-})
-
-// 从 localStorage 加载对话
-const loadConversations = () => {
-  const saved = localStorage.getItem('chatConversations')
-  if (saved) {
-    try {
-      conversations.value = JSON.parse(saved)
-    } catch (e) {
-      console.error('加载对话消息失败:', e)
-    }
+  if (!userId || userId === 'null' || userId === 'undefined') {
+    return ''
   }
+  return userId
 }
 
-// 保存对话到 localStorage
-const saveConversations = () => {
-  localStorage.setItem('chatConversations', JSON.stringify(conversations.value))
-}
+// 分页状态
+const hasMoreMessages = ref(true)
 
 // 新建对话
 const handleNewChat = () => {
-  // 当前对话已存在且消息列表为空则不创建新对话
-  if (currentConversationId.value) {
-    const currentConversation = conversations.value.find(c => c.id === currentConversationId.value)
-    if (currentConversation && currentConversation.messages.length === 0) {
-      return
-    }
-  }
-
-  const newConversation: Conversation = {
-    id: Date.now().toString(),
-    title: '新对话',
-    messages: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  }
-  conversations.value.unshift(newConversation)
-  currentConversationId.value = newConversation.id
-  saveConversations()
+  createConversation()
 }
 
 // 选择对话
-const handleSelectConversation = (id: string) => {
-  currentConversationId.value = id
+const handleSelectConversation = async (id: string) => {
+  const paginationInfo = await selectConversation(id)
+
+  // 更新分页状态
+  if (paginationInfo) {
+    hasMoreMessages.value = paginationInfo.hasMore
+  } else {
+    // 没有返回分页信息-默认为true
+    hasMoreMessages.value = true
+  }
 }
 
 // 清空所有对话
 const handleClearConversations = () => {
-  conversations.value = []
-  currentConversationId.value = ''
-  saveConversations()
+  clearAllConversations()
   message.success('已清空所有对话')
 }
 
-// 发送消息（流式 API）
-const handleSendMessage = async (content: string) => {
+// 重命名对话
+const handleRenameConversation = async (id: string, title: string, callback: (success: boolean) => void) => {
+  const success = await updateConversationTitle(id, title)
+  callback(success)
+}
+
+// 删除对话
+const handleDeleteConversation = async (id: string) => {
+  await deleteConversation(id)
+}
+
+// 发送消息
+const handleSendMessage = async (
+  content: string,
+  files?: { base64: string; type: string; name: string }[]
+) => {
   const userId = getUserId()
   if (!userId) {
-    message.error('请先登录')
+    message.warning('未获取到用户信息，请重新登录')
     return
   }
 
-  // 没有当前对话则创建一个
+  // 若没有当前对话-创建一个本地临时对话
   if (!currentConversationId.value) {
-    handleNewChat()
+    createConversation()
   }
 
-  const conversation = conversations.value.find(c => c.id === currentConversationId.value)
-  if (!conversation) return
-
-  // 添加用户消息
-  const userMessage: Message = {
-    id: Date.now().toString(),
-    role: 'user',
-    content,
-    timestamp: Date.now()
-  }
-  conversation.messages.push(userMessage)
-
-  // 更新对话标题（第一条消息的前30个字符）
-  if (conversation.messages.length === 1) {
-    conversation.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
-  }
-
-  conversation.updatedAt = Date.now()
-  saveConversations()
-
-  // 设置 loading 状态
-  loading.value = true
-
-  // AI 消息索引（第一次收到数据时创建）
-  let messageIndex = -1
-  let updateCount = 0 // 用于节流
-
-  try {
-    sendStreamMessage(
-      {
-        userId,
-        sessionId: conversation.sessionId, // 后端会话 ID（第一次为 undefined）
-        message: content,
-        model: 'claude-sonnet-4-5-20250929' // 默认模型
-      },
-      {
-        // 接收到增量内容
-        onMessage: (delta: string, sessionId?: string) => {
-          // 第一次收到数据时创建 AI 消息
-          if (messageIndex === -1) {
-            const assistantMessage: Message = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: delta,
-              timestamp: Date.now()
-            }
-            conversation.messages.push(assistantMessage)
-            messageIndex = conversation.messages.length - 1
-            loading.value = false // 收到第一个字符后关闭 loading
-          } else {
-            // 后续追加内容 - 直接修改对象属性触发 Vue 响应式更新
-            const currentMessage = conversation.messages[messageIndex]
-            if (currentMessage) {
-              currentMessage.content = currentMessage.content + delta
-            }
-          }
-
-          conversation.updatedAt = Date.now()
-
-          // 保存后端会话 ID（第一次收到时）
-          if (sessionId && !conversation.sessionId) {
-            conversation.sessionId = sessionId
-          }
-
-          // 节流保存：每50次更新保存一次到localStorage
-          updateCount++
-          if (updateCount % 50 === 0) {
-            saveConversations()
-          }
-        },
-
-        // 流式传输完成
-        onComplete: (fullMessage: string, sessionId: string, model: string) => {
-          if (messageIndex >= 0) {
-            const msg = conversation.messages[messageIndex]
-            if (msg) {
-              msg.content = fullMessage
-            }
-          }
-          conversation.sessionId = sessionId
-          conversation.updatedAt = Date.now()
-          saveConversations() // 完成后保存最终状态
-          loading.value = false
-          console.log('AI 回复完成，模型:', model)
-        },
-
-        // 错误处理
-        onError: (error: string) => {
-          message.error(`${error}`)
-          // 移除失败的消息
-          if (messageIndex >= 0) {
-            conversation.messages.splice(messageIndex, 1)
-          }
-          saveConversations()
-          loading.value = false
-        }
-      }
-    )
-  } catch (error: never) {
-    message.error('发送消息失败，请稍后重试')
-    // 移除失败的 AI 消息
-    if (messageIndex >= 0) {
-      conversation.messages.splice(messageIndex, 1)
-    }
-    saveConversations()
-    loading.value = false
-  }
+  // 流式聊天
+  await sendMessage(userId, content, files)
 }
 
-onMounted(() => {
-  loadConversations()
-  // 如果没有对话，创建一个新的
-  if (conversations.value.length === 0) {
-    handleNewChat()
+// 加载更多消息
+const handleLoadMoreMessages = async (sessionId: string, page: number) => {
+  // 调用 loadMessagesForSession 加载历史消息
+  const paginationInfo = await loadMessagesForSession(sessionId, page, 5, 'asc')
+
+  // 更新是否还有更多消息的状态
+  hasMoreMessages.value = paginationInfo.hasMore
+}
+
+onMounted(async () => {
+  // 从后端加载会话列表
+  const userId = getUserId()
+  if (userId) {
+    const paginationInfo = await initializeFromServer(userId)
+
+    // 初始化 hasMoreMessages 状态
+    if (paginationInfo) {
+      hasMoreMessages.value = paginationInfo.hasMore
+    }
   } else {
-    // 选择最新的对话
-    currentConversationId.value = conversations.value[0]?.id || ''
+    message.warning('未获取到用户信息，请重新登录')
   }
 })
 </script>

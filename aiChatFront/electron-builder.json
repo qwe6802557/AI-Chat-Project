@@ -1,6 +1,6 @@
 {
   "appId": "com.aichat.app",
-  "productName": "AI Chat",
+  "productName": "ERJ Chat",
   "copyright": "Copyright © 2024",
   "directories": {
     "output": "release/${version}"
@@ -30,7 +30,7 @@
     "installerHeaderIcon": "public/favicon.ico",
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
-    "shortcutName": "AI Chat"
+    "shortcutName": "ERJ Chat"
   },
   "mac": {
     "target": [
