@@ -15,14 +15,24 @@ export interface ResponseData<T = unknown> {
 const request: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 // 请求拦截器
 request.interceptors.request.use(
   (config) => {
+    // 踩坑: FormData 请求不要手动设置 Content-Type（否则 multipart boundary 丢失，后端 Multer 收不到文件）
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+      if (config.headers && typeof (config.headers as any).delete === 'function') {
+        (config.headers as any).delete('Content-Type')
+      } else if (config.headers) {
+        delete (config.headers as any)['Content-Type']
+        delete (config.headers as any)['content-type']
+      }
+    }
+
+    // 确保 headers 存在
+    config.headers = config.headers ?? {}
+
     // 从 localStorage 获取 token
     const token = localStorage.getItem('token')
     if (token) {
@@ -89,4 +99,3 @@ request.interceptors.response.use(
 )
 
 export default request
-

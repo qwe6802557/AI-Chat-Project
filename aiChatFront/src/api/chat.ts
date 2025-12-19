@@ -6,6 +6,19 @@ import request, { type ResponseData } from '@/utils/request'
 // ---数据类型---
 
 /**
+ * 后端返回的附件信息
+ */
+export interface BackendAttachment {
+  id: string
+  url: string       // 后端文件访问路径，如 /files/uuid
+  name: string
+  type: string      // MIME type
+  sizeBytes: number
+  width?: number | null
+  height?: number | null
+}
+
+/**
  * 聊天消息
  */
 export interface BackendChatMessage {
@@ -20,6 +33,8 @@ export interface BackendChatMessage {
     completionTokens: number
     totalTokens: number
   }
+  /** 消息附件（后端返回） */
+  attachments?: BackendAttachment[]
   createdAt: string
   updatedAt: string
 }
@@ -62,7 +77,10 @@ export interface SendMessageParams {
   model?: string
   temperature?: number
   maxTokens?: number
-  files?: FileDataParam[] // 附件文件列表（图片、PDF、文档等）
+  /** 已上传的文件 ID 列表（推荐使用） */
+  fileIds?: string[]
+  /** 附件文件列表 - base64 方式（兼容旧版，不推荐） */
+  files?: FileDataParam[]
 }
 
 /**
@@ -251,6 +269,22 @@ export function deleteSession(data: DeleteSessionParams) {
 }
 
 /**
+ * 清空所有会话
+ */
+export interface ClearAllSessionsParams {
+  userId: string
+}
+
+export interface ClearAllSessionsResponse {
+  message: string
+  deletedCount: number
+}
+
+export function clearAllSessions(data: ClearAllSessionsParams) {
+  return request.post<never, ResponseData<ClearAllSessionsResponse>>('/chat/session/clear-all', data)
+}
+
+/**
  * 获取会话消息
  */
 export interface GetSessionMessagesParams {
@@ -283,4 +317,47 @@ export interface UpdateSessionTitleParams {
 
 export function updateSessionTitle(data: UpdateSessionTitleParams) {
   return request.post<never, ResponseData<BackendChatSession>>('/chat/session/update', data)
+}
+
+// ---文件上传---
+
+/**
+ * 上传文件响应
+ */
+export interface UploadedFileResponse {
+  id: string
+  url: string       // 访问路径，如 /files/uuid
+  name: string
+  mime: string
+  sizeBytes: number
+  width?: number | null
+  height?: number | null
+}
+
+/**
+ * 上传图片文件
+ * - 最多 4 张
+ * - 单张 <= 5MB
+ * - 服务端会自动压缩重编码
+ */
+export async function uploadFiles(files: File[]): Promise<ResponseData<UploadedFileResponse[]>> {
+  console.log('[uploadFiles] 收到文件数量:', files.length)
+  console.log('[uploadFiles] 文件列表:', files)
+
+  const formData = new FormData()
+  files.forEach((file, index) => {
+    console.log(`[uploadFiles] 添加文件 ${index}:`, file?.name, file?.size, file instanceof File)
+    if (file instanceof File) {
+      formData.append('files', file)
+    }
+  })
+
+  // 检查 FormData 内容
+  console.log('[uploadFiles] FormData entries:')
+  for (const [key, value] of formData.entries()) {
+    console.log(`  ${key}:`, value)
+  }
+
+  // 不要手动设置 Content-Type，让 axios 自动处理 boundary
+  return request.post<never, ResponseData<UploadedFileResponse[]>>('/files/upload', formData)
 }

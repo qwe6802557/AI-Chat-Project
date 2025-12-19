@@ -1,15 +1,28 @@
-import { Controller, Post, Get, Body, Query, Logger } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Query,
+  Logger,
+  UseGuards,
+  Req,
+  ForbiddenException,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBody,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { ChatSessionService } from './chat-session.service';
 import { ChatService } from './chat.service';
 import { CreateSessionDto, GetSessionMessagesDto } from './dto';
 import { UpdateSessionBodyDto } from './dto/update-session-body.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 /**
  * 聊天会话控制器
@@ -55,8 +68,12 @@ export class ChatSessionController {
     },
   })
   async create(@Body() createSessionDto: CreateSessionDto) {
-    this.logger.log(`[create] 收到请求 Body: ${JSON.stringify(createSessionDto)}`);
-    this.logger.log(`[create] userId 值: ${createSessionDto.userId}, 类型: ${typeof createSessionDto.userId}`);
+    this.logger.log(
+      `[create] 收到请求 Body: ${JSON.stringify(createSessionDto)}`,
+    );
+    this.logger.log(
+      `[create] userId 值: ${createSessionDto.userId}, 类型: ${typeof createSessionDto.userId}`,
+    );
     return this.chatSessionService.create(createSessionDto);
   }
 
@@ -187,7 +204,12 @@ export class ChatSessionController {
     const pageNum = page ? parseInt(page, 10) : 1;
     const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
     const orderValue = order === 'asc' ? 'asc' : 'desc'; // 默认 desc
-    return this.chatService.getSessionMessages(sessionId, pageNum, pageSizeNum, orderValue);
+    return this.chatService.getSessionMessages(
+      sessionId,
+      pageNum,
+      pageSizeNum,
+      orderValue,
+    );
   }
 
   /**
@@ -265,6 +287,68 @@ export class ChatSessionController {
   async delete(@Body() body: { id: string }) {
     await this.chatSessionService.delete(body.id);
     return { message: '会话已删除' };
+  }
+
+  /**
+   * 清空用户所有会话-批量软删除
+   * 需要 JWT认证-且只能清空自己的会话
+   */
+  @Post('clear-all')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '清空所有会话',
+    description: '批量软删除当前登录用户的所有会话',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        userId: {
+          type: 'string',
+          description: '用户 ID（必须与当前登录用户一致）',
+          example: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
+        },
+      },
+      required: ['userId'],
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: '清空成功',
+    schema: {
+      example: {
+        code: 0,
+        data: {
+          message: '已清空所有会话',
+          deletedCount: 5,
+        },
+        message: '操作成功',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: '无权操作他人会话',
+  })
+  async clearAll(@Body() body: { userId: string }, @Req() req: Request) {
+    // 获取当前登录用户 ID
+    const currentUserId = (req.user as any)?.id as string | undefined;
+
+    // 只能清空自己的会话
+    if (!currentUserId || body.userId !== currentUserId) {
+      this.logger.warn(
+        `[清除对话] 用户身份不匹配: body.userId=${body.userId}, currentUserId=${currentUserId}`,
+      );
+      throw new ForbiddenException('无权清空他人的会话');
+    }
+
+    const result =
+      await this.chatSessionService.clearAllByUserId(currentUserId);
+    return {
+      message: '已清空所有会话',
+      deletedCount: result.deletedCount,
+    };
   }
 
   /**

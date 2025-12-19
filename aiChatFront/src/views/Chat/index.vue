@@ -3,6 +3,7 @@
     <Sidebar
       :conversations="conversations"
       :currentConversationId="currentConversationId"
+      :isClearing="isClearing"
       @new-chat="handleNewChat"
       @select-conversation="handleSelectConversation"
       @clear-conversations="handleClearConversations"
@@ -63,8 +64,7 @@ const { loading, sendMessage } = useStreamChat(
     saveConversations,
     ensureServerSession
   },
-  () => currentMessages.value,
-  () => conversations.value.find(c => c.id === currentConversationId.value)?.sessionId
+  () => currentMessages.value
 )
 
 // 获取当前用户 ID
@@ -98,10 +98,33 @@ const handleSelectConversation = async (id: string) => {
   }
 }
 
+// 清空状态
+const isClearing = ref(false)
+
 // 清空所有对话
-const handleClearConversations = () => {
-  clearAllConversations()
-  message.success('已清空所有对话')
+const handleClearConversations = async () => {
+  const userId = getUserId()
+
+  // 开始清空-显示加载状态
+  isClearing.value = true
+
+  try {
+    const result = await clearAllConversations(userId)
+
+    if (result) {
+      // 清空成功-自动创建新对话
+      createConversation()
+      message.success(`已清空 ${result.deletedCount} 个对话`)
+    } else {
+      // 清空失败
+      message.error('清空对话失败，请稍后重试')
+    }
+  } catch (error) {
+    console.error('清空对话出错:', error)
+    message.error('清空对话失败，请稍后重试')
+  } finally {
+    isClearing.value = false
+  }
 }
 
 // 重命名对话
@@ -118,7 +141,11 @@ const handleDeleteConversation = async (id: string) => {
 // 发送消息
 const handleSendMessage = async (
   content: string,
-  files?: { base64: string; type: string; name: string }[]
+  options?: {
+    fileIds?: string[]
+    serverFiles?: { id: string; url: string; name: string; type: string }[]
+    files?: { base64: string; type: string; name: string }[]
+  }
 ) => {
   const userId = getUserId()
   if (!userId) {
@@ -132,7 +159,7 @@ const handleSendMessage = async (
   }
 
   // 流式聊天
-  await sendMessage(userId, content, files)
+  await sendMessage(userId, content, options)
 }
 
 // 加载更多消息

@@ -2,9 +2,14 @@
   <div class="sidebar">
     <!-- 顶部 -->
     <div class="sidebar-header">
-      <a-button block @click="$emit('new-chat')" class="new-chat-btn">
+      <a-button
+        block
+        @click="$emit('new-chat')"
+        class="new-chat-btn"
+        :disabled="isClearing"
+      >
         <PlusOutlined />
-        新建对话
+        {{ isClearing ? '清空中...' : '新建对话' }}
       </a-button>
     </div>
 
@@ -61,9 +66,12 @@
 
     <!-- 底部 -->
     <div class="sidebar-footer">
-      <div class="menu-item" @click="handleClearConversations">
+      <div
+        :class="['menu-item', { disabled: isClearing }]"
+        @click="!isClearing && handleClearConversations()"
+      >
         <DeleteOutlined class="menu-icon" />
-        <span>清空对话</span>
+        <span>{{ isClearing ? '清空中...' : '清空对话' }}</span>
       </div>
 <!--      <div class="menu-item">-->
 <!--        <BulbOutlined class="menu-icon" />-->
@@ -109,9 +117,11 @@ defineOptions({
 interface Props {
   conversations: Conversation[]
   currentConversationId: string
+  /** 是否正在清空对话中 */
+  isClearing?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'new-chat': []
@@ -210,10 +220,16 @@ const handleDeleteConversation = (conversation: Conversation) => {
 }
 
 const handleClearConversations = () => {
+  const count = props.conversations.length
+  if (count === 0) {
+    message.info('暂无对话可清空')
+    return
+  }
+
   Modal.confirm({
     title: '清空对话',
-    content: '确定要清空所有对话记录吗？',
-    okText: '清空',
+    content: `确定要清空所有对话吗？这将删除全部 ${count} 个会话（包括已归档的会话）。此操作不可恢复。`,
+    okText: '清空全部',
     okType: 'danger',
     cancelText: '取消',
     onOk() {
@@ -400,8 +416,13 @@ const handleLogout = () => {
       color: #000000;
       font-size: 14px;
 
-      &:hover {
+      &:hover:not(.disabled) {
         background: rgba(0, 0, 0, 0.05);
+      }
+
+      &.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
       }
 
       .menu-icon {

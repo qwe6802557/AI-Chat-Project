@@ -115,7 +115,7 @@ export class ChatController {
 
     try {
       // 获取流和上下文信息
-      const { stream, sessionId, userId, userMessage, modelId } =
+      const { stream, sessionId, userId, userMessage, modelId, attachmentIds } =
         await this.chatService.createStream(createChatDto);
 
       let fullMessage = '';
@@ -143,6 +143,8 @@ export class ChatController {
             userMessage,
             fullMessage,
             modelId,
+            undefined,
+            attachmentIds,
           );
 
           // 发送最终的完成事件

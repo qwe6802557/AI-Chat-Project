@@ -145,11 +145,50 @@ export class ChatSessionService {
   }
 
   /**
-   * 删除会话（软删除）
+   * 删除会话-软删除
    */
   async delete(sessionId: string): Promise<void> {
     this.logger.log(`删除会话: sessionId=${sessionId}`);
     await this.update(sessionId, { isDeleted: true });
+  }
+
+  /**
+   * 清空用户的所有会话（批量软删除）
+   *
+   * 实现说明：
+   * - 这是软删除操作，只将 isDeleted 标记为 true，数据仍保留在数据库中
+   * - 会话关联的消息（ChatMessage）和附件文件（ChatAttachment）不会被删除
+   * - 如需释放存储空间，需要配合定时任务进行硬删除清理
+   *
+   * 建议的定期清理策略（可后续实现）：
+   * - 条件：isDeleted = true 且 updatedAt < 30天前
+   * - 操作：DELETE 会话及关联的消息和附件文件
+   *
+   * @param userId 用户 ID
+   * @returns 被删除的会话数量
+   */
+  async clearAllByUserId(userId: string): Promise<{ deletedCount: number }> {
+    this.logger.log(`清空用户所有会话: userId=${userId}`);
+
+    // 验证用户是否存在
+    const user = await this.userService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('用户不存在');
+    }
+
+    // 批量软删除：将该用户所有未删除的会话标记为已删除
+    const result = await this.chatSessionRepository
+      .createQueryBuilder()
+      .update(ChatSession)
+      .set({ isDeleted: true })
+      .where('userId = :userId', { userId })
+      .andWhere('isDeleted = :isDeleted', { isDeleted: false })
+      .execute();
+
+    const deletedCount = result.affected || 0;
+    this.logger.log(`已清空 ${deletedCount} 个会话`);
+
+    return { deletedCount };
   }
 
   /**

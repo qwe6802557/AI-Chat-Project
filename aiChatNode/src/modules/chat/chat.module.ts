@@ -8,21 +8,24 @@ import { AIClientService } from './services/ai-client.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
+import { ChatAttachment } from './entities/chat-attachment.entity';
 import { UserModule } from '../user/user.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
+import { FilesModule } from '../files/files.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatMessage, ChatSession]),
+    TypeOrmModule.forFeature([ChatMessage, ChatSession, ChatAttachment]),
     UserModule,
-    AiProviderModule, // 导入 AI 供应商模块
+    AiProviderModule,
+    FilesModule, // 导入文件模块
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [
     ChatService,
     ChatSessionService,
-    AIClientService, // 新增：AI 客户端服务
-    ClaudeAdapter, // 新增：Claude 适配器
+    AIClientService, // AI 客户端服务
+    ClaudeAdapter, // Claude 适配器
   ],
   exports: [ChatService, ChatSessionService],
 })

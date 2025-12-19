@@ -248,7 +248,14 @@ const props = defineProps<Props>()
 const hasMoreMessagesComputed = computed(() => props.hasMoreMessages ?? true)
 
 const emit = defineEmits<{
-  'send-message': [content: string, files?: { base64: string; type: string; name: string }[]]
+  'send-message': [
+    content: string,
+    options?: {
+      fileIds?: string[]
+      serverFiles?: { id: string; url: string; name: string; type: string }[]
+      files?: { base64: string; type: string; name: string }[]
+    }
+  ]
 }>()
 
 const inputMessage = ref('')
@@ -260,20 +267,29 @@ const textareaRef = ref<HTMLElement | null>(null)
 const isDragging = ref(false)
 let dragCounter = 0
 
-// 文件上传 Hook
+// 文件上传 Hook（添加时自动上传到服务器）
 const {
   files: uploadedFiles,
   addFiles,
   removeFile,
   clearFiles,
   getFilesForSend,
-  hasFiles
+  getFileIdsForSend,
+  getUploadedFileInfos,
+  hasFiles,
+  isProcessing,
+  canSendFiles
 } = useFileUpload()
 
-// 是否可以发送（有内容或有文件）
-const canSend = computed(() =>
-  (inputMessage.value.trim() || hasFiles.value) && !props.loading
-)
+// 是否可以发送（有内容或有已上传的文件，且不在加载/处理中）
+const canSend = computed(() => {
+  const hasContent = !!inputMessage.value.trim()
+  // 有内容可以发送，或者有已上传完成的文件可以发送
+  const canSendWithFiles = hasFiles.value && canSendFiles.value
+  const result = (hasContent || canSendWithFiles) && !props.loading
+
+  return result
+})
 
 // 分页状态
 const currentPage = ref(1)
@@ -325,14 +341,44 @@ watch(() => props.currentSessionId, () => {
  */
 const handleSend = () => {
   const content = inputMessage.value.trim()
-  const filesData = hasFiles.value ? getFilesForSend() : undefined
 
-  // 必须有内容或文件
-  if (!content && !filesData?.length) return
-  if (props.loading) return
+  // 必须有内容或已上传的文件
+  if (!content && !canSendFiles.value) {
+    return
+  }
+  if (props.loading || isProcessing.value) {
+    return
+  }
+
+  // 准备发送选项
+  let sendOptions: {
+    fileIds?: string[]
+    serverFiles?: { id: string; url: string; name: string; type: string }[]
+    files?: { base64: string; type: string; name: string }[]
+  } | undefined
+
+  // 如果有已上传的文件，获取 fileIds
+  if (hasFiles.value) {
+    const fileIds = getFileIdsForSend()
+    const serverFiles = getUploadedFileInfos()
+
+    if (fileIds.length > 0) {
+      // 使用 fileIds 方式（文件已在添加时上传完成）
+      sendOptions = {
+        fileIds,
+        serverFiles
+      }
+    } else {
+      // 没有成功上传的文件，尝试用 base64 方式
+      const filesData = getFilesForSend()
+      if (filesData.length > 0) {
+        sendOptions = { files: filesData }
+      }
+    }
+  }
 
   // 发送消息
-  emit('send-message', content, filesData)
+  emit('send-message', content, sendOptions)
 
   // 清空输入和文件
   inputMessage.value = ''
@@ -1061,6 +1107,7 @@ $input-height: 50px;
 
         .message-content {
           justify-content: flex-end;
+          max-width: 32rem;
 
           .message-text {
             background: $color-bg-user-message;

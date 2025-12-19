@@ -1,5 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsUUID, IsOptional, IsArray, IsNumber, Min, Max, IsBoolean, ValidateNested } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  IsOptional,
+  IsArray,
+  IsNumber,
+  Min,
+  Max,
+  IsBoolean,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 /**
@@ -173,4 +184,18 @@ export class CreateChatDto {
   @ValidateNested({ each: true })
   @Type(() => FileDataDto)
   files?: FileDataDto[];
+
+  /**
+   * 已上传的附件 ID
+   */
+  @ApiProperty({
+    description: '已上传的附件ID列表',
+    example: ['a1b2c3d4-e5f6-7890-abcd-ef1234567890'],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray({ message: 'fileIds必须是数组' })
+  @IsUUID('4', { each: true, message: 'fileIds 中包含非法 UUID' })
+  fileIds?: string[];
 }

@@ -1,5 +1,6 @@
-import { ref, computed, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount, toRaw } from 'vue'
 import { message } from 'ant-design-vue'
+import { uploadFiles, type UploadedFileResponse } from '@/api/chat'
 
 /**
  * 上传文件接口
@@ -8,27 +9,31 @@ export interface UploadedFile {
   id: string
   file: File
   preview: string        // 预览URL(blob URL 或 图标)
-  base64: string         // Base64数据
+  base64: string         // Base64数据（兼容旧版）
   type: 'image' | 'pdf' | 'document'
   name: string
   size: number
-  status: 'processing' | 'ready' | 'error'
+  status: 'processing' | 'uploading' | 'uploaded' | 'error'
   error?: string
+  /** 服务端返回的文件 ID（上传成功后） */
+  serverId?: string
+  /** 服务端返回的文件访问 URL（上传成功后） */
+  serverUrl?: string
 }
 
 /**
  * 文件上传 Hook 配置
  */
 export interface UseFileUploadOptions {
-  /** 最大文件大小（字节）-默认 20MB */
+  /** 最大文件大小（字节）-默认 5MB（匹配后端限制） */
   maxSize?: number
-  /** 最大文件数量-默认10 */
+  /** 最大文件数量-默认 4（匹配后端限制） */
   maxCount?: number
   /** 允许的文件类型，默认图片和文档 */
   allowedTypes?: string[]
   /** 是否自动压缩图片，默认 true */
   autoCompress?: boolean
-  /** 压缩阈值（字节），超过此大小自动压缩，默认 5MB */
+  /** 压缩阈值（字节），超过此大小自动压缩，默认 2MB */
   compressThreshold?: number
   /** 压缩质量（0-1），默认 0.8 */
   compressQuality?: number
@@ -76,23 +81,20 @@ const FILE_TYPE_NAMES: Record<string, string> = {
 /**
  * 文件上传 Hook
  *
- * @description 处理文件上传、验证、压缩、Base64 转换等
+ * @description 处理文件上传、验证、压缩，添加时自动上传到服务器
  */
 export function useFileUpload(options: UseFileUploadOptions = {}) {
   const {
-    maxSize = 20 * 1024 * 1024, // 20MB
-    maxCount = 10,
+    maxSize = 5 * 1024 * 1024, // 5MB（匹配后端限制）
+    maxCount = 4,              // 最多4张（匹配后端限制）
     allowedTypes = DEFAULT_ALLOWED_TYPES,
     autoCompress = true,
-    compressThreshold = 5 * 1024 * 1024, // 5MB
+    compressThreshold = 2 * 1024 * 1024, // 2MB 开始压缩
     compressQuality = 0.8
   } = options
 
   // 文件列表
   const files = ref<UploadedFile[]>([])
-
-  // 是否正在处理
-  const isProcessing = ref(false)
 
   // 计算属性
   const totalSize = computed(() =>
@@ -101,12 +103,24 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
   const hasFiles = computed(() => files.value.length > 0)
 
-  const readyFiles = computed(() =>
-    files.value.filter(f => f.status === 'ready')
+  // 是否有文件正在处理或上传中
+  const isProcessing = computed(() =>
+    files.value.some(f => f.status === 'processing' || f.status === 'uploading')
   )
 
-  const imageFiles = computed(() =>
-    files.value.filter(f => f.type === 'image')
+  // 已上传到服务器的文件
+  const uploadedFiles = computed(() =>
+    files.value.filter(f => f.status === 'uploaded' && f.serverId)
+  )
+
+  // 是否所有文件都已上传完成（没有处理中/上传中的文件）
+  const allUploaded = computed(() =>
+    files.value.length > 0 && files.value.every(f => f.status === 'uploaded' || f.status === 'error')
+  )
+
+  // 是否可以发送（有已上传的文件，且没有正在处理/上传的文件）
+  const canSendFiles = computed(() =>
+    uploadedFiles.value.length > 0 && !isProcessing.value
   )
 
   /**
@@ -234,7 +248,59 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 处理单个文件
+   * 上传单个文件到服务器
+   * @param fileId 文件的本地 ID（用于在 files.value 中查找响应式对象）
+   */
+  const uploadSingleFile = async (fileId: string): Promise<boolean> => {
+    // 通过 ID 在 files.value 中查找，确保获取响应式代理对象
+    const fileItem = files.value.find(f => f.id === fileId)
+    if (!fileItem) {
+      console.error('[uploadSingleFile] 找不到文件:', fileId)
+      return false
+    }
+
+    // 只上传图片类型
+    if (fileItem.type !== 'image') {
+      // 非图片类型暂不支持服务器上传，标记为错误
+      fileItem.status = 'error'
+      fileItem.error = '暂不支持该文件类型上传'
+      return false
+    }
+
+    fileItem.status = 'uploading'
+    console.log('[uploadSingleFile] 开始上传:', fileItem.name)
+
+    try {
+      // 使用 toRaw 获取原始 File 对象，避免 Vue Proxy 导致 instanceof 检查失败
+      const rawFile = toRaw(fileItem.file)
+      console.log('[uploadSingleFile] rawFile instanceof File:', rawFile instanceof File)
+      const response = await uploadFiles([rawFile])
+      console.log('[uploadSingleFile] 上传响应:', response)
+
+      if (response.code === 0 && response.data && response.data.length > 0) {
+        const serverFile = response.data[0]
+        fileItem.status = 'uploaded'
+        fileItem.serverId = serverFile.id
+        fileItem.serverUrl = serverFile.url
+        console.log('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
+        return true
+      } else {
+        fileItem.status = 'error'
+        fileItem.error = response.message || '上传失败'
+        message.error(`${fileItem.name} 上传失败: ${fileItem.error}`)
+        return false
+      }
+    } catch (error) {
+      console.error('[uploadSingleFile] 上传异常:', error)
+      fileItem.status = 'error'
+      fileItem.error = error instanceof Error ? error.message : '上传失败'
+      message.error(`${fileItem.name} 上传失败`)
+      return false
+    }
+  }
+
+  /**
+   * 处理单个文件（本地处理 + 自动上传）
    */
   const processFile = async (file: File): Promise<UploadedFile | null> => {
     // 验证
@@ -263,20 +329,23 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     files.value.push(uploadedFile)
 
     try {
-      // 转换为 Base64（图片可能需要压缩）
+      // 转换为 Base64（图片可能需要压缩）- 用于兼容旧版发送
       if (fileType === 'image' && autoCompress && file.size > compressThreshold) {
-        console.log(`压缩图片: ${file.name}, 原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        console.log(`[processFile] 压缩图片: ${file.name}, 原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
         uploadedFile.base64 = await compressImage(file, compressQuality)
-        const compressedSize = Math.round((uploadedFile.base64.length * 3) / 4) // Base64 大小估算
-        console.log(`压缩后大小: ${(compressedSize / 1024 / 1024).toFixed(2)}MB`)
+        const compressedSize = Math.round((uploadedFile.base64.length * 3) / 4)
+        console.log(`[processFile] 压缩后大小: ${(compressedSize / 1024 / 1024).toFixed(2)}MB`)
       } else {
         uploadedFile.base64 = await fileToBase64(file)
       }
 
-      uploadedFile.status = 'ready'
+      // 本地处理完成后，立即上传到服务器
+      // 传递 fileId 而不是对象，确保在 uploadSingleFile 中通过 files.value 获取响应式代理
+      await uploadSingleFile(uploadedFile.id)
+
       return uploadedFile
     } catch (error) {
-      console.error('文件处理失败:', error)
+      console.error('[processFile] 文件处理失败:', error)
       uploadedFile.status = 'error'
       uploadedFile.error = error instanceof Error ? error.message : '文件处理失败'
       return null
@@ -284,27 +353,22 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 添加文件
+   * 添加文件（自动处理 + 上传）
    */
   const addFiles = async (fileList: FileList | File[]): Promise<void> => {
-    if (isProcessing.value) return
-
-    isProcessing.value = true
     const fileArray = Array.from(fileList)
 
-    try {
-      // 检查总数量
-      if (files.value.length + fileArray.length > maxCount) {
-        message.warning(`最多只能上传 ${maxCount} 个文件`)
-        // 只处理允许数量的文件
-        fileArray.splice(maxCount - files.value.length)
-      }
-
-      // 并行处理文件
-      await Promise.all(fileArray.map(processFile))
-    } finally {
-      isProcessing.value = false
+    // 检查总数量
+    if (files.value.length + fileArray.length > maxCount) {
+      message.warning(`最多只能上传 ${maxCount} 个文件`)
+      // 只处理允许数量的文件
+      fileArray.splice(maxCount - files.value.length)
     }
+
+    if (fileArray.length === 0) return
+
+    // 并行处理文件（包含上传）
+    await Promise.all(fileArray.map(processFile))
   }
 
   /**
@@ -338,15 +402,39 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 获取用于发送的文件数据
-   * 只返回已就绪的文件
+   * 获取用于发送的文件数据（兼容旧版 base64 方式）
    */
   const getFilesForSend = (): { base64: string; type: string; name: string }[] => {
-    return readyFiles.value.map(f => ({
-      base64: f.base64,
-      type: f.file.type,
-      name: f.name
-    }))
+    return files.value
+      .filter(f => f.status === 'uploaded' || f.base64)
+      .map(f => ({
+        base64: f.base64,
+        type: f.file.type,
+        name: f.name
+      }))
+  }
+
+  /**
+   * 获取已上传到服务器的文件 ID 列表
+   */
+  const getFileIdsForSend = (): string[] => {
+    return uploadedFiles.value
+      .map(f => f.serverId)
+      .filter((id): id is string => !!id)
+  }
+
+  /**
+   * 获取已上传文件的服务器信息（用于消息附件显示）
+   */
+  const getUploadedFileInfos = (): { id: string; url: string; name: string; type: string }[] => {
+    return uploadedFiles.value
+      .filter(f => f.serverId && f.serverUrl)
+      .map(f => ({
+        id: f.serverId!,
+        url: f.serverUrl!,
+        name: f.name,
+        type: f.file.type
+      }))
   }
 
   /**
@@ -369,14 +457,17 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     isProcessing,
     totalSize,
     hasFiles,
-    readyFiles,
-    imageFiles,
+    uploadedFiles,
+    allUploaded,
+    canSendFiles,
 
     // 方法
     addFiles,
     removeFile,
     clearFiles,
     getFilesForSend,
+    getFileIdsForSend,
+    getUploadedFileInfos,
     clearBase64Data,
     validateFile
   }

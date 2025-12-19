@@ -1,12 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false, // 禁用默认body解析器
+  });
+
+  // 增加body大小限制（支持base64图片上传，单张 5MB × 4 张 × 1.33 膨胀 ≈ 28MB）
+  app.useBodyParser('json', { limit: '30mb' });
+  app.useBodyParser('urlencoded', { limit: '30mb', extended: true });
 
   // 跨域处理
   app.enableCors({

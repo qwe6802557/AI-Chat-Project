@@ -5,10 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { ChatSession } from './chat-session.entity';
+import { ChatAttachment } from './chat-attachment.entity';
 
 /**
  * 聊天记录实体
@@ -89,4 +91,12 @@ export class ChatMessage {
    */
   @UpdateDateColumn()
   updatedAt: Date;
+
+  /**
+   * 关联附件-用于用户消息的图片/文件
+   */
+  @OneToMany(() => ChatAttachment, (attachment) => attachment.message, {
+    cascade: false,
+  })
+  attachments?: ChatAttachment[];
 }

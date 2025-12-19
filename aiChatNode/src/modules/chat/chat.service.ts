@@ -8,6 +8,7 @@ import { ChatMessage } from './entities/chat.entity';
 import { UserService } from '../user/user.service';
 import { ChatSessionService } from './chat-session.service';
 import { MultimodalContent } from './types/completion.types';
+import { FilesService } from '../files/files.service';
 
 @Injectable()
 export class ChatService {
@@ -30,6 +31,7 @@ export class ChatService {
     private readonly userService: UserService,
     private readonly chatSessionService: ChatSessionService,
     private readonly configService: ConfigService,
+    private readonly filesService: FilesService,
   ) {}
 
   /**
@@ -124,6 +126,14 @@ export class ChatService {
       await this.chatSessionService.findById(sessionId);
     }
 
+    // 处理附件：统一处理 fileIds 和 files（base64）
+    const { attachmentIds, fileDataForAI } =
+      await this.filesService.prepareChatAttachments({
+        userId: createChatDto.userId,
+        fileIds: createChatDto.fileIds,
+        files: createChatDto.files,
+      });
+
     // 构建消息数组
     const messages: any[] = [];
 
@@ -143,7 +153,7 @@ export class ChatService {
     // 构建当前用户消息内容（支持多模态）
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
-      createChatDto.files,
+      fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
     // 添加当前用户消息
@@ -153,9 +163,9 @@ export class ChatService {
     });
 
     // 记录文件信息
-    if (createChatDto.files && createChatDto.files.length > 0) {
+    if (fileDataForAI.length > 0) {
       this.logger.log(
-        `包含 ${createChatDto.files.length} 个附件: ${createChatDto.files.map((f) => f.name).join(', ')}`,
+        `包含 ${fileDataForAI.length} 个附件: ${fileDataForAI.map((f) => f.name).join(', ')}`,
       );
     }
 
@@ -197,6 +207,16 @@ export class ChatService {
     const savedMessage = await this.chatMessageRepository.save(chatMessage);
 
     this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
+
+    // 绑定附件到消息-用于历史回看
+    if (attachmentIds.length > 0) {
+      await this.filesService.bindAttachmentsToMessage({
+        userId: createChatDto.userId,
+        sessionId,
+        messageId: savedMessage.id,
+        attachmentIds,
+      });
+    }
 
     // 更新最后活跃时间和消息预览
     const preview =
@@ -257,7 +277,7 @@ export class ChatService {
     pageSize: number = 20,
     order: 'asc' | 'desc' = 'desc',
   ): Promise<{
-    messages: ChatMessage[];
+    messages: any[];
     total: number;
     page: number;
     pageSize: number;
@@ -273,13 +293,28 @@ export class ChatService {
       order: { createdAt: order === 'desc' ? 'DESC' : 'ASC' },
       skip,
       take: pageSize,
+      relations: ['attachments'], // 加载附件关联
     });
 
     // 如果是倒序查询-反转数组使消息按时间正序显示
     const orderedMessages = order === 'desc' ? messages.reverse() : messages;
 
+    // 转换附件格式
+    const messagesWithAttachments = orderedMessages.map((msg) => ({
+      ...msg,
+      attachments: (msg.attachments || []).map((att) => ({
+        id: att.id,
+        url: `/files/${att.id}`,
+        name: att.originalName,
+        type: att.storageMime,
+        sizeBytes: att.sizeBytes,
+        width: att.width,
+        height: att.height,
+      })),
+    }));
+
     return {
-      messages: orderedMessages,
+      messages: messagesWithAttachments,
       total,
       page,
       pageSize,
@@ -314,6 +349,14 @@ export class ChatService {
       await this.chatSessionService.findById(sessionId);
     }
 
+    // 处理附件：统一处理 fileIds 和 files（base64）
+    const { attachmentIds, fileDataForAI } =
+      await this.filesService.prepareChatAttachments({
+        userId: createChatDto.userId,
+        fileIds: createChatDto.fileIds,
+        files: createChatDto.files,
+      });
+
     // 构建消息数组
     const messages: any[] = [];
 
@@ -333,7 +376,7 @@ export class ChatService {
     // 构建当前用户消息内容-支持多模态
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
-      createChatDto.files,
+      fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
     // 添加当前用户消息
@@ -343,9 +386,9 @@ export class ChatService {
     });
 
     // 记录文件信息
-    if (createChatDto.files && createChatDto.files.length > 0) {
+    if (fileDataForAI.length > 0) {
       this.logger.log(
-        `包含 ${createChatDto.files.length} 个附件: ${createChatDto.files.map((f) => f.name).join(', ')}`,
+        `包含 ${fileDataForAI.length} 个附件: ${fileDataForAI.map((f) => f.name).join(', ')}`,
       );
     }
 
@@ -372,12 +415,13 @@ export class ChatService {
       userId: createChatDto.userId,
       userMessage: createChatDto.message,
       modelId,
+      attachmentIds,
     };
   }
 
   /**
    * 保存流式对话的完整消息
-   * （在流式传输结束后调用）
+   * （流式传输结束后调用）
    */
   async saveStreamMessage(
     userId: string,
@@ -390,6 +434,7 @@ export class ChatService {
       completionTokens: number;
       totalTokens: number;
     },
+    attachmentIds?: string[],
   ) {
     // 保存聊天记录到数据库
     const chatMessage = this.chatMessageRepository.create({
@@ -408,6 +453,16 @@ export class ChatService {
     const savedMessage = await this.chatMessageRepository.save(chatMessage);
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);
+
+    // 绑定附件到消息-用于历史回看
+    if (attachmentIds && attachmentIds.length > 0) {
+      await this.filesService.bindAttachmentsToMessage({
+        userId,
+        sessionId,
+        messageId: savedMessage.id,
+        attachmentIds,
+      });
+    }
 
     // 更新会话的最后活跃时间和消息预览
     const preview =

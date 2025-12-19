@@ -6,6 +6,7 @@ import {
   deleteSession,
   getSessionMessages,
   updateSessionTitle,
+  clearAllSessions,
   type BackendChatSession,
   type BackendChatMessage
 } from '@/api/chat'
@@ -16,8 +17,10 @@ import {
 export interface MessageAttachment {
   type: 'image' | 'pdf' | 'document'
   name: string
-  preview: string  // 用于显示（blob URL 或空字符串）
+  preview: string  // 用于显示（blob URL、base64 或服务端 URL）
   base64?: string  // 用于发送给 AI（发送后可清理以节省内存）
+  /** 服务端文件访问 URL（历史消息回看时使用） */
+  url?: string
 }
 
 /**
@@ -73,11 +76,21 @@ export function useConversationManager() {
   )
 
   /**
+   * 将文件类型映射为附件类型
+   */
+  const mapMimeToAttachmentType = (mimeType: string): MessageAttachment['type'] => {
+    if (mimeType.startsWith('image/')) return 'image'
+    if (mimeType === 'application/pdf') return 'pdf'
+    return 'document'
+  }
+
+  /**
    * 转换消息
    * 一条记录包含 userMessage + aiMessage -需要拆分为两条
    */
   const transformBackendMessages = (backendMessages: BackendChatMessage[]): Message[] => {
     const messages: Message[] = []
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
     // 按创建时间排序
     const sortedMessages = [...backendMessages].sort(
@@ -87,13 +100,26 @@ export function useConversationManager() {
     sortedMessages.forEach((msg) => {
       const timestamp = new Date(msg.createdAt).getTime()
 
-      // 用户消息
+      // 转换后端附件为前端格式
+      let attachments: MessageAttachment[] | undefined
+      if (msg.attachments && msg.attachments.length > 0) {
+        attachments = msg.attachments.map(att => ({
+          type: mapMimeToAttachmentType(att.type),
+          name: att.name,
+          // 使用完整 URL 作为预览
+          preview: `${baseURL}${att.url}`,
+          url: `${baseURL}${att.url}`
+        }))
+      }
+
+      // 用户消息（附件属于用户消息）
       if (msg.userMessage) {
         messages.push({
           id: `${msg.id}-user`,
           role: 'user',
           content: msg.userMessage,
-          timestamp
+          timestamp,
+          attachments
         })
       }
 
@@ -420,11 +446,36 @@ export function useConversationManager() {
 
   /**
    * 清空所有对话
+   * @param userId 用户 ID
+   * @returns 成功返回删除的数量，失败返回 null
    */
-  const clearAllConversations = (): void => {
+  const clearAllConversations = async (userId?: string): Promise<{ deletedCount: number } | null> => {
+    let serverDeletedCount = 0
+
+    if (userId && userId !== 'null' && userId !== 'undefined' && userId.trim() !== '') {
+      try {
+        const response = await clearAllSessions({ userId })
+        if (response.code !== 0) {
+          console.error('清空会话失败:', response.message)
+          return null
+        }
+        serverDeletedCount = response.data.deletedCount
+        console.log(`后端已清空 ${serverDeletedCount} 个会话`)
+      } catch (error) {
+        console.log('清空会话出错:', error)
+        return null
+      }
+    } else {
+      // 无userId时-使用本地数量
+      serverDeletedCount = conversations.value.length
+    }
+
+    // 清空本地数据
     conversations.value = []
     currentConversationId.value = ''
     saveConversations()
+
+    return { deletedCount: serverDeletedCount }
   }
 
   /**

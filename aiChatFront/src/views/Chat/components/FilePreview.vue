@@ -40,8 +40,8 @@
           {{ truncateFileName(file.name) }}
         </div>
 
-        <!-- 处理遮罩 -->
-        <div v-if="file.status === 'processing'" class="processing-overlay">
+        <!-- 处理/上传中遮罩 -->
+        <div v-if="file.status === 'processing' || file.status === 'uploading'" class="processing-overlay">
           <LoadingOutlined spin />
         </div>
 
