@@ -1,4 +1,15 @@
-import { ref, readonly, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
+
+export interface UseLocalStorageOptions<T> {
+  /**
+   * 自定义序列化（用于裁剪/脱敏/压缩等）
+   */
+  serialize?: (value: T) => unknown
+  /**
+   * 自定义反序列化（用于数据迁移/兼容旧结构等）
+   */
+  deserialize?: (raw: unknown) => T
+}
 
 /**
  * 通用 LocalStorage Hook
@@ -8,9 +19,14 @@ import { ref, readonly, type Ref } from 'vue'
  * @param defaultValue - 默认值
  * @returns
  */
-export function useLocalStorage<T>(key: string, defaultValue: T) {
+export function useLocalStorage<T>(
+  key: string,
+  defaultValue: T,
+  options: UseLocalStorageOptions<T> = {}
+) {
   // 内部可写的 ref
   const data = ref<T>(defaultValue) as Ref<T>
+  let saveTimer: number | null = null
 
   /**
    * 从 localStorage 加载数据
@@ -19,7 +35,8 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
     try {
       const saved = localStorage.getItem(key)
       if (saved) {
-        data.value = JSON.parse(saved) as T
+        const parsed = JSON.parse(saved) as unknown
+        data.value = options.deserialize ? options.deserialize(parsed) : (parsed as T)
       } else {
         data.value = defaultValue
       }
@@ -34,10 +51,24 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
    */
   const save = (): void => {
     try {
-      localStorage.setItem(key, JSON.stringify(data.value))
+      const serialized = options.serialize ? options.serialize(data.value) : data.value
+      localStorage.setItem(key, JSON.stringify(serialized))
     } catch (error) {
       console.error(`[useLocalStorage] 保存数据失败 (key: ${key}):`, error)
     }
+  }
+
+  /**
+   * 节流/防抖保存
+   */
+  const saveDebounced = (delayMs: number = 300): void => {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+    }
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null
+      save()
+    }, delayMs)
   }
 
   /**
@@ -47,6 +78,10 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
     try {
       localStorage.removeItem(key)
       data.value = defaultValue
+      if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+      }
     } catch (error) {
       console.error(`[useLocalStorage] 清除数据失败 (key: ${key}):`, error)
     }
@@ -55,11 +90,12 @@ export function useLocalStorage<T>(key: string, defaultValue: T) {
   // 加载数据
   load()
 
-  // 返回可修改的 data（不使用 readonly，因为需要修改对象属性）
+  // 返回可修改的 data
   return {
     data,
     load,
     save,
+    saveDebounced,
     clear
   }
 }

@@ -31,6 +31,8 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: number
+  /** 是否为流式输出中的 AI 消息（仅运行时使用，不建议落盘） */
+  streaming?: boolean
   /** 消息附件（图片、文档等） */
   attachments?: MessageAttachment[]
 }
@@ -47,6 +49,12 @@ export interface Conversation {
   sessionId?: string // 后端会话 ID-用于兼容
 }
 
+const MAX_PERSISTED_MESSAGES_PER_CONVERSATION = 50
+
+const isBlobUrl = (value: string | undefined): boolean => {
+  return typeof value === 'string' && value.startsWith('blob:')
+}
+
 /**
  * 对话管理 Hook
  *
@@ -56,8 +64,56 @@ export function useConversationManager() {
   // 对话列表持久化
   const {
     data: conversations,
-    save: saveConversations
-  } = useLocalStorage<Conversation[]>('chatConversations', [])
+    save: saveNow,
+    saveDebounced
+  } = useLocalStorage<Conversation[]>(
+    'chatConversations',
+    [],
+    {
+      serialize: (value) => {
+        return value.map((conv) => {
+          const persistedMessages = conv.messages.length > MAX_PERSISTED_MESSAGES_PER_CONVERSATION
+            ? conv.messages.slice(-MAX_PERSISTED_MESSAGES_PER_CONVERSATION)
+            : conv.messages
+
+          return {
+            id: conv.id,
+            title: conv.title,
+            createdAt: conv.createdAt,
+            updatedAt: conv.updatedAt,
+            sessionId: conv.sessionId,
+            messages: persistedMessages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: m.content,
+              timestamp: m.timestamp,
+              attachments: m.attachments?.map((att) => ({
+                type: att.type,
+                name: att.name,
+                url: att.url,
+                // blob URL 刷新后不可用，且会徒增 localStorage 体积
+                preview: isBlobUrl(att.preview) ? '' : att.preview,
+              })),
+            })),
+          }
+        })
+      },
+      deserialize: (raw) => raw as Conversation[],
+    }
+  )
+
+  /**
+   * 统一的落盘入口
+   * - 默认使用 debounced，减少频繁 JSON.stringify 导致的卡顿
+   * - 关键操作可传 immediate 强制立即保存
+   */
+  const saveConversations = (options?: { immediate?: boolean; delayMs?: number }): void => {
+    if (options?.immediate) {
+      saveNow()
+      return
+    }
+    saveDebounced(options?.delayMs)
+  }
 
   // 加载状态
   const isLoading = ref(false)
@@ -456,11 +512,11 @@ export function useConversationManager() {
       try {
         const response = await clearAllSessions({ userId })
         if (response.code !== 0) {
-          console.error('清空会话失败:', response.message)
+          console.log('清空会话失败:', response.message)
           return null
         }
         serverDeletedCount = response.data.deletedCount
-        console.log(`后端已清空 ${serverDeletedCount} 个会话`)
+        console.log(`已清空 ${serverDeletedCount} 个会话`)
       } catch (error) {
         console.log('清空会话出错:', error)
         return null
@@ -479,7 +535,7 @@ export function useConversationManager() {
   }
 
   /**
-   * 删除单个对话（同步到后端）
+   * 删除单个对话（同步）
    */
   const deleteConversation = async (id: string): Promise<void> => {
     const index = conversations.value.findIndex(c => c.id === id)
@@ -500,7 +556,7 @@ export function useConversationManager() {
   }
 
   /**
-   * 更新对话标题（同步到后端）
+   * 更新对话标题
    * @param id 对话 ID
    * @param title 新标题
    * @returns 是否更新成功
@@ -509,7 +565,7 @@ export function useConversationManager() {
     const conversation = conversations.value.find(c => c.id === id)
     if (!conversation) return false
 
-    // 临时对话（没有后端 sessionId）只更新本地
+    // 临时对话只更新本地
     if (!conversation.sessionId || conversation.id.startsWith('temp-')) {
       conversation.title = title
       conversation.updatedAt = Date.now()
@@ -517,7 +573,7 @@ export function useConversationManager() {
       return true
     }
 
-    // 已同步的对话需要调用后端接口
+    // 已同步的对话需要调用接口
     try {
       const response = await updateSessionTitle({ id, title })
       if (response.code === 0) {
@@ -526,11 +582,11 @@ export function useConversationManager() {
         saveConversations()
         return true
       } else {
-        console.error('更新会话标题失败:', response.message)
+        console.log('更新会话标题失败:', response.message)
         return false
       }
     } catch (error) {
-      console.error('更新会话标题出错:', error)
+      console.log('更新会话标题出错:', error)
       return false
     }
   }
@@ -546,12 +602,19 @@ export function useConversationManager() {
     }
   }
 
+  const getConversationById = (conversationId: string): Conversation | undefined => {
+    return conversations.value.find(c => c.id === conversationId)
+  }
+
   /**
-   * 添加消息到当前对话
+   * 添加消息到指定对话（避免因切换会话导致串消息）
    */
-  const addMessage = (message: Message): void => {
-    const conversation = currentConversation.value
-    if (!conversation) return
+  const addMessageToConversation = (conversationId: string, message: Message): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) {
+      console.warn('addMessageToConversation: 对话不存在:', conversationId)
+      return
+    }
 
     conversation.messages.push(message)
     conversation.updatedAt = Date.now()
@@ -562,7 +625,85 @@ export function useConversationManager() {
       conversation.title = content.slice(0, 30) + (content.length > 30 ? '...' : '')
     }
 
+    // 流式消息不落盘，避免写入频繁/刷新后状态异常
+    if (!message.streaming) {
+      saveConversations()
+    }
+  }
+
+  /**
+   * 按 messageId 更新消息内容（避免 index 因会话切换而失效）
+   */
+  const updateMessageContentById = (
+    conversationId: string,
+    messageId: string,
+    content: string,
+    isAppend = false
+  ): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const msg = conversation.messages.find(m => m.id === messageId)
+    if (!msg) return
+
+    msg.content = isAppend ? msg.content + content : content
+    conversation.updatedAt = Date.now()
+  }
+
+  /**
+   * 按 messageId 局部更新消息字段
+   */
+  const patchMessageById = (
+    conversationId: string,
+    messageId: string,
+    patch: Partial<Message>
+  ): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const msg = conversation.messages.find(m => m.id === messageId)
+    if (!msg) return
+
+    Object.assign(msg, patch)
+    conversation.updatedAt = Date.now()
+  }
+
+  /**
+   * 清理指定消息的附件 base64（减少内存/落盘体积）
+   */
+  const clearMessageAttachmentBase64 = (conversationId: string, messageId: string): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const msg = conversation.messages.find(m => m.id === messageId)
+    if (!msg?.attachments) return
+
+    msg.attachments.forEach(att => {
+      att.base64 = undefined
+    })
+  }
+
+  /**
+   * 按 messageId 删除消息
+   */
+  const deleteMessageById = (conversationId: string, messageId: string): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const index = conversation.messages.findIndex(m => m.id === messageId)
+    if (index === -1) return
+
+    conversation.messages.splice(index, 1)
     saveConversations()
+  }
+
+  /**
+   * 添加消息到当前对话
+   */
+  const addMessage = (message: Message): void => {
+    const conversationId = currentConversationId.value
+    if (!conversationId) return
+    addMessageToConversation(conversationId, message)
   }
 
   /**
@@ -663,6 +804,11 @@ export function useConversationManager() {
     // 消息管理
     addMessage,
     updateMessageContent,
+    addMessageToConversation,
+    updateMessageContentById,
+    patchMessageById,
+    clearMessageAttachmentBase64,
+    deleteMessageById,
     deleteMessage,
     deleteMessageByIndex,
 

@@ -1,6 +1,6 @@
-import { ref } from 'vue'
+import { ref, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
-import { sendStreamMessage } from '@/api/chat'
+import { sendStreamMessage, type StreamRequestController } from '@/api/chat'
 import type { Message, MessageAttachment } from './useConversationManager'
 
 /**
@@ -26,11 +26,21 @@ export interface ServerFileInfo {
  * 对话管理器方法接口
  */
 interface ConversationMethods {
-  addMessage: (message: Message) => void
-  updateMessageContent: (index: number, content: string, isAppend?: boolean) => void
-  deleteMessageByIndex: (index: number) => void
-  updateSessionId: (sessionId: string) => void
-  saveConversations: () => void
+  addMessageToConversation: (conversationId: string, message: Message) => void
+  updateMessageContentById: (
+    conversationId: string,
+    messageId: string,
+    content: string,
+    isAppend?: boolean
+  ) => void
+  patchMessageById: (
+    conversationId: string,
+    messageId: string,
+    patch: Partial<Message>
+  ) => void
+  clearMessageAttachmentBase64: (conversationId: string, messageId: string) => void
+  deleteMessageById: (conversationId: string, messageId: string) => void
+  saveConversations: (options?: { immediate?: boolean }) => void
   ensureServerSession: (userId: string, title?: string) => Promise<string | null>
 }
 
@@ -63,7 +73,7 @@ const convertServerFilesToAttachments = (serverFiles: ServerFileInfo[]): Message
   return serverFiles.map(file => ({
     type: mapFileTypeToAttachmentType(file.type),
     name: file.name,
-    // 使用服务端 URL 作为预览（跨设备可访问）
+    // 使用服务端URL作为预览-跨设备可访问
     url: `${baseURL}${file.url}`,
     preview: `${baseURL}${file.url}`
   }))
@@ -76,13 +86,57 @@ const convertServerFilesToAttachments = (serverFiles: ServerFileInfo[]): Message
  */
 export function useStreamChat(
   conversationMethods: ConversationMethods,
-  getCurrentMessages: () => Message[],
 ) {
-  const { addMessage, updateMessageContent, deleteMessageByIndex,  saveConversations, ensureServerSession } = conversationMethods
+  const {
+    addMessageToConversation,
+    updateMessageContentById,
+    patchMessageById,
+    clearMessageAttachmentBase64,
+    deleteMessageById,
+    saveConversations,
+    ensureServerSession
+  } = conversationMethods
   const loading = ref(false)
 
+  const activeRequestId = ref<string | null>(null)
+  const activeController = ref<StreamRequestController | null>(null)
+  const activeStreamContext = ref<{
+    conversationId: string
+    assistantMessageId: string | null
+  } | null>(null)
+
+  const createId = (): string => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return (crypto as Crypto).randomUUID()
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
   /**
-   * 发送消息（推荐：使用已上传的 fileIds）
+   * 取消当前流式请求（如切换会话/重新发送/清空对话）
+   */
+  const cancelCurrentStream = () => {
+    activeRequestId.value = null
+    activeController.value?.close()
+    activeController.value = null
+
+    // 取消时-将已生成的AI消息标记为非流式，避免UI卡在 streaming 状态
+    if (activeStreamContext.value?.assistantMessageId) {
+      patchMessageById(activeStreamContext.value.conversationId, activeStreamContext.value.assistantMessageId, {
+        streaming: false,
+      })
+      saveConversations({ immediate: true })
+    }
+    activeStreamContext.value = null
+    loading.value = false
+  }
+
+  onBeforeUnmount(() => {
+    cancelCurrentStream()
+  })
+
+  /**
+   * 发送消息
    * @param userId 用户 ID
    * @param content 消息文本内容
    * @param options 可选参数
@@ -101,6 +155,9 @@ export function useStreamChat(
       model?: string
     }
   ) => {
+    // 新请求开始前，先取消旧请求，避免串会话/串消息
+    cancelCurrentStream()
+
     const {
       fileIds,
       serverFiles,
@@ -124,7 +181,7 @@ export function useStreamChat(
       return
     }
 
-    // 消息内容作为会话标题（如果有内容），否则用文件名
+    // 消息内容作为会话标题（如果有内容）-否则用文件名
     const firstFileName = serverFiles?.[0]?.name || files?.[0]?.name
     const title = hasContent
       ? content
@@ -145,23 +202,48 @@ export function useStreamChat(
     }
 
     // 添加用户消息
+    const userMessageId = createId()
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: userMessageId,
       role: 'user',
       content: content || '',
       timestamp: Date.now(),
       attachments
     }
-    addMessage(userMessage)
+    addMessageToConversation(sessionId, userMessage)
 
+    // 流式请求状态
     loading.value = true
+    const requestId = createId()
+    activeRequestId.value = requestId
+    activeStreamContext.value = { conversationId: sessionId, assistantMessageId: null }
 
-    // AI 消息索引（第一次收到数据时创建）
-    let messageIndex = -1
-    let updateCount = 0
+    // AI 消息 id（首次收到 delta 时创建）
+    let assistantMessageId: string | null = null
+    let pendingDelta = ''
+    let flushRafId: number | null = null
+
+    const scheduleFlushDelta = () => {
+      if (flushRafId !== null) return
+      flushRafId = requestAnimationFrame(() => {
+        flushRafId = null
+
+        // 请求已切换/取消，丢弃缓存，避免串会话
+        if (activeRequestId.value !== requestId) {
+          pendingDelta = ''
+          return
+        }
+        if (!assistantMessageId) return
+        if (!pendingDelta) return
+
+        const chunk = pendingDelta
+        pendingDelta = ''
+        updateMessageContentById(sessionId, assistantMessageId, chunk, true)
+      })
+    }
 
     try {
-      sendStreamMessage(
+      const controller = sendStreamMessage(
         {
           userId,
           sessionId,
@@ -173,65 +255,107 @@ export function useStreamChat(
         },
         {
           onMessage: (delta: string) => {
-            if (messageIndex === -1) {
-              const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: delta,
-                timestamp: Date.now()
+            if (activeRequestId.value !== requestId) return
+
+            if (!assistantMessageId) {
+              assistantMessageId = createId()
+              if (activeStreamContext.value?.conversationId === sessionId) {
+                activeStreamContext.value.assistantMessageId = assistantMessageId
               }
-              addMessage(assistantMessage)
-              messageIndex = getCurrentMessages().length - 1
-              loading.value = false
-            } else {
-              updateMessageContent(messageIndex, delta, true)
+              const assistantMessage: Message = {
+                id: assistantMessageId,
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                streaming: true
+              }
+              addMessageToConversation(sessionId, assistantMessage)
             }
 
-            updateCount++
-            if (updateCount % 50 === 0) {
-              saveConversations()
-            }
+            pendingDelta += delta
+            scheduleFlushDelta()
           },
 
           onComplete: (fullMessage: string, _sessionId: string, model: string) => {
-            if (messageIndex >= 0) {
-              updateMessageContent(messageIndex, fullMessage, false)
+            if (activeRequestId.value !== requestId) return
+
+            if (flushRafId !== null) {
+              cancelAnimationFrame(flushRafId)
+              flushRafId = null
+              pendingDelta = ''
+            }
+
+            if (!assistantMessageId) {
+              assistantMessageId = createId()
+              if (activeStreamContext.value?.conversationId === sessionId) {
+                activeStreamContext.value.assistantMessageId = assistantMessageId
+              }
+              addMessageToConversation(sessionId, {
+                id: assistantMessageId,
+                role: 'assistant',
+                content: fullMessage,
+                timestamp: Date.now(),
+                streaming: false,
+              })
+            } else {
+              updateMessageContentById(sessionId, assistantMessageId, fullMessage, false)
+              patchMessageById(sessionId, assistantMessageId, { streaming: false })
             }
 
             // 清理用户消息中的 base64 数据（节省内存）
-            const userMsg = getCurrentMessages().find(m => m.id === userMessage.id)
-            if (userMsg?.attachments) {
-              userMsg.attachments.forEach(att => {
-                att.base64 = undefined
-              })
-            }
+            clearMessageAttachmentBase64(sessionId, userMessageId)
 
-            saveConversations()
+            saveConversations({ immediate: true })
             loading.value = false
             console.log('AI 回复完成，模型:', model)
+
+            activeController.value = null
+            activeRequestId.value = null
+            activeStreamContext.value = null
           },
 
           onError: (error: string) => {
+            if (activeRequestId.value !== requestId) return
+
+            if (flushRafId !== null) {
+              cancelAnimationFrame(flushRafId)
+              flushRafId = null
+              pendingDelta = ''
+            }
+
             message.error(`${error}`)
-            if (messageIndex >= 0) {
-              deleteMessageByIndex(messageIndex)
+            if (assistantMessageId) {
+              deleteMessageById(sessionId, assistantMessageId)
             }
             loading.value = false
+
+            saveConversations({ immediate: true })
+            activeController.value = null
+            activeRequestId.value = null
+            activeStreamContext.value = null
           }
         }
       )
+
+      activeController.value = controller
     } catch (error: unknown) {
       console.log(error)
       message.error('发送消息失败，请稍后重试')
-      if (messageIndex >= 0) {
-        deleteMessageByIndex(messageIndex)
+      if (assistantMessageId) {
+        deleteMessageById(sessionId, assistantMessageId)
       }
       loading.value = false
+
+      saveConversations({ immediate: true })
+      activeController.value = null
+      activeRequestId.value = null
+      activeStreamContext.value = null
     }
   }
 
   return {
     loading,
-    sendMessage
+    sendMessage,
+    cancelCurrentStream
   }
 }

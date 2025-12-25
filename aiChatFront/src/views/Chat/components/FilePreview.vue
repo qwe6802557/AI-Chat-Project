@@ -137,7 +137,7 @@ const handleRemove = (id: string) => {
 
 // 预览点击
 const handlePreviewClick = (file: UploadedFile) => {
-  if (file.status === 'ready') {
+  if (file.status === 'uploaded') {
     emit('preview', file)
   }
 }

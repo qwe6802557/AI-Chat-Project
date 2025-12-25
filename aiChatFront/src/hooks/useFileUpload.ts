@@ -1,6 +1,6 @@
 import { ref, computed, onBeforeUnmount, toRaw } from 'vue'
 import { message } from 'ant-design-vue'
-import { uploadFiles, type UploadedFileResponse } from '@/api/chat'
+import { uploadFiles } from '@/api/chat'
 
 /**
  * 上传文件接口
@@ -15,9 +15,9 @@ export interface UploadedFile {
   size: number
   status: 'processing' | 'uploading' | 'uploaded' | 'error'
   error?: string
-  /** 服务端返回的文件 ID（上传成功后） */
+  /** 文件ID（上传成功后） */
   serverId?: string
-  /** 服务端返回的文件访问 URL（上传成功后） */
+  /** 文件访问URL（上传成功后） */
   serverUrl?: string
 }
 
@@ -25,9 +25,9 @@ export interface UploadedFile {
  * 文件上传 Hook 配置
  */
 export interface UseFileUploadOptions {
-  /** 最大文件大小（字节）-默认 5MB（匹配后端限制） */
+  /** 最大文件大小（字节）-默认 5MB（匹配限制） */
   maxSize?: number
-  /** 最大文件数量-默认 4（匹配后端限制） */
+  /** 最大文件数量-默认 4（匹配限制） */
   maxCount?: number
   /** 允许的文件类型，默认图片和文档 */
   allowedTypes?: string[]
@@ -252,7 +252,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * @param fileId 文件的本地 ID（用于在 files.value 中查找响应式对象）
    */
   const uploadSingleFile = async (fileId: string): Promise<boolean> => {
-    // 通过 ID 在 files.value 中查找，确保获取响应式代理对象
+    // 通过 ID 在 files.value 中查找-确保获取响应式代理对象
     const fileItem = files.value.find(f => f.id === fileId)
     if (!fileItem) {
       console.error('[uploadSingleFile] 找不到文件:', fileId)
@@ -279,6 +279,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       if (response.code === 0 && response.data && response.data.length > 0) {
         const serverFile = response.data[0]
+        if (!serverFile) {
+          fileItem.status = 'error'
+          fileItem.error = '上传失败：服务端返回为空'
+          message.error(`${fileItem.name} 上传失败: ${fileItem.error}`)
+          return false
+        }
         fileItem.status = 'uploaded'
         fileItem.serverId = serverFile.id
         fileItem.serverUrl = serverFile.url
@@ -424,7 +430,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 获取已上传文件的服务器信息（用于消息附件显示）
+   * 获取已上传文件的服务器信息-消息附件显示
    */
   const getUploadedFileInfos = (): { id: string; url: string; name: string; type: string }[] => {
     return uploadedFiles.value

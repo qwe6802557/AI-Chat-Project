@@ -30,7 +30,7 @@ function createWindow() {
     minHeight: 600,
     icon: path.join(process.env.VITE_PUBLIC || '', 'favicon.ico'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(__dirname, 'preload.mjs'), // 加载预加载脚本-用于主进程和渲染进程通信
       // 安全设置
       nodeIntegration: false,
       contextIsolation: true,
@@ -42,6 +42,7 @@ function createWindow() {
     titleBarStyle: 'default',
     backgroundColor: '#ffffff',
     show: false, // 先隐藏窗口，等待加载完成后再显示
+    autoHideMenuBar: true, // 隐藏菜单栏
   })
 
   // 窗口准备好后显示（避免白屏闪烁）

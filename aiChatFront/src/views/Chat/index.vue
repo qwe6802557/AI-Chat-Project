@@ -44,10 +44,11 @@ const {
   clearAllConversations,
   deleteConversation,
   updateConversationTitle,
-  addMessage,
-  updateMessageContent,
-  deleteMessageByIndex,
-  updateSessionId,
+  addMessageToConversation,
+  updateMessageContentById,
+  patchMessageById,
+  clearMessageAttachmentBase64,
+  deleteMessageById,
   saveConversations,
   ensureServerSession,
   initializeFromServer,
@@ -55,16 +56,16 @@ const {
 } = useConversationManager()
 
 // 流式聊天
-const { loading, sendMessage } = useStreamChat(
+const { loading, sendMessage, cancelCurrentStream } = useStreamChat(
   {
-    addMessage,
-    updateMessageContent,
-    deleteMessageByIndex,
-    updateSessionId,
+    addMessageToConversation,
+    updateMessageContentById,
+    patchMessageById,
+    clearMessageAttachmentBase64,
+    deleteMessageById,
     saveConversations,
-    ensureServerSession
-  },
-  () => currentMessages.value
+    ensureServerSession,
+  }
 )
 
 // 获取当前用户 ID
@@ -87,6 +88,8 @@ const handleNewChat = () => {
 
 // 选择对话
 const handleSelectConversation = async (id: string) => {
+  // 切换会话时取消当前流式请求，避免串会话/后台写入
+  cancelCurrentStream()
   const paginationInfo = await selectConversation(id)
 
   // 更新分页状态
@@ -107,6 +110,7 @@ const handleClearConversations = async () => {
 
   // 开始清空-显示加载状态
   isClearing.value = true
+  cancelCurrentStream()
 
   try {
     const result = await clearAllConversations(userId)
@@ -121,7 +125,6 @@ const handleClearConversations = async () => {
     }
   } catch (error) {
     console.error('清空对话出错:', error)
-    message.error('清空对话失败，请稍后重试')
   } finally {
     isClearing.value = false
   }
@@ -135,6 +138,7 @@ const handleRenameConversation = async (id: string, title: string, callback: (su
 
 // 删除对话
 const handleDeleteConversation = async (id: string) => {
+  cancelCurrentStream()
   await deleteConversation(id)
 }
 
@@ -172,7 +176,7 @@ const handleLoadMoreMessages = async (sessionId: string, page: number) => {
 }
 
 onMounted(async () => {
-  // 从后端加载会话列表
+  // 加载会话列表
   const userId = getUserId()
   if (userId) {
     const paginationInfo = await initializeFromServer(userId)
@@ -196,4 +200,3 @@ onMounted(async () => {
   overflow: hidden;
 }
 </style>
-

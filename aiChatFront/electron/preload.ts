@@ -3,15 +3,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 /**
  * Preload 脚本
  *
- * 该脚本在渲染进程加载之前运行，可以安全地暴露 Node.js API 给渲染进程
+ * 该脚本在渲染进程加载之前运行-可以安全地暴露 Node.js API 给渲染进程
  * 通过 contextBridge 暴露的 API 可以在渲染进程中通过 window.electronAPI 访问
  */
 
-// 暴露给渲染进程的 API
+// 暴露给渲染进程的API
 const electronAPI = {
   // 平台信息
   platform: process.platform,
-
   // 版本信息
   versions: {
     node: process.versions.node,
@@ -19,7 +18,7 @@ const electronAPI = {
     electron: process.versions.electron,
   },
 
-  // IPC 通信示例
+  // 示例: IPC 通信
   // 发送消息到主进程
   sendMessage: (channel: string, data: any) => {
     // 白名单验证，只允许特定的频道

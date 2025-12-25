@@ -84,10 +84,12 @@
         </div>
         <div class="message-content">
           <!-- AI 消息：渲染 Markdown -->
-          <div
+          <MarkdownMessage
             v-if="message.role === 'assistant'"
             class="markdown-content"
-            v-html="renderMarkdownSimple(message.content)"
+            :message-id="message.id"
+            :content="message.content"
+            :streaming="message.streaming"
           />
           <!-- 用户消息：支持图片 + 文本 -->
           <div v-else class="user-message-content">
@@ -117,7 +119,7 @@
       </div>
 
       <!-- 打字动画 -->
-      <div v-if="loading" class="message-item assistant">
+      <div v-if="loading && !hasStreamingAssistantMessage" class="message-item assistant">
         <div class="message-avatar">
           <a-avatar
             :size="32"
@@ -221,12 +223,12 @@ import {
   FilePdfOutlined,
   FileTextOutlined
 } from '@ant-design/icons-vue'
-import { renderMarkdownSimple } from '@/utils/markdown'
 import { useScrollManager } from '@/hooks/useScrollManager'
 import { useFileUpload } from '@/hooks/useFileUpload'
 import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import FilePreview from './FilePreview.vue'
+import MarkdownMessage from './MarkdownMessage.vue'
 import type { Message } from '../hooks/useConversationManager'
 
 defineOptions({
@@ -290,6 +292,11 @@ const canSend = computed(() => {
 
   return result
 })
+
+// 是否存在正在流式输出的 AI 消息（用于控制打字动画显示）
+const hasStreamingAssistantMessage = computed(() =>
+  props.messages.some((m) => m.role === 'assistant' && !!m.streaming)
+)
 
 // 分页状态
 const currentPage = ref(1)
@@ -465,6 +472,7 @@ const handlePaste = (event: ClipboardEvent) => {
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
+    if (!item) continue
     // 检查是否是文件类型
     if (item.kind === 'file') {
       const file = item.getAsFile()
@@ -1327,5 +1335,4 @@ $input-height: 50px;
   }
 }
 </style>
-
 

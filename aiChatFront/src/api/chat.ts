@@ -122,6 +122,10 @@ export function sendMessage(data: SendMessageParams) {
  * 发送流式聊天消息
  * 使用 SSE
  */
+export interface StreamRequestController {
+  close: () => void
+}
+
 export function sendStreamMessage(
   data: SendMessageParams,
   callbacks: {
@@ -129,11 +133,12 @@ export function sendStreamMessage(
     onComplete: (fullMessage: string, sessionId: string, model: string) => void
     onError: (error: string) => void
   }
-): EventSource {
+): StreamRequestController {
   const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
   const token = localStorage.getItem('token')
+  const abortController = new AbortController()
 
-  // 使用 fetch 发送 POST 请求并接收 SSE 流
+  // 使用fetch发送并接收SSE流
   const fetchStream = async () => {
     try {
       const response = await fetch(`${baseURL}/chat/stream`, {
@@ -143,6 +148,7 @@ export function sendStreamMessage(
           'Authorization': token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify(data),
+        signal: abortController.signal,
       })
 
       if (!response.ok) {
@@ -160,6 +166,9 @@ export function sendStreamMessage(
       let buffer = ''
 
       while (true) {
+        if (abortController.signal.aborted) {
+          return
+        }
         const { done, value } = await reader.read()
 
         if (done) break
@@ -206,6 +215,10 @@ export function sendStreamMessage(
         }
       }
     } catch (error: unknown) {
+      // 主动取消，不视为错误
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       console.log('流式请求失败:', error)
       const errorMessage =
         error instanceof Error ? error.message : '流式请求失败'
@@ -216,8 +229,9 @@ export function sendStreamMessage(
   // 启动流式请求
   fetchStream()
 
-  // 虚拟EventSource对象-用于兼容
-  return {} as EventSource
+  return {
+    close: () => abortController.abort(),
+  }
 }
 
 /**
