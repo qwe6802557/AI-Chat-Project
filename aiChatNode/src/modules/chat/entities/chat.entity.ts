@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
@@ -15,6 +16,8 @@ import { ChatAttachment } from './chat-attachment.entity';
 /**
  * 聊天记录实体
  */
+@Index('idx_chat_messages_session_created_at', ['sessionId', 'createdAt'])
+@Index('idx_chat_messages_user_created_at', ['userId', 'createdAt'])
 @Entity('chat_messages')
 export class ChatMessage {
   @PrimaryGeneratedColumn('uuid')

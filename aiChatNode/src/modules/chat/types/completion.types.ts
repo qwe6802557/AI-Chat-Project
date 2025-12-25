@@ -45,6 +45,7 @@ export interface ChatMessage {
 export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
+  abortSignal?: AbortSignal;
 }
 
 /**

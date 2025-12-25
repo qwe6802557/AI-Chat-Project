@@ -1,5 +1,6 @@
 import {
   Entity,
+  Index,
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
@@ -17,6 +18,8 @@ import { ChatMessage } from './chat.entity';
  * - 支持“先上传、后发送消息”的 fileId 引用方式（messageId/sessionId 可为空）
  * - 支持历史回看/跨设备同步（落盘 + DB 元数据）
  */
+@Index('idx_chat_attachments_user_message_id', ['userId', 'messageId'])
+@Index('idx_chat_attachments_user_session_id', ['userId', 'sessionId'])
 @Entity('chat_attachments')
 export class ChatAttachment {
   @PrimaryGeneratedColumn('uuid')
@@ -95,4 +98,3 @@ export class ChatAttachment {
   @CreateDateColumn()
   createdAt: Date;
 }
-

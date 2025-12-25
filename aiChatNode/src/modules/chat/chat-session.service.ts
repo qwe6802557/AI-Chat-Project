@@ -97,6 +97,22 @@ export class ChatSessionService {
   }
 
   /**
+   * 根据 ID 获取会话详情（仅限会话所有者）
+   * - 不加载 chatMessages 关联，避免长会话导致的性能问题
+   */
+  async findByIdForUser(sessionId: string, userId: string): Promise<ChatSession> {
+    const session = await this.chatSessionRepository.findOne({
+      where: { id: sessionId, userId, isDeleted: false },
+    });
+
+    if (!session) {
+      throw new NotFoundException('会话不存在');
+    }
+
+    return session;
+  }
+
+  /**
    * 更新会话
    */
   async update(
@@ -207,4 +223,3 @@ export class ChatSessionService {
     return this.update(sessionId, { isArchived: false });
   }
 }
-

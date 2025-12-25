@@ -52,14 +52,17 @@ export class ClaudeAdapter implements IProviderAdapter {
     try {
       this.logger.log(`调用 ${this.providerName} API - 模型: ${model}`);
 
-      const completion = await this.client.chat.completions.create({
-        model,
-        // 类型断言
-        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-        stream: false,
-      });
+      const completion = await this.client.chat.completions.create(
+        {
+          model,
+          // 类型断言
+          messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 4096,
+          stream: false,
+        },
+        options?.abortSignal ? { signal: options.abortSignal } : undefined,
+      );
 
       return this.transformResponse(completion);
     } catch (error) {
@@ -78,13 +81,16 @@ export class ClaudeAdapter implements IProviderAdapter {
     try {
       this.logger.log(`调用 ${this.providerName} 流式 API - 模型: ${model}`);
 
-      const stream = await this.client.chat.completions.create({
-        model,
-        messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 4096,
-        stream: true,
-      });
+      const stream = await this.client.chat.completions.create(
+        {
+          model,
+          messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 4096,
+          stream: true,
+        },
+        options?.abortSignal ? { signal: options.abortSignal } : undefined,
+      );
 
       return this.transformStream(stream);
     } catch (error) {

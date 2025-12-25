@@ -28,6 +28,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
  * 聊天会话控制器
  */
 @ApiTags('聊天会话')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 @Controller('chat/session')
 export class ChatSessionController {
   private readonly logger = new Logger(ChatSessionController.name);
@@ -67,14 +69,20 @@ export class ChatSessionController {
       },
     },
   })
-  async create(@Body() createSessionDto: CreateSessionDto) {
-    this.logger.log(
-      `[create] 收到请求 Body: ${JSON.stringify(createSessionDto)}`,
-    );
-    this.logger.log(
-      `[create] userId 值: ${createSessionDto.userId}, 类型: ${typeof createSessionDto.userId}`,
-    );
-    return this.chatSessionService.create(createSessionDto);
+  async create(@Body() createSessionDto: CreateSessionDto, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    if (createSessionDto.userId && createSessionDto.userId !== currentUserId) {
+      throw new ForbiddenException('无权以他人身份创建会话');
+    }
+
+    return this.chatSessionService.create({
+      ...createSessionDto,
+      userId: currentUserId,
+    });
   }
 
   /**
@@ -122,11 +130,24 @@ export class ChatSessionController {
     },
   })
   async getList(
-    @Query('userId') userId: string,
+    @Req() req: Request,
+    @Query('userId') userId?: string,
     @Query('includeArchived') includeArchived?: string,
   ) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    if (userId && userId !== currentUserId) {
+      throw new ForbiddenException('无权查看他人会话列表');
+    }
+
     const includeArchivedBool = includeArchived === 'true';
-    return this.chatSessionService.findByUserId(userId, includeArchivedBool);
+    return this.chatSessionService.findByUserId(
+      currentUserId,
+      includeArchivedBool,
+    );
   }
 
   /**
@@ -197,14 +218,21 @@ export class ChatSessionController {
   })
   async getMessages(
     @Query('sessionId') sessionId: string,
+    @Req() req: Request,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('order') order?: 'asc' | 'desc',
   ) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
     const pageNum = page ? parseInt(page, 10) : 1;
     const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
     const orderValue = order === 'asc' ? 'asc' : 'desc'; // 默认 desc
     return this.chatService.getSessionMessages(
+      currentUserId,
       sessionId,
       pageNum,
       pageSizeNum,
@@ -230,8 +258,13 @@ export class ChatSessionController {
     status: 200,
     description: '获取成功',
   })
-  async getById(@Query('id') id: string) {
-    return this.chatSessionService.findById(id);
+  async getById(@Query('id') id: string, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    return this.chatSessionService.findByIdForUser(id, currentUserId);
   }
 
   /**
@@ -247,8 +280,14 @@ export class ChatSessionController {
     status: 200,
     description: '更新成功',
   })
-  async update(@Body() updateSessionDto: UpdateSessionBodyDto) {
+  async update(@Body() updateSessionDto: UpdateSessionBodyDto, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
     const { id, ...updateData } = updateSessionDto;
+    await this.chatSessionService.findByIdForUser(id, currentUserId);
     return this.chatSessionService.update(id, updateData);
   }
 
@@ -284,7 +323,13 @@ export class ChatSessionController {
       },
     },
   })
-  async delete(@Body() body: { id: string }) {
+  async delete(@Body() body: { id: string }, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    await this.chatSessionService.findByIdForUser(body.id, currentUserId);
     await this.chatSessionService.delete(body.id);
     return { message: '会话已删除' };
   }
@@ -294,8 +339,6 @@ export class ChatSessionController {
    * 需要 JWT认证-且只能清空自己的会话
    */
   @Post('clear-all')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @ApiOperation({
     summary: '清空所有会话',
     description: '批量软删除当前登录用户的所有会话',
@@ -376,7 +419,13 @@ export class ChatSessionController {
     status: 200,
     description: '归档成功',
   })
-  async archive(@Body() body: { id: string }) {
+  async archive(@Body() body: { id: string }, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    await this.chatSessionService.findByIdForUser(body.id, currentUserId);
     return this.chatSessionService.archive(body.id);
   }
 
@@ -405,7 +454,13 @@ export class ChatSessionController {
     status: 200,
     description: '取消归档成功',
   })
-  async unarchive(@Body() body: { id: string }) {
+  async unarchive(@Body() body: { id: string }, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    await this.chatSessionService.findByIdForUser(body.id, currentUserId);
     return this.chatSessionService.unarchive(body.id);
   }
 }

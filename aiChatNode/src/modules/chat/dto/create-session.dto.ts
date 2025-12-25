@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsUUID, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsUUID, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
  * 创建聊天会话 DTO
@@ -12,10 +12,11 @@ export class CreateSessionDto {
     description: '用户 ID（UUID 格式）',
     example: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
     format: 'uuid',
+    required: false,
   })
-  @IsNotEmpty({ message: '用户 ID 不能为空' })
+  @IsOptional()
   @IsUUID('4', { message: '用户 ID 格式不正确' })
-  userId: string;
+  userId?: string;
 
   /**
    * 会话标题（可选，默认为"新对话"）
@@ -32,4 +33,3 @@ export class CreateSessionDto {
   @MaxLength(255, { message: '标题最多255个字符' })
   title?: string;
 }
-

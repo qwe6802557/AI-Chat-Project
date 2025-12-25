@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -106,8 +111,13 @@ export class ChatService {
   async create(createChatDto: CreateChatDto) {
     this.logger.log(`收到聊天请求: ${createChatDto.message}`);
 
+    const userId = createChatDto.userId;
+    if (!userId) {
+      throw new BadRequestException('用户ID不能为空');
+    }
+
     // 验证用户是否存在
-    const user = await this.userService.findById(createChatDto.userId);
+    const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException('用户不存在');
     }
@@ -117,19 +127,19 @@ export class ChatService {
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
       const newSession = await this.chatSessionService.create({
-        userId: createChatDto.userId,
+        userId,
         title: '新对话',
       });
       sessionId = newSession.id;
     } else {
       // 验证会话是否存在
-      await this.chatSessionService.findById(sessionId);
+      await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
     // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
-        userId: createChatDto.userId,
+        userId,
         fileIds: createChatDto.fileIds,
         files: createChatDto.files,
       });
@@ -139,7 +149,7 @@ export class ChatService {
 
     // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
-      const historyMessages = await this.getSessionHistory(sessionId, 10);
+      const historyMessages = await this.getSessionHistory(userId, sessionId, 10);
       historyMessages.forEach((msg) => {
         messages.push(
           { role: 'user', content: msg.userMessage },
@@ -192,7 +202,7 @@ export class ChatService {
 
     // 保存聊天记录到数据库
     const chatMessage = this.chatMessageRepository.create({
-      userId: createChatDto.userId,
+      userId,
       sessionId: sessionId,
       userMessage: createChatDto.message,
       aiMessage: assistantMessage,
@@ -211,7 +221,7 @@ export class ChatService {
     // 绑定附件到消息-用于历史回看
     if (attachmentIds.length > 0) {
       await this.filesService.bindAttachmentsToMessage({
-        userId: createChatDto.userId,
+        userId,
         sessionId,
         messageId: savedMessage.id,
         attachmentIds,
@@ -254,14 +264,20 @@ export class ChatService {
    * 获取指定会话的聊天历史-新
    */
   async getSessionHistory(
+    userId: string,
     sessionId: string,
     limit: number = 50,
   ): Promise<ChatMessage[]> {
-    return this.chatMessageRepository.find({
-      where: { sessionId },
-      order: { createdAt: 'ASC' }, // 时间正序
+    await this.chatSessionService.findByIdForUser(sessionId, userId);
+
+    const messages = await this.chatMessageRepository.find({
+      where: { sessionId, userId },
+      order: { createdAt: 'DESC' },
       take: limit,
     });
+
+    // 转为正序-便于前端/Prompt直接使用
+    return messages.reverse();
   }
 
   /**
@@ -272,6 +288,7 @@ export class ChatService {
    * @param order 排序方式：asc正序，desc倒序
    */
   async getSessionMessages(
+    userId: string,
     sessionId: string,
     page: number = 1,
     pageSize: number = 20,
@@ -284,12 +301,12 @@ export class ChatService {
     totalPages: number;
   }> {
     // 验证会话是否存在
-    await this.chatSessionService.findById(sessionId);
+    await this.chatSessionService.findByIdForUser(sessionId, userId);
 
     const skip = (page - 1) * pageSize;
 
     const [messages, total] = await this.chatMessageRepository.findAndCount({
-      where: { sessionId },
+      where: { sessionId, userId },
       order: { createdAt: order === 'desc' ? 'DESC' : 'ASC' },
       skip,
       take: pageSize,
@@ -326,11 +343,19 @@ export class ChatService {
    * 创建流式聊天对话
    * @param createChatDto 聊天请求参数
    */
-  async createStream(createChatDto: CreateChatDto) {
+  async createStream(
+    createChatDto: CreateChatDto,
+    options?: { abortSignal?: AbortSignal },
+  ) {
     this.logger.log(`收到流式聊天请求: ${createChatDto.message}`);
 
+    const userId = createChatDto.userId;
+    if (!userId) {
+      throw new BadRequestException('用户ID不能为空');
+    }
+
     // 验证用户是否存在
-    const user = await this.userService.findById(createChatDto.userId);
+    const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException('用户不存在');
     }
@@ -340,19 +365,19 @@ export class ChatService {
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
       const newSession = await this.chatSessionService.create({
-        userId: createChatDto.userId,
+        userId,
         title: '新对话',
       });
       sessionId = newSession.id;
     } else {
       // 验证会话是否存在
-      await this.chatSessionService.findById(sessionId);
+      await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
     // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
-        userId: createChatDto.userId,
+        userId,
         fileIds: createChatDto.fileIds,
         files: createChatDto.files,
       });
@@ -362,7 +387,7 @@ export class ChatService {
 
     // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
-      const historyMessages = await this.getSessionHistory(sessionId, 10);
+      const historyMessages = await this.getSessionHistory(userId, sessionId, 10);
       historyMessages.forEach((msg) => {
         messages.push(
           { role: 'user', content: msg.userMessage },
@@ -405,6 +430,7 @@ export class ChatService {
       {
         temperature: createChatDto.temperature,
         maxTokens: createChatDto.maxTokens,
+        abortSignal: options?.abortSignal,
       },
     );
 
@@ -412,7 +438,7 @@ export class ChatService {
     return {
       stream,
       sessionId,
-      userId: createChatDto.userId,
+      userId,
       userMessage: createChatDto.message,
       modelId,
       attachmentIds,

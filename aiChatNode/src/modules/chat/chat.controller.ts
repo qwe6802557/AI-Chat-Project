@@ -6,6 +6,9 @@ import {
   Query,
   Res,
   HttpStatus,
+  UseGuards,
+  Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -13,12 +16,16 @@ import {
   ApiResponse,
   ApiBody,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('聊天消息')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 @Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
@@ -79,7 +86,17 @@ export class ChatController {
       },
     },
   })
-  async create(@Body() createChatDto: CreateChatDto) {
+  async create(@Body() createChatDto: CreateChatDto, @Req() req: Request) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    if (createChatDto.userId && createChatDto.userId !== currentUserId) {
+      throw new ForbiddenException('无权以他人身份发送消息');
+    }
+
+    createChatDto.userId = currentUserId;
     return this.chatService.create(createChatDto);
   }
 
@@ -106,7 +123,28 @@ export class ChatController {
   async createStream(
     @Body() createChatDto: CreateChatDto,
     @Res() res: Response,
+    @Req() req: Request,
   ) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    if (createChatDto.userId && createChatDto.userId !== currentUserId) {
+      throw new ForbiddenException('无权以他人身份发送消息');
+    }
+
+    createChatDto.userId = currentUserId;
+
+    const abortController = new AbortController();
+    let clientClosed = false;
+    const onClose = () => {
+      clientClosed = true;
+      abortController.abort();
+    };
+    res.on('close', onClose);
+    res.on('error', onClose);
+
     // 设置 SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -116,12 +154,16 @@ export class ChatController {
     try {
       // 获取流和上下文信息
       const { stream, sessionId, userId, userMessage, modelId, attachmentIds } =
-        await this.chatService.createStream(createChatDto);
+        await this.chatService.createStream(createChatDto, {
+          abortSignal: abortController.signal,
+        });
 
       let fullMessage = '';
 
       // 遍历流式响应
       for await (const chunk of stream) {
+        if (clientClosed) break;
+
         const delta = chunk.delta?.content || '';
         fullMessage += delta;
 
@@ -132,7 +174,9 @@ export class ChatController {
           sessionId,
         });
 
-        res.write(`data: ${sseData}\n\n`);
+        if (!res.writableEnded) {
+          res.write(`data: ${sseData}\n\n`);
+        }
 
         // 如果流结束，保存完整消息
         if (chunk.finish_reason) {
@@ -156,21 +200,31 @@ export class ChatController {
             model: modelId,
           });
 
-          res.write(`data: ${finalData}\n\n`);
+          if (!res.writableEnded) {
+            res.write(`data: ${finalData}\n\n`);
+          }
           break;
         }
       }
 
       // 结束响应
-      res.end();
-    } catch (error) {
+      if (!res.writableEnded) {
+        res.end();
+      }
+    } catch (error: any) {
+      if (clientClosed || abortController.signal.aborted) {
+        return;
+      }
+
       // 发送错误事件
       const errorData = JSON.stringify({
-        error: error.message || '流式请求失败',
+        error: error?.message || '流式请求失败',
       });
 
-      res.write(`data: ${errorData}\n\n`);
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
+      if (!res.writableEnded) {
+        res.write(`data: ${errorData}\n\n`);
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
+      }
     }
   }
 
@@ -228,18 +282,25 @@ export class ChatController {
     },
   })
   async getHistory(
+    @Req() req: Request,
     @Query('userId') userId?: string,
     @Query('sessionId') sessionId?: string,
     @Query('limit') limit?: number,
   ) {
+    const currentUserId = (req.user as any)?.id as string | undefined;
+    if (!currentUserId) {
+      throw new ForbiddenException('未授权，请先登录');
+    }
+
+    if (userId && userId !== currentUserId) {
+      throw new ForbiddenException('无权查看他人聊天历史');
+    }
+
     // 优先使用 sessionId 查询
     if (sessionId) {
-      return this.chatService.getSessionHistory(sessionId, limit);
+      return this.chatService.getSessionHistory(currentUserId, sessionId, limit);
     }
-    // 兼容旧接口-使用userId查询
-    if (userId) {
-      return this.chatService.getUserChatHistory(userId, limit);
-    }
-    return [];
+
+    return this.chatService.getUserChatHistory(currentUserId, limit);
   }
 }

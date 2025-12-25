@@ -37,10 +37,10 @@ function createRenderer(options: RenderMarkdownOptions) {
         ignoreIllegals: true,
       }).value
 
-      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent)">复制</button></div><code class="hljs language-${validLanguage}">${highlighted}</code></pre>`
+      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" type="button">复制</button></div><code class="hljs language-${validLanguage}">${highlighted}</code></pre>`
     } catch {
       // 高亮失败返回原始代码
-      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" onclick="navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent)">复制</button></div><code>${escapeHtml(text)}</code></pre>`
+      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" type="button">复制</button></div><code>${escapeHtml(text)}</code></pre>`
     }
   }
 

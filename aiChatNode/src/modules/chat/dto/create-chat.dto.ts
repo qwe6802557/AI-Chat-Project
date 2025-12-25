@@ -50,10 +50,11 @@ export class CreateChatDto {
     description: '用户 ID（UUID 格式）',
     example: '627d8c93-877d-486d-9bd1-9c1a3e9141e8',
     format: 'uuid',
+    required: false,
   })
-  @IsNotEmpty({ message: '用户ID不能为空' })
-  @IsString({ message: '用户ID必须是字符串' })
-  userId: string;
+  @IsOptional()
+  @IsUUID('4', { message: '用户 ID 格式不正确' })
+  userId?: string;
 
   /**
    * 会话 ID（可选，如果不提供则自动创建新会话）
@@ -65,7 +66,7 @@ export class CreateChatDto {
     format: 'uuid',
   })
   @IsOptional()
-  @IsString({ message: '会话ID必须是字符串' })
+  @IsUUID('4', { message: '会话 ID 格式不正确' })
   sessionId?: string;
 
   /**

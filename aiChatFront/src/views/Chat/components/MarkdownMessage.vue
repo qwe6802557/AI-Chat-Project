@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="containerRef" @click="handleClick">
     <div v-if="streaming" class="streaming-markdown">
       <div v-html="streamingHtml" />
       <span class="streaming-cursor" aria-hidden="true" />
@@ -9,8 +9,46 @@
 </template>
 
 <script setup lang="ts">
-import { shallowRef, computed, watch, onBeforeUnmount } from 'vue'
+import { shallowRef, ref, computed, watch, onBeforeUnmount } from 'vue'
+import { message } from 'ant-design-vue'
 import { renderMarkdown, renderStreamingMarkdown } from '@/utils/markdown'
+
+const containerRef = ref<HTMLElement | null>(null)
+
+/**
+ * 事件委托处理复制按钮点击
+ */
+const handleClick = async (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target.classList.contains('copy-btn')) return
+
+  // 找到对应的code元素
+  const codeBlock = target.closest('.code-block')
+  const codeElement = codeBlock?.querySelector('code')
+  if (!codeElement) return
+
+  const text = codeElement.textContent || ''
+
+  try {
+    await navigator.clipboard.writeText(text)
+    message.success('复制成功')
+  } catch {
+    // 降级方案-使用execCommand
+    try {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      message.success('复制成功')
+    } catch {
+      message.error('复制失败，请手动复制')
+    }
+  }
+}
 
 interface Props {
   messageId: string

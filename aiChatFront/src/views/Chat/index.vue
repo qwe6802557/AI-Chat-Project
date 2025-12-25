@@ -168,8 +168,8 @@ const handleSendMessage = async (
 
 // 加载更多消息
 const handleLoadMoreMessages = async (sessionId: string, page: number) => {
-  // 调用 loadMessagesForSession 加载历史消息
-  const paginationInfo = await loadMessagesForSession(sessionId, page, 5, 'asc')
+  // desc倒序：page 获取的更早的消息-历史消息
+  const paginationInfo = await loadMessagesForSession(sessionId, page, 5, 'desc')
 
   // 更新是否还有更多消息的状态
   hasMoreMessages.value = paginationInfo.hasMore
