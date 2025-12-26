@@ -1,15 +1,7 @@
 <template>
   <div class="chat-container">
-    <Sidebar
-      :conversations="conversations"
-      :currentConversationId="currentConversationId"
-      :isClearing="isClearing"
-      @new-chat="handleNewChat"
-      @select-conversation="handleSelectConversation"
-      @clear-conversations="handleClearConversations"
-      @rename-conversation="handleRenameConversation"
-      @delete-conversation="handleDeleteConversation"
-    />
+    <!-- 侧边栏 -->
+    <Sidebar />
     <ChatArea
       :messages="currentMessages"
       :loading="loading"
@@ -23,124 +15,38 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
-import { useConversationManager } from './hooks/useConversationManager'
 import { useStreamChat } from './hooks/useStreamChat'
+import { useAuthStore, useConversationStore } from '@/stores'
 
 // 定义组件名称
 defineOptions({
   name: 'ChatPage'
 })
 
+// 认证状态
+const authStore = useAuthStore()
+
 // 对话管理
+const conversationStore = useConversationStore()
 const {
-  conversations,
   currentConversationId,
-  currentMessages,
-  createConversation,
-  selectConversation,
-  clearAllConversations,
-  deleteConversation,
-  updateConversationTitle,
-  addMessageToConversation,
-  updateMessageContentById,
-  patchMessageById,
-  clearMessageAttachmentBase64,
-  deleteMessageById,
-  saveConversations,
-  ensureServerSession,
-  initializeFromServer,
-  loadMessagesForSession
-} = useConversationManager()
+  currentMessages
+} = storeToRefs(conversationStore)
 
 // 流式聊天
-const { loading, sendMessage, cancelCurrentStream } = useStreamChat(
-  {
-    addMessageToConversation,
-    updateMessageContentById,
-    patchMessageById,
-    clearMessageAttachmentBase64,
-    deleteMessageById,
-    saveConversations,
-    ensureServerSession,
-  }
-)
+const { loading, sendMessage } = useStreamChat()
 
-// 获取当前用户 ID
+// 获取当前用户ID
 const getUserId = (): string => {
-  const userId = localStorage.getItem('userId')
-
-  if (!userId || userId === 'null' || userId === 'undefined') {
-    return ''
-  }
-  return userId
+  return authStore.getUserId()
 }
 
 // 分页状态
 const hasMoreMessages = ref(true)
-
-// 新建对话
-const handleNewChat = () => {
-  createConversation()
-}
-
-// 选择对话
-const handleSelectConversation = async (id: string) => {
-  // 切换会话时取消当前流式请求，避免串会话/后台写入
-  cancelCurrentStream()
-  const paginationInfo = await selectConversation(id)
-
-  // 更新分页状态
-  if (paginationInfo) {
-    hasMoreMessages.value = paginationInfo.hasMore
-  } else {
-    // 没有返回分页信息-默认为true
-    hasMoreMessages.value = true
-  }
-}
-
-// 清空状态
-const isClearing = ref(false)
-
-// 清空所有对话
-const handleClearConversations = async () => {
-  const userId = getUserId()
-
-  // 开始清空-显示加载状态
-  isClearing.value = true
-  cancelCurrentStream()
-
-  try {
-    const result = await clearAllConversations(userId)
-
-    if (result) {
-      // 清空成功-自动创建新对话
-      createConversation()
-      message.success(`已清空 ${result.deletedCount} 个对话`)
-    } else {
-      // 清空失败
-      message.error('清空对话失败，请稍后重试')
-    }
-  } catch (error) {
-    console.error('清空对话出错:', error)
-  } finally {
-    isClearing.value = false
-  }
-}
-
-// 重命名对话
-const handleRenameConversation = async (id: string, title: string, callback: (success: boolean) => void) => {
-  const success = await updateConversationTitle(id, title)
-  callback(success)
-}
-
-// 删除对话
-const handleDeleteConversation = async (id: string) => {
-  cancelCurrentStream()
-  await deleteConversation(id)
-}
 
 // 发送消息
 const handleSendMessage = async (
@@ -159,7 +65,7 @@ const handleSendMessage = async (
 
   // 若没有当前对话-创建一个本地临时对话
   if (!currentConversationId.value) {
-    createConversation()
+    conversationStore.createConversation()
   }
 
   // 流式聊天
@@ -169,7 +75,7 @@ const handleSendMessage = async (
 // 加载更多消息
 const handleLoadMoreMessages = async (sessionId: string, page: number) => {
   // desc倒序：page 获取的更早的消息-历史消息
-  const paginationInfo = await loadMessagesForSession(sessionId, page, 5, 'desc')
+  const paginationInfo = await conversationStore.loadMessagesForSession(sessionId, page, 5, 'desc')
 
   // 更新是否还有更多消息的状态
   hasMoreMessages.value = paginationInfo.hasMore
@@ -179,7 +85,7 @@ onMounted(async () => {
   // 加载会话列表
   const userId = getUserId()
   if (userId) {
-    const paginationInfo = await initializeFromServer(userId)
+    const paginationInfo = await conversationStore.initializeFromServer(userId)
 
     // 初始化 hasMoreMessages 状态
     if (paginationInfo) {

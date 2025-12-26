@@ -6,11 +6,11 @@ import request, { type ResponseData } from '@/utils/request'
 // ---数据类型---
 
 /**
- * 后端返回的附件信息
+ * 返回的附件信息
  */
 export interface BackendAttachment {
   id: string
-  url: string       // 后端文件访问路径，如 /files/uuid
+  url: string       // 文件访问路径，如 /files/uuid
   name: string
   type: string      // MIME type
   sizeBytes: number
@@ -77,9 +77,9 @@ export interface SendMessageParams {
   model?: string
   temperature?: number
   maxTokens?: number
-  /** 已上传的文件 ID 列表（推荐使用） */
+  /** 已上传的文件 ID 列表 */
   fileIds?: string[]
-  /** 附件文件列表 - base64 方式（兼容旧版，不推荐） */
+  /** 附件文件列表 - base64 方式（兼容旧版） */
   files?: FileDataParam[]
 }
 
@@ -215,7 +215,7 @@ export function sendStreamMessage(
         }
       }
     } catch (error: unknown) {
-      // 主动取消，不视为错误
+      // 主动取消-不视为错误
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
       }

@@ -3,6 +3,7 @@
  */
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
+import { useAuthStore } from '@/stores'
 
 // 响应数据接口
 export interface ResponseData<T = unknown> {
@@ -33,8 +34,9 @@ request.interceptors.request.use(
     // 确保 headers 存在
     config.headers = config.headers ?? {}
 
-    // 从 localStorage 获取 token
-    const token = localStorage.getItem('token')
+    // 从 authStore 获取 token
+    const authStore = useAuthStore()
+    const token = authStore.getToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -71,9 +73,10 @@ request.interceptors.response.use(
           break
         case 401:
           message.error('未授权，请重新登录')
-          // 清除
-          localStorage.removeItem('token')
-          localStorage.removeItem('isAuthenticated')
+          // 清除认证状态
+          const authStore = useAuthStore()
+          authStore.clearAuth()
+
           window.location.href = '/login'
           break
         case 403:

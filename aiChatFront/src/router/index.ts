@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
+import { useAuthStore } from '@/stores'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -74,13 +75,18 @@ router.beforeEach((to, from, next) => {
     document.title = 'ERJ Chat'
   }
 
-  // 检查是否需要认证
-  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true'
+  // 使用 authStore 检查认证状态
+  const authStore = useAuthStore()
 
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    // 需要认证但未登录，跳转到登录页
+  // 首次访问时从 localStorage 初始化状态
+  if (!authStore.token) {
+    authStore.initFromStorage()
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    // 需要认证但未登录-跳转到登录页
     next({ name: 'login', query: { redirect: to.fullPath } })
-  } else if ((to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') && isAuthenticated) {
+  } else if ((to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') && authStore.isAuthenticated) {
     // 已登录用户访问登录/注册/忘记密码页，跳转到聊天页
     next({ name: 'chat' })
   } else {

@@ -287,7 +287,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         }
         fileItem.status = 'uploaded'
         fileItem.serverId = serverFile.id
-        fileItem.serverUrl = serverFile.url
+        // 拼接完整 URL，确保预览时可以正确加载
+        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+        fileItem.serverUrl = `${baseURL}${serverFile.url}`
         console.log('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
         return true
       } else {

@@ -8,13 +8,19 @@
       >
         <!-- 图片预览 -->
         <template v-if="file.type === 'image'">
-          <img
+          <a-image
             v-if="file.preview"
             :src="file.preview"
             :alt="file.name"
             class="preview-image"
-            @click="handlePreviewClick(file)"
-          />
+            :preview="{
+              src: file.serverUrl || file.preview
+            }"
+          >
+            <template #previewMask>
+              <span>预览</span>
+            </template>
+          </a-image>
           <div v-else class="preview-placeholder">
             <LoadingOutlined v-if="file.status === 'processing'" spin />
             <FileImageOutlined v-else />
@@ -97,7 +103,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'remove': [id: string]
-  'preview': [file: UploadedFile]
 }>()
 
 // 计算总大小
@@ -133,13 +138,6 @@ const truncateFileName = (name: string, maxLength: number = 12): string => {
 // 移除文件
 const handleRemove = (id: string) => {
   emit('remove', id)
-}
-
-// 预览点击
-const handlePreviewClick = (file: UploadedFile) => {
-  if (file.status === 'uploaded') {
-    emit('preview', file)
-  }
 }
 </script>
 
@@ -196,6 +194,19 @@ $radius-md: 12px;
 
   // 图片类型
   &.image {
+    // a-image 组件容器
+    :deep(.ant-image) {
+      width: 100%;
+      height: 100%;
+      display: block;
+
+      .ant-image-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+    }
+
     .preview-image {
       width: 100%;
       height: 100%;

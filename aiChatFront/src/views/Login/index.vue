@@ -146,6 +146,7 @@ import {
 } from '@ant-design/icons-vue'
 import { getCaptcha, login } from '@/api/auth'
 import type { LoginParams } from '@/api/auth'
+import { useAuthStore } from '@/stores'
 
 // 定义组件名称
 defineOptions({
@@ -153,6 +154,7 @@ defineOptions({
 })
 
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 
 // 验证码相关
@@ -191,7 +193,8 @@ onMounted(() => {
   if (usernameFromQuery) {
     formState.username = usernameFromQuery
   } else {
-    const rememberedUsername = localStorage.getItem('rememberedUsername')
+    // 使用 authStore 获取记住的用户名
+    const rememberedUsername = authStore.rememberedUsername
     if (rememberedUsername) {
       formState.username = rememberedUsername
       formState.remember = true
@@ -223,7 +226,7 @@ const rules = {
 const handleLogin = async () => {
   loading.value = true
   try {
-    // 准备登录参数
+    // 登录参数
     const loginParams: LoginParams = {
       username: formState.username,
       password: formState.password,
@@ -231,20 +234,21 @@ const handleLogin = async () => {
       captchaId: captchaId.value,
     }
 
-    // 调用后端登录 API
+    // 调用API
     const response = await login(loginParams)
 
-    // 保存 token 和用户信息
-    localStorage.setItem('token', response.data.token)
-    localStorage.setItem('isAuthenticated', 'true')
-    localStorage.setItem('username', response.data.user.username)
-    localStorage.setItem('userId', response.data.user.id)
+    // 保存认证数据
+    authStore.setAuthData({
+      token: response.data.token,
+      userId: response.data.user.id,
+      username: response.data.user.username
+    })
 
-    // 保存记住的用户名
+    // 记住用户名
     if (formState.remember) {
-      localStorage.setItem('rememberedUsername', formState.username)
+      authStore.setRememberedUsername(formState.username)
     } else {
-      localStorage.removeItem('rememberedUsername')
+      authStore.setRememberedUsername(null)
     }
 
     message.success('登录成功!')
@@ -258,8 +262,6 @@ const handleLogin = async () => {
     // 登录失败后刷新验证码
     fetchCaptcha()
     formState.captcha = ''
-
-    // 错误信息已经在 axios 拦截器中处理，这里不需要再次提示
   } finally {
     loading.value = false
   }

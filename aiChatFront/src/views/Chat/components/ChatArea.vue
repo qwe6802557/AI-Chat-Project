@@ -95,23 +95,30 @@
           <div v-else class="user-message-content">
             <!-- 用户发送的图片 -->
             <div v-if="message.attachments?.length" class="message-attachments">
-              <div
-                v-for="(att, idx) in message.attachments"
-                :key="idx"
-                :class="['attachment-item', att.type]"
-              >
-                <img
-                  v-if="att.type === 'image'"
-                  :src="att.preview"
-                  :alt="att.name"
-                  class="attachment-image"
-                />
-                <div v-else class="attachment-file">
-                  <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
-                  <FileTextOutlined v-else class="file-icon doc" />
-                  <span class="file-name">{{ att.name }}</span>
-                </div>
-              </div>
+              <a-image-preview-group>
+                <template v-for="(att, idx) in message.attachments" :key="idx">
+                  <div :class="['attachment-item', att.type]">
+                    <a-image
+                      v-if="att.type === 'image'"
+                      :src="att.preview || att.url"
+                      :alt="att.name"
+                      class="attachment-image"
+                      :preview="{
+                        src: att.url || att.preview
+                      }"
+                    >
+                      <template #previewMask>
+                        <span>预览</span>
+                      </template>
+                    </a-image>
+                    <div v-else class="attachment-file">
+                      <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
+                      <FileTextOutlined v-else class="file-icon doc" />
+                      <span class="file-name">{{ att.name }}</span>
+                    </div>
+                  </div>
+                </template>
+              </a-image-preview-group>
             </div>
             <div v-if="message.content" class="message-text">{{ message.content }}</div>
           </div>
@@ -229,7 +236,7 @@ import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import FilePreview from './FilePreview.vue'
 import MarkdownMessage from './MarkdownMessage.vue'
-import type { Message } from '../hooks/useConversationManager'
+import type { Message } from '@/stores'
 
 defineOptions({
   name: 'ChatAreaComponent',
