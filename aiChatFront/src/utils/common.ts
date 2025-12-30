@@ -1,9 +1,10 @@
 /**
  * 公共工具函数
  */
+import { useAuthStore } from "@/stores";
 
 /**
- * 格式化手机号（中间四位加星号）
+ * 格式化手机号-中间四位加星号
  * @param phone 手机号
  * @returns 格式化后的手机号，如 138****8888
  */
@@ -33,4 +34,15 @@ export function formatDate(dateStr?: string): string {
   } catch {
     return dateStr
   }
+}
+
+/**
+ * 清除用户信息
+ */
+export function clearUserInfo(): void {
+  // 清除认证状态
+  const authStore = useAuthStore()
+  authStore.clearAuth()
+
+  window.location.href = '/login'
 }

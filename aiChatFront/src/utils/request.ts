@@ -4,6 +4,7 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores'
+import {clearUserInfo} from "@/utils/common.ts";
 
 // 响应数据接口
 export interface ResponseData<T = unknown> {
@@ -58,10 +59,7 @@ request.interceptors.response.use(
       return response.data as never
     } else if (code === 1) {
       // 清除认证状态
-      const authStore = useAuthStore()
-      authStore.clearAuth()
-
-      window.location.href = '/login'
+      clearUserInfo()
     }
 
     // 非成功
@@ -80,10 +78,7 @@ request.interceptors.response.use(
         case 401:
           message.error('未授权，请重新登录')
           // 清除认证状态
-          const authStore = useAuthStore()
-          authStore.clearAuth()
-
-          window.location.href = '/login'
+          clearUserInfo()
           break
         case 403:
           message.error('拒绝访问')
