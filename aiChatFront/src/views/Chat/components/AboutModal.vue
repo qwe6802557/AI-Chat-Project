@@ -81,7 +81,7 @@ const handleCheckUpdate = () => {
 
 // 访问项目地址
 const handleVisitRepo = () => {
-  window.open('https://github.com/qwe6802557/AI-Chat-Project', '_blank')
+  window.open(import.meta.env.VITE_PROJECT_GIT_URL, '_blank')
 }
 </script>
 

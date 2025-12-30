@@ -6,6 +6,7 @@
 import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
+import DOMPurify from "dompurify";
 
 // ---配置marked---
 
@@ -142,10 +143,10 @@ export function renderMarkdown(
   try {
     const renderer = options.highlightCode === false ? rendererPlain : rendererWithHighlight
     const html = marked.parse(content, { renderer }) as string
-    return html
+    return DOMPurify.sanitize(html)  // 引入DOMPurify防止xss攻击
   } catch (error) {
     console.error('Markdown 渲染失败:', error)
-    return `<p>${escapeHtml(content)}</p>`
+    return DOMPurify.sanitize(`<p>${escapeHtml(content)}</p>`)
   }
 }
 
@@ -203,7 +204,7 @@ export function renderStreamingMarkdown(
       const codeHtml = `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span></div><code>${escapeHtml(codeText)}</code></pre>`
 
       return {
-        html: prefixHtml + codeHtml,
+        html: DOMPurify.sanitize(prefixHtml + codeHtml),
         isComplete: false,
       }
     }
@@ -297,7 +298,7 @@ export function renderStreamingMarkdown(
             `</table></div>`
 
           return {
-            html: prefixHtml + tableHtml,
+            html: DOMPurify.sanitize(prefixHtml + tableHtml),
             isComplete: false,
           }
         }
@@ -318,7 +319,7 @@ export function renderStreamingMarkdown(
 
     // 无法分割时-直接返回转义后的原始文本（避免卡住）
     return {
-      html: `<span class="streaming-text">${escapeHtml(content)}</span>`,
+      html: `<span class="streaming-text">${DOMPurify.sanitize(escapeHtml(content))}</span>`,
       isComplete: false,
     }
   }

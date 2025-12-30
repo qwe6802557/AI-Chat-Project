@@ -56,6 +56,12 @@ request.interceptors.response.use(
     // 成功
     if (code === 0) {
       return response.data as never
+    } else if (code === 1) {
+      // 清除认证状态
+      const authStore = useAuthStore()
+      authStore.clearAuth()
+
+      window.location.href = '/login'
     }
 
     // 非成功

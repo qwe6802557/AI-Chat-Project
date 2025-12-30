@@ -77,7 +77,7 @@
 <!--        <BulbOutlined class="menu-icon" />-->
 <!--        <span>浅色模式</span>-->
 <!--      </div>-->
-      <div class="menu-item">
+      <div class="menu-item" @click="showAccountModal = true">
         <UserOutlined class="menu-icon" />
         <span>我的账户</span>
       </div>
@@ -93,6 +93,9 @@
 
     <!-- 更新与帮助弹窗 -->
     <AboutModal v-model:open="showAboutModal" />
+
+    <!-- 我的账户弹窗 -->
+    <AccountModal v-model:open="showAccountModal" />
   </div>
 </template>
 
@@ -112,6 +115,7 @@ import {
   EditOutlined
 } from '@ant-design/icons-vue'
 import AboutModal from './AboutModal.vue'
+import AccountModal from './AccountModal.vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import type { Conversation } from '@/stores'
 
@@ -131,6 +135,9 @@ const { conversations, currentConversationId } = storeToRefs(conversationStore)
 
 // 更新与帮助弹窗
 const showAboutModal = ref(false)
+
+// 我的账户弹窗
+const showAccountModal = ref(false)
 
 // 编辑状态
 const editingId = ref<string | null>(null)

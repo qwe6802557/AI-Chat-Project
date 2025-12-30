@@ -372,6 +372,6 @@ export async function uploadFiles(files: File[]): Promise<ResponseData<UploadedF
     console.log(`  ${key}:`, value)
   }
 
-  // 不要手动设置 Content-Type，让 axios 自动处理 boundary
+  // 不手动设置 Content-Type，让 axios 自动处理 boundary
   return request.post<never, ResponseData<UploadedFileResponse[]>>('/files/upload', formData)
 }
