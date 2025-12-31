@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as svgCaptcha from 'svg-captcha';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 /**
  * 验证码数据接口
@@ -38,7 +38,7 @@ export class CaptchaService {
     });
 
     // 生成唯一 ID
-    const captchaId = uuidv4();
+    const captchaId = randomUUID();
 
     // 存储验证码（不区分大小写）
     this.captchaStore.set(captchaId, {

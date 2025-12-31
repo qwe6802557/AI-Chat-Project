@@ -1,21 +1,34 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ResponseDto } from '../../common/dto/response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { UserRole } from './entities/user.entity';
 
 @ApiTags('用户管理')
 @Controller('user')
+@UseGuards(JwtAuthGuard, RolesGuard) // JWT认证 和 角色检查
+@ApiBearerAuth() // Swagger 文档标记
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   /**
-   * 创建用户
+   * 创建用户（管理员）
    */
   @Post('create')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: '创建用户',
-    description: '创建新用户，密码将自动加密存储。用户名、手机号、邮箱必须唯一。',
+    summary: '创建用户（管理员）',
+    description:
+      '管理员创建用户，无需验证码。密码将自动加密存储。用户名、手机号、邮箱必须唯一。',
   })
   @ApiBody({ type: CreateUserDto })
   @ApiResponse({
@@ -64,11 +77,12 @@ export class UserController {
   }
 
   /**
-   * 获取所有用户
+   * 获取所有用户（管理员）
    */
   @Get('list')
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
-    summary: '获取用户列表',
+    summary: '获取用户列表（管理员）',
     description: '获取所有用户列表（不包含密码字段）',
   })
   @ApiResponse({
@@ -102,4 +116,3 @@ export class UserController {
     return this.userService.findAll();
   }
 }
-

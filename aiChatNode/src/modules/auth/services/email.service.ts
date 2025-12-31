@@ -32,6 +32,7 @@ interface EmailCodeData {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private dmClient: Dm20151123;
+  private enabled = true; // 服务是否启用
 
   // 使用Map存储邮件验证码
   private emailCodeStore = new Map<string, EmailCodeData>();
@@ -66,8 +67,13 @@ export class EmailService {
 
     // 校验配置
     if (!this.accessKeyId || !this.accessKeySecret || !this.fromEmail) {
-      this.logger.error('阿里云邮件推送配置缺失，请检查 .env 文件');
-      throw new Error('阿里云邮件推送配置缺失');
+      this.logger.warn('阿里云邮件推送配置缺失，邮件服务已禁用');
+      this.logger.warn('如需启用邮件服务，请配置以下环境变量：');
+      this.logger.warn('- ALIYUN_ACCESS_KEY_ID');
+      this.logger.warn('- ALIYUN_ACCESS_KEY_SECRET');
+      this.logger.warn('- ALIYUN_FROM_EMAIL');
+      this.enabled = false;
+      return;
     }
 
     // 初始化
@@ -108,6 +114,11 @@ export class EmailService {
   async sendEmailCode(
     email: string,
   ): Promise<{ code?: string; message: string }> {
+    // 检查服务是否启用
+    if (!this.enabled) {
+      throw new BadRequestException('邮件服务未配置，无法发送验证码');
+    }
+
     // 检查是否在间隔内
     const existingData = this.emailCodeStore.get(email);
     if (

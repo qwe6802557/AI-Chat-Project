@@ -4,7 +4,7 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores'
-import {clearUserInfo} from "@/utils/common.ts";
+import { clearUserInfo } from "@/utils/common.ts";
 
 // 响应数据接口
 export interface ResponseData<T = unknown> {

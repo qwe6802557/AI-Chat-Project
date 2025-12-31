@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, IsEmail, Matches, MinLength, MaxLength } from 'class-validator';
 
 /**
  * 重置密码 DTO
@@ -13,7 +13,7 @@ export class ResetPasswordDto {
     example: 'user@example.com',
   })
   @IsNotEmpty({ message: '邮箱不能为空' })
-  @IsString({ message: '邮箱必须是字符串' })
+  @IsEmail({}, { message: '邮箱格式不正确' })
   email: string;
 
   /**
@@ -36,12 +36,17 @@ export class ResetPasswordDto {
    * 新密码
    */
   @ApiProperty({
-    description: '新密码（至少6位）',
+    description: '新密码（6-20位，必须包含字母和数字）',
     example: 'newPassword123',
     minLength: 6,
+    maxLength: 20,
   })
   @IsNotEmpty({ message: '新密码不能为空' })
   @IsString({ message: '新密码必须是字符串' })
   @MinLength(6, { message: '新密码长度不能少于6位' })
+  @MaxLength(20, { message: '新密码长度不能超过20位' })
+  @Matches(/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{6,20}$/, {
+    message: '密码必须包含字母和数字',
+  })
   newPassword: string;
 }
