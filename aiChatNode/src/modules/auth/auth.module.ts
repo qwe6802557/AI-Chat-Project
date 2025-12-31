@@ -21,7 +21,7 @@ import { UserModule } from '../user/user.module';
     UserModule,
     // 配置 Passport
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    // 配置 JWT - 使用异步配置强制验证环境变量
+    // 配置 JWT
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
