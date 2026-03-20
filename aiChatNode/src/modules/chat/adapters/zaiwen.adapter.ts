@@ -10,26 +10,25 @@ import {
 } from '../types/completion.types';
 
 /**
- * Claude AI 适配器
- * 使用 OpenAI SDK 调用第三方 Claude API
+ * 在问 AI 适配器
+ * 使用 OpenAI SDK 对接在问提供的 OpenAI 兼容接口
  */
 @Injectable()
-export class ClaudeAdapter implements IProviderAdapter {
-  readonly providerName = 'Claude';
-  private readonly logger = new Logger(ClaudeAdapter.name);
+export class ZaiwenAdapter implements IProviderAdapter {
+  readonly providerName = 'Zaiwen';
+  private readonly logger = new Logger(ZaiwenAdapter.name);
   private client: OpenAI | null = null;
   private enabled = false;
 
   constructor(private readonly configService: ConfigService) {
-    const apiKey = this.configService.get<string>('CLAUDE_API_KEY');
-    const baseURL = this.configService.get<string>('CLAUDE_BASE_URL');
+    const apiKey = this.configService.get<string>('ZAIWEN_API_KEY');
+    const baseURL = this.configService.get<string>('ZAIWEN_BASE_URL');
 
     if (!apiKey || !baseURL) {
-      this.logger.warn('Claude 适配器未启用：CLAUDE_API_KEY 或 CLAUDE_BASE_URL 缺失');
+      this.logger.warn('Zaiwen 适配器未启用：ZAIWEN_API_KEY 或 ZAIWEN_BASE_URL 缺失');
       return;
     }
 
-    // 使用 OpenAI SDK
     this.client = new OpenAI({
       apiKey,
       baseURL,
@@ -45,7 +44,7 @@ export class ClaudeAdapter implements IProviderAdapter {
    */
   private getClient(): OpenAI {
     if (!this.enabled || !this.client) {
-      throw new Error('Claude 适配器未配置，无法发起请求');
+      throw new Error('Zaiwen 适配器未配置，无法发起请求');
     }
     return this.client;
   }
@@ -64,7 +63,6 @@ export class ClaudeAdapter implements IProviderAdapter {
       const completion = await this.getClient().chat.completions.create(
         {
           model,
-          // 类型断言
           messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,

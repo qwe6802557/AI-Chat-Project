@@ -13,6 +13,23 @@ export interface ResponseData<T = unknown> {
   message: string
 }
 
+const AUTH_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/captcha',
+  '/auth/sms/send',
+  '/auth/email/send',
+  '/auth/reset-password',
+]
+
+/**
+ * 判断当前请求是否属于认证页公开接口
+ */
+const isPublicAuthRequest = (url?: string): boolean => {
+  if (!url) return false
+  return AUTH_ENDPOINTS.some((endpoint) => url.includes(endpoint))
+}
+
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
@@ -57,9 +74,6 @@ request.interceptors.response.use(
     // 成功
     if (code === 0) {
       return response.data as never
-    } else if (code === 1) {
-      // 清除认证状态
-      clearUserInfo()
     }
 
     // 非成功
@@ -70,15 +84,20 @@ request.interceptors.response.use(
     // 错误处理
     if (error.response) {
       const { status, data } = error.response
+      const requestUrl = error.config?.url as string | undefined
+      const authStore = useAuthStore()
+      const hasToken = !!authStore.getToken()
+      const shouldClearAuth = status === 401 && hasToken && !isPublicAuthRequest(requestUrl)
 
       switch (status) {
         case 400:
           message.error(data?.message || '请求参数错误')
           break
         case 401:
-          message.error('未授权，请重新登录')
-          // 清除认证状态
-          clearUserInfo()
+          message.error(data?.message || '未授权')
+          if (shouldClearAuth) {
+            clearUserInfo()
+          }
           break
         case 403:
           message.error('拒绝访问')

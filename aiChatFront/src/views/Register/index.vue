@@ -148,7 +148,8 @@ import {
   SafetyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
-import { sendEmailCode, register, type RegisterParams } from '@/api/auth'
+import { sendEmailCode, register } from '@/api/auth'
+import type { RegisterParams } from '@/interface/auth'
 
 // 定义组件名称
 defineOptions({
@@ -693,4 +694,3 @@ const handleGoToLogin = () => {
   }
 }
 </style>
-

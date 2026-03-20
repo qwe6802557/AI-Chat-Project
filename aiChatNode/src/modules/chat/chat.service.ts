@@ -40,6 +40,18 @@ export class ChatService {
   ) {}
 
   /**
+   * 获取默认聊天模型
+   */
+  private getDefaultChatModel(): string {
+    return (
+      this.configService.get<string>('DEFAULT_CHAT_MODEL') ||
+      this.configService.get<string>('ZAIWEN_MODEL') ||
+      this.configService.get<string>('CLAUDE_MODEL') ||
+      'GLM-5'
+    );
+  }
+
+  /**
    * 构建多模态消息内容
    * @param textContent 文本内容
    * @param files 文件列表
@@ -180,10 +192,7 @@ export class ChatService {
     }
 
     // 获取默认模型
-    const defaultModel =
-      this.configService.get<string>('CLAUDE_MODEL') ||
-      'claude-opus-4-5-20251101';
-    const modelId = createChatDto.model || defaultModel;
+    const modelId = createChatDto.model || this.getDefaultChatModel();
 
     // 调用 AI 客户端服务
     const completion = await this.aiClientService.createChatCompletion(
@@ -418,10 +427,7 @@ export class ChatService {
     }
 
     // 获取默认模型
-    const defaultModel =
-      this.configService.get<string>('CLAUDE_MODEL') ||
-      'claude-opus-4-5-20251101';
-    const modelId = createChatDto.model || defaultModel;
+    const modelId = createChatDto.model || this.getDefaultChatModel();
 
     // 调用 AI 客户端服务-流式
     const stream = await this.aiClientService.createStreamChatCompletion(

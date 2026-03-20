@@ -1,26 +1,10 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
-import { sendStreamMessage, type StreamRequestController } from '@/api/chat'
-import { useConversationStore, type Message, type MessageAttachment } from '@/stores'
-
-/**
- * 文件数据接口（兼容旧版 base64 方式）
- */
-export interface FileData {
-  base64: string
-  type: string
-  name: string
-}
-
-/**
- * 服务端上传文件信息
- */
-export interface ServerFileInfo {
-  id: string
-  url: string
-  name: string
-  type: string
-}
+import { sendStreamMessage } from '@/api/chat'
+import type { StreamRequestController } from '@/interface/chat'
+import { useConversationStore } from '@/stores'
+import type { Message, MessageAttachment } from '@/interface/conversation'
+import type { FileData, ServerFileInfo } from '@/interface/upload'
 
 /**
  * 将文件类型映射为附件类型
@@ -119,7 +103,7 @@ export function useStreamChat() {
       fileIds,
       serverFiles,
       files,
-      model = 'claude-opus-4-5-20251101'
+      model = 'GLM-5'
     } = options || {}
 
     if (!userId) {

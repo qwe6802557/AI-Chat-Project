@@ -1,5 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ClaudeAdapter } from '../adapters/claude.adapter';
+import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
+import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModelService } from '../../ai-provider/ai-model.service';
 import { AiProviderService } from '../../ai-provider/ai-provider.service';
 import {
@@ -21,9 +23,33 @@ export class AIClientService {
 
   constructor(
     private readonly claudeAdapter: ClaudeAdapter,
+    private readonly zaiwenAdapter: ZaiwenAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
   ) {}
+
+  /**
+   * 根据供应商选择适配器
+   */
+  private resolveAdapter(providerName: string): IProviderAdapter {
+    const normalizedProviderName = providerName.trim().toLowerCase();
+
+    if (
+      normalizedProviderName.includes('zaiwen') ||
+      providerName.includes('在问')
+    ) {
+      return this.zaiwenAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('claude') ||
+      normalizedProviderName.includes('anthropic')
+    ) {
+      return this.claudeAdapter;
+    }
+
+    throw new BadRequestException(`暂不支持供应商 ${providerName}`);
+  }
 
   /**
    * 创建聊天补全（非流式）
@@ -52,8 +78,10 @@ export class AIClientService {
       `使用供应商: ${model.provider.name}, 模型: ${model.modelName} (${modelId})`,
     );
 
+    const adapter = this.resolveAdapter(model.provider.name);
+
     // 调用适配器
-    const completion = await this.claudeAdapter.createChatCompletion(
+    const completion = await adapter.createChatCompletion(
       messages,
       modelId,
       options,
@@ -93,11 +121,13 @@ export class AIClientService {
       `使用供应商: ${model.provider.name}, 模型: ${model.modelName} (${modelId}) - 流式模式`,
     );
 
+    const adapter = this.resolveAdapter(model.provider.name);
+
     // 更新供应商访问量统计
     await this.aiProviderService.incrementAccessCount(model.provider.id);
 
     // 调用适配器
-    return this.claudeAdapter.createStreamChatCompletion(
+    return adapter.createStreamChatCompletion(
       messages,
       modelId,
       options,

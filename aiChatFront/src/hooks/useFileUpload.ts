@@ -1,43 +1,9 @@
 import { ref, computed, onBeforeUnmount, toRaw } from 'vue'
 import { message } from 'ant-design-vue'
 import { uploadFiles } from '@/api/chat'
+import type { UploadedFile, UseFileUploadOptions, ServerFileInfo } from '@/interface/upload'
 
-/**
- * 上传文件接口
- */
-export interface UploadedFile {
-  id: string
-  file: File
-  preview: string        // 预览URL(blob URL 或 图标)
-  base64: string         // Base64数据（兼容旧版）
-  type: 'image' | 'pdf' | 'document'
-  name: string
-  size: number
-  status: 'processing' | 'uploading' | 'uploaded' | 'error'
-  error?: string
-  /** 文件ID（上传成功后） */
-  serverId?: string
-  /** 文件访问URL（上传成功后） */
-  serverUrl?: string
-}
-
-/**
- * 文件上传 Hook 配置
- */
-export interface UseFileUploadOptions {
-  /** 最大文件大小（字节）-默认 5MB（匹配限制） */
-  maxSize?: number
-  /** 最大文件数量-默认 4（匹配限制） */
-  maxCount?: number
-  /** 允许的文件类型，默认图片和文档 */
-  allowedTypes?: string[]
-  /** 是否自动压缩图片，默认 true */
-  autoCompress?: boolean
-  /** 压缩阈值（字节），超过此大小自动压缩，默认 2MB */
-  compressThreshold?: number
-  /** 压缩质量（0-1），默认 0.8 */
-  compressQuality?: number
-}
+export type { UploadedFile, UseFileUploadOptions } from '@/interface/upload'
 
 // 默认支持的文件类型
 const DEFAULT_ALLOWED_TYPES = [
@@ -434,7 +400,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   /**
    * 获取已上传文件的服务器信息-消息附件显示
    */
-  const getUploadedFileInfos = (): { id: string; url: string; name: string; type: string }[] => {
+  const getUploadedFileInfos = (): ServerFileInfo[] => {
     return uploadedFiles.value
       .filter(f => f.serverId && f.serverUrl)
       .map(f => ({

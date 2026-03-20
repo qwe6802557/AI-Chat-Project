@@ -87,7 +87,7 @@ import {
   FileTextOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons-vue'
-import type { UploadedFile } from '@/hooks/useFileUpload'
+import type { UploadedFile } from '@/interface/upload'
 import { formatFileSize } from '@/hooks/useFileUpload'
 
 interface Props {

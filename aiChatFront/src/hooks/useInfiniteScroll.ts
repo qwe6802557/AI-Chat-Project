@@ -1,4 +1,5 @@
 import { ref, watch, onBeforeUnmount, type Ref } from 'vue'
+import type { UseInfiniteScrollOptions } from '@/types/hooks'
 
 /**
  * 节流函数
@@ -16,37 +17,7 @@ function throttle(fn: () => void, delay: number): () => void {
   }
 }
 
-export interface UseInfiniteScrollOptions {
-  /**
-   * 触发加载的阈值
-   * 默认: 100
-   */
-  threshold?: number
-
-  /**
-   * 节流延迟时间
-   * 默认: 200
-   */
-  throttleDelay?: number
-
-  /**
-   * 是否禁用无限滚动
-   * 默认: false
-   */
-  disabled?: Ref<boolean>
-
-  /**
-   * 加载更多数据的回调函数
-   * 返回 Promise，resolve 时表示加载完成
-   */
-  onLoadMore: () => Promise<void>
-
-  /**
-   * 是否还有更多数据
-   * 默认: true
-   */
-  hasMore?: Ref<boolean>
-}
+export type { UseInfiniteScrollOptions } from '@/types/hooks'
 
 /**
  * 向上滚动加载历史消息

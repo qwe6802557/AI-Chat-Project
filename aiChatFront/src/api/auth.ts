@@ -2,75 +2,25 @@
  * 认证相关 API
  */
 import request, { type ResponseData } from '@/utils/request'
+import type {
+  CaptchaResponse,
+  LoginParams,
+  LoginResponse,
+  RegisterParams,
+  SendSmsParams,
+  SendEmailParams,
+  ResetPasswordParams,
+} from '@/interface/auth'
 
-/**
- * 验证码响应接口
- */
-export interface CaptchaResponse {
-  captchaId: string
-  captchaImage: string
-}
-
-/**
- * 登录请求参数
- */
-export interface LoginParams {
-  username: string
-  password: string
-  captcha: string
-  captchaId: string
-}
-
-/**
- * 登录响应数据
- */
-export interface LoginResponse {
-  token: string
-  user: {
-    id: string
-    username: string
-    phone: string
-    email?: string
-    role: string
-    isActive: boolean
-    createdAt: string
-    updatedAt: string
-  }
-}
-
-/**
- * 注册请求参数
- */
-export interface RegisterParams {
-  username: string
-  password: string
-  email: string
-  emailCode: string
-  phone?: string
-}
-
-/**
- * 发送短信验证码参数
- */
-export interface SendSmsParams {
-  phone: string
-}
-
-/**
- * 发送邮件验证码参数
- */
-export interface SendEmailParams {
-  email: string
-}
-
-/**
- * 重置密码请求参数
- */
-export interface ResetPasswordParams {
-  email: string
-  emailCode: string
-  newPassword: string
-}
+export type {
+  CaptchaResponse,
+  LoginParams,
+  LoginResponse,
+  RegisterParams,
+  SendSmsParams,
+  SendEmailParams,
+  ResetPasswordParams,
+} from '@/interface/auth'
 
 /**
  * 获取图片验证码
@@ -113,4 +63,3 @@ export function sendEmailCode(data: SendEmailParams) {
 export function resetPassword(data: ResetPasswordParams) {
   return request.post<never, ResponseData<{ message: string }>>('/auth/reset-password', data)
 }
-

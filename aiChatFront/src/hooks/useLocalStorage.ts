@@ -1,15 +1,7 @@
 import { ref, type Ref } from 'vue'
+import type { UseLocalStorageOptions } from '@/types/hooks'
 
-export interface UseLocalStorageOptions<T> {
-  /**
-   * 自定义序列化（用于裁剪/脱敏/压缩等）
-   */
-  serialize?: (value: T) => unknown
-  /**
-   * 自定义反序列化（用于数据迁移/兼容旧结构等）
-   */
-  deserialize?: (raw: unknown) => T
-}
+export type { UseLocalStorageOptions } from '@/types/hooks'
 
 /**
  * 通用 LocalStorage Hook

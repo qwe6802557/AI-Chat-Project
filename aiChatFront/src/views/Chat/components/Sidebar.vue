@@ -117,7 +117,7 @@ import {
 import AboutModal from './AboutModal.vue'
 import AccountModal from './AccountModal.vue'
 import { useAuthStore, useConversationStore } from '@/stores'
-import type { Conversation } from '@/stores'
+import type { Conversation } from '@/interface/conversation'
 
 defineOptions({
   name: 'SidebarComponent',
@@ -490,4 +490,3 @@ const handleLogout = () => {
   }
 }
 </style>
-

@@ -5,30 +5,7 @@
  */
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
-
-/**
- * 用户信息接口
- */
-export interface UserInfo {
-  id: string
-  username: string
-  phone?: string
-  email?: string
-  avatar?: string
-  role?: 'admin' | 'user'
-  isActive?: boolean
-  createdAt?: string
-  updatedAt?: string
-}
-
-/**
- * 用户积分信息
- */
-export interface UserCredits {
-  total: number
-  consumed: number
-  remaining: number
-}
+import type { UserInfo, UserCredits } from '@/types/user'
 
 /**
  * localStorage 键名常量

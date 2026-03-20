@@ -4,15 +4,9 @@
  */
 import { ref } from 'vue'
 import { message } from 'ant-design-vue'
+import type { UseAvatarUploadOptions } from '@/types/hooks'
 
-/**
- * 头像上传配置
- */
-export interface UseAvatarUploadOptions {
-  maxSize?: number        // 最大文件大小（字节），默认 2MB
-  quality?: number        // 压缩质量 0-1，默认 0.8
-  outputSize?: number     // 输出尺寸（正方形边长），默认 200
-}
+export type { UseAvatarUploadOptions } from '@/types/hooks'
 
 /**
  * 头像上传 Hook

@@ -165,6 +165,23 @@
           @remove="handleRemoveFile"
         />
 
+        <div class="model-toolbar">
+          <div class="model-toolbar-label">
+            <ThunderboltOutlined class="model-toolbar-icon" />
+            <span>模型</span>
+          </div>
+          <a-select
+            :value="selectedModel"
+            :options="modelOptions"
+            :loading="modelsLoading"
+            size="small"
+            show-search
+            option-filter-prop="label"
+            class="model-select"
+            @change="handleModelChange"
+          />
+        </div>
+
         <div class="input-wrapper">
           <!-- 上传按钮 -->
           <a-button
@@ -236,7 +253,7 @@ import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import FilePreview from './FilePreview.vue'
 import MarkdownMessage from './MarkdownMessage.vue'
-import type { Message } from '@/stores'
+import type { Message } from '@/interface/conversation'
 
 defineOptions({
   name: 'ChatAreaComponent',
@@ -245,6 +262,9 @@ defineOptions({
 interface Props {
   messages: Message[]
   loading: boolean
+  selectedModel: string
+  modelOptions: Array<{ label: string; value: string }>
+  modelsLoading?: boolean
   currentSessionId?: string
   hasMoreMessages?: boolean
   /** 加载更多消息的函数 */
@@ -257,6 +277,7 @@ const props = defineProps<Props>()
 const hasMoreMessagesComputed = computed(() => props.hasMoreMessages ?? true)
 
 const emit = defineEmits<{
+  'update:selected-model': [modelId: string]
   'send-message': [
     content: string,
     options?: {
@@ -266,6 +287,10 @@ const emit = defineEmits<{
     }
   ]
 }>()
+
+const handleModelChange = (value: string) => {
+  emit('update:selected-model', value)
+}
 
 const inputMessage = ref('')
 const messagesListRef = ref<HTMLElement | null>(null)
@@ -1163,6 +1188,67 @@ $input-height: 50px;
       padding: 0 $spacing-md;
     }
 
+    .model-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: $spacing-md;
+      margin-bottom: 10px;
+      padding: 10px 14px;
+      background: $color-bg-input;
+      backdrop-filter: blur(40px);
+      border: 1px solid $color-border-light;
+      border-radius: $radius-md;
+      box-shadow: 0 2px 8px $color-shadow;
+
+      @media (max-width: 768px) {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .model-toolbar-label {
+        display: flex;
+        align-items: center;
+        gap: $spacing-sm;
+        color: $color-text-secondary;
+        font-size: $font-size-sm;
+        font-weight: 500;
+        flex-shrink: 0;
+
+        .model-toolbar-icon {
+          font-size: 16px;
+          color: $color-text-primary;
+        }
+      }
+
+      .model-select {
+        width: 320px;
+        flex-shrink: 0;
+
+        @media (max-width: 768px) {
+          width: 100%;
+        }
+
+        :deep(.ant-select-selector) {
+          background: rgba(0, 0, 0, 0.04) !important;
+          border: 1px solid transparent !important;
+          border-radius: 10px !important;
+          min-height: 26px !important;
+          box-shadow: none !important;
+        }
+
+        :deep(.ant-select-selection-item),
+        :deep(.ant-select-selection-search-input) {
+          color: $color-text-primary;
+          font-size: $font-size-sm;
+        }
+
+        :deep(.ant-select-arrow) {
+          color: $color-text-secondary;
+        }
+      }
+    }
+
     .input-wrapper {
       background: $color-bg-input;
       backdrop-filter: blur(40px);
@@ -1342,4 +1428,3 @@ $input-height: 50px;
   }
 }
 </style>
-

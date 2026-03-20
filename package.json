@@ -1,0 +1,14 @@
+{
+  "name": "ai-chat-project-root",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --prefix aiChatNode && npm install --prefix aiChatFront",
+    "dev": "concurrently -k -n backend,frontend -c blue,green \"npm --prefix aiChatNode run start:dev\" \"npm --prefix aiChatFront run dev:web\"",
+    "dev:backend": "npm --prefix aiChatNode run start:dev",
+    "dev:frontend": "npm --prefix aiChatFront run dev:web",
+    "dev:electron": "concurrently -k -n backend,electron -c blue,magenta \"npm --prefix aiChatNode run start:dev\" \"npm --prefix aiChatFront run dev:electron\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

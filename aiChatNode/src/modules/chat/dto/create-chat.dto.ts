@@ -112,9 +112,9 @@ export class CreateChatDto {
    */
   @ApiProperty({
     description: '模型名称',
-    example: 'gpt-4o',
+    example: 'GLM-5',
     required: false,
-    default: 'gpt-4o',
+    default: 'GLM-5',
   })
   @IsOptional()
   @IsString({ message: '模型名称必须是字符串' })

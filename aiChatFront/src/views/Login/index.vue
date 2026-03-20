@@ -145,7 +145,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons-vue'
 import { getCaptcha, login } from '@/api/auth'
-import type { LoginParams } from '@/api/auth'
+import type { LoginParams } from '@/interface/auth'
 import { useAuthStore } from '@/stores'
 
 // 定义组件名称
@@ -690,4 +690,3 @@ const handleGoToRegister = () => {
   }
 }
 </style>
-

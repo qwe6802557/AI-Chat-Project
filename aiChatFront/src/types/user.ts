@@ -3,15 +3,24 @@
  */
 
 /**
- * 用户完整信息接口
- * 基于后端 User 实体扩展
+ * 用户基础信息接口
  */
-export interface UserProfile {
+export interface UserInfo {
   id: string
   username: string
   phone?: string
   email?: string
   avatar?: string           // 头像 URL
+  role?: 'admin' | 'user'
+  isActive?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * 用户完整信息接口
+ */
+export interface UserProfile extends UserInfo {
   role: 'admin' | 'user'
   isActive: boolean
   createdAt: string
@@ -30,7 +39,7 @@ export interface UserCredits {
 /**
  * 完整用户账户信息
  */
-export interface UserAccount extends UserProfile {
+export interface UserAccount extends UserInfo {
   credits: UserCredits
 }
 

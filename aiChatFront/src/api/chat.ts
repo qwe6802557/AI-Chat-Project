@@ -2,128 +2,46 @@
  * 聊天相关 API
  */
 import request, { type ResponseData } from '@/utils/request'
+import type {
+  BackendChatSession,
+  SendMessageParams,
+  ChatMessageResponse,
+  StreamChunk,
+  StreamRequestController,
+  GetHistoryParams,
+  GetSessionListParams,
+  CreateSessionParams,
+  DeleteSessionParams,
+  ClearAllSessionsParams,
+  ClearAllSessionsResponse,
+  GetSessionMessagesParams,
+  SessionMessagesResponse,
+  UpdateSessionTitleParams,
+  UploadedFileResponse,
+} from '@/interface/chat'
 
-// ---数据类型---
-
-/**
- * 返回的附件信息
- */
-export interface BackendAttachment {
-  id: string
-  url: string       // 文件访问路径，如 /files/uuid
-  name: string
-  type: string      // MIME type
-  sizeBytes: number
-  width?: number | null
-  height?: number | null
-}
-
-/**
- * 聊天消息
- */
-export interface BackendChatMessage {
-  id: string
-  userId: string
-  sessionId: string
-  userMessage: string
-  aiMessage: string
-  model: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  /** 消息附件（后端返回） */
-  attachments?: BackendAttachment[]
-  createdAt: string
-  updatedAt: string
-}
-
-/**
- * 后端会话数据
- */
-export interface BackendChatSession {
-  id: string
-  userId: string
-  title: string
-  isArchived: boolean
-  isDeleted: boolean
-  lastMessagePreview: string | null
-  lastActiveAt: string | null
-  messageCount: number
-  createdAt: string
-  updatedAt: string
-  chatMessages?: BackendChatMessage[]
-}
-
-// ---请求参数类型---
-
-/**
- * 文件数据接口
- */
-export interface FileDataParam {
-  base64: string  // data:xxx;base64,...
-  type: string    // MIME type
-  name: string    // 文件名
-}
-
-/**
- * 发送聊天消息请求参数
- */
-export interface SendMessageParams {
-  userId: string
-  sessionId?: string
-  message: string
-  model?: string
-  temperature?: number
-  maxTokens?: number
-  /** 已上传的文件 ID 列表 */
-  fileIds?: string[]
-  /** 附件文件列表 - base64 方式（兼容旧版） */
-  files?: FileDataParam[]
-}
-
-/**
- * 聊天消息响应
- */
-export interface ChatMessageResponse {
-  id: string
-  sessionId: string
-  message: string
-  model: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
-  createdAt: string
-}
-
-/**
- * 流式聊天数据块
- */
-export interface StreamChunk {
-  delta: string
-  finish_reason: string | null
-  sessionId?: string
-  message?: string
-  model?: string
-  error?: string
-}
-
-/**
- * 发送聊天消息（非流式）
- */
+export type {
+  BackendAttachment,
+  BackendChatSession,
+  BackendChatMessage,
+  FileDataParam,
+  SendMessageParams,
+  ChatMessageResponse,
+  StreamChunk,
+  StreamRequestController,
+  GetHistoryParams,
+  GetSessionListParams,
+  CreateSessionParams,
+  DeleteSessionParams,
+  ClearAllSessionsParams,
+  ClearAllSessionsResponse,
+  GetSessionMessagesParams,
+  SessionMessagesResponse,
+  UpdateSessionTitleParams,
+  UploadedFileResponse,
+} from '@/interface/chat'
 export function sendMessage(data: SendMessageParams) {
   return request.post<never, ResponseData<ChatMessageResponse>>('/chat/create', data)
-}
-
-/**
- * 发送流式聊天消息
- * 使用 SSE
- */
-export interface StreamRequestController {
-  close: () => void
 }
 
 export function sendStreamMessage(
@@ -204,7 +122,7 @@ export function sendStreamMessage(
                 callbacks.onComplete(
                   chunk.message || fullMessage,
                   chunk.sessionId || '',
-                  chunk.model || 'claude-opus-4-5-20251101'
+                  chunk.model || 'GLM-5'
                 )
                 return
               }
@@ -234,99 +152,28 @@ export function sendStreamMessage(
   }
 }
 
-/**
- * 获取聊天历史
- */
-export interface GetHistoryParams {
-  sessionId?: string
-  userId?: string
-  limit?: number
-}
-
 export function getHistory(params: GetHistoryParams) {
   return request.get<never, ResponseData<never[]>>('/chat/history', { params })
-}
-
-/**
- * 获取会话列表
- */
-export interface GetSessionListParams {
-  userId: string
-  includeArchived?: boolean
 }
 
 export function getSessionList(params: GetSessionListParams) {
   return request.get<never, ResponseData<BackendChatSession[]>>('/chat/session/list', { params })
 }
 
-/**
- * 创建新会话
- */
-export interface CreateSessionParams {
-  userId: string
-  title?: string
-}
-
 export function createSession(data: CreateSessionParams) {
   return request.post<never, ResponseData<BackendChatSession>>('/chat/session/create', data)
-}
-
-/**
- * 删除会话
- */
-export interface DeleteSessionParams {
-  id: string
 }
 
 export function deleteSession(data: DeleteSessionParams) {
   return request.post<never, ResponseData<void>>('/chat/session/delete', data)
 }
 
-/**
- * 清空所有会话
- */
-export interface ClearAllSessionsParams {
-  userId: string
-}
-
-export interface ClearAllSessionsResponse {
-  message: string
-  deletedCount: number
-}
-
 export function clearAllSessions(data: ClearAllSessionsParams) {
   return request.post<never, ResponseData<ClearAllSessionsResponse>>('/chat/session/clear-all', data)
 }
 
-/**
- * 获取会话消息
- */
-export interface GetSessionMessagesParams {
-  sessionId: string
-  page?: number
-  pageSize?: number
-  /** 排序方式：asc正序，desc倒序 */
-  order?: 'asc' | 'desc'
-}
-
-export interface SessionMessagesResponse {
-  messages: BackendChatMessage[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
-}
-
 export function getSessionMessages(params: GetSessionMessagesParams) {
   return request.get<never, ResponseData<SessionMessagesResponse>>('/chat/session/messages', { params })
-}
-
-/**
- * 更新会话标题
- */
-export interface UpdateSessionTitleParams {
-  id: string
-  title: string
 }
 
 export function updateSessionTitle(data: UpdateSessionTitleParams) {
@@ -334,19 +181,6 @@ export function updateSessionTitle(data: UpdateSessionTitleParams) {
 }
 
 // ---文件上传---
-
-/**
- * 上传文件响应
- */
-export interface UploadedFileResponse {
-  id: string
-  url: string       // 访问路径，如 /files/uuid
-  name: string
-  mime: string
-  sizeBytes: number
-  width?: number | null
-  height?: number | null
-}
 
 /**
  * 上传图片文件

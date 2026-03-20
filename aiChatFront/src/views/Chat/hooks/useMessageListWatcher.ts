@@ -1,5 +1,5 @@
 import { watch, type Ref } from 'vue'
-import type { Message } from '@/stores'
+import type { Message } from '@/interface/conversation'
 
 /**
  * 滚动管理器接口

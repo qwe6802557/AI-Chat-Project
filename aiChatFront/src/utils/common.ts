@@ -2,6 +2,7 @@
  * 公共工具函数
  */
 import { useAuthStore } from "@/stores";
+import router from "@/router";
 
 /**
  * 格式化手机号-中间四位加星号
@@ -44,5 +45,7 @@ export function clearUserInfo(): void {
   const authStore = useAuthStore()
   authStore.clearAuth()
 
-  window.location.href = '/login'
+  if (router.currentRoute.value.name !== 'login') {
+    void router.replace({ name: 'login' })
+  }
 }
