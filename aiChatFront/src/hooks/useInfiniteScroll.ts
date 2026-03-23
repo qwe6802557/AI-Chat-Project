@@ -1,5 +1,6 @@
 import { ref, watch, onBeforeUnmount, type Ref } from 'vue'
 import type { UseInfiniteScrollOptions } from '@/types/hooks'
+import logger from '@/utils/logger'
 
 /**
  * 节流函数
@@ -80,7 +81,7 @@ export function useInfiniteScroll(
           })
         })
         .catch((error) => {
-          console.error('加载历史消息失败:', error)
+          logger.error('加载历史消息失败:', error)
         })
         .finally(() => {
           isLoading.value = false

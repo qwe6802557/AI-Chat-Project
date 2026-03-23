@@ -11,10 +11,32 @@
         <div class="drag-content">
           <CloudUploadOutlined class="drag-icon" />
           <p>释放以上传文件</p>
-          <span>支持图片、PDF、Word 文档</span>
+          <span>支持 JPG、PNG、GIF、WebP、BMP 图片</span>
         </div>
       </div>
     </transition>
+
+    <div class="model-floating-switcher">
+      <div class="model-floating-chip">
+        <div class="model-floating-icon">
+          <ThunderboltOutlined />
+        </div>
+        <div class="model-floating-copy">
+          <a-select
+            :value="selectedModel"
+            :options="modelOptions"
+            :loading="modelsLoading"
+            size="middle"
+            show-search
+            option-filter-prop="label"
+            :bordered="false"
+            :dropdown-match-select-width="280"
+            class="model-floating-select"
+            @change="handleModelChange"
+          />
+        </div>
+      </div>
+    </div>
 
     <div v-if="messages.length === 0" class="welcome-screen">
       <div class="welcome-content">
@@ -165,23 +187,6 @@
           @remove="handleRemoveFile"
         />
 
-        <div class="model-toolbar">
-          <div class="model-toolbar-label">
-            <ThunderboltOutlined class="model-toolbar-icon" />
-            <span>模型</span>
-          </div>
-          <a-select
-            :value="selectedModel"
-            :options="modelOptions"
-            :loading="modelsLoading"
-            size="small"
-            show-search
-            option-filter-prop="label"
-            class="model-select"
-            @change="handleModelChange"
-          />
-        </div>
-
         <div class="input-wrapper">
           <!-- 上传按钮 -->
           <a-button
@@ -189,7 +194,7 @@
             class="input-icon-btn"
             @click="triggerFileInput"
             :disabled="loading"
-            title="上传图片或文件"
+            title="上传图片"
           >
             <PictureOutlined />
           </a-button>
@@ -199,7 +204,7 @@
             ref="fileInputRef"
             type="file"
             multiple
-            accept="image/*,.pdf,.doc,.docx,.txt"
+            :accept="IMAGE_UPLOAD_ACCEPT"
             class="hidden-file-input"
             @change="handleFileInputChange"
           />
@@ -248,7 +253,7 @@ import {
   FileTextOutlined
 } from '@ant-design/icons-vue'
 import { useScrollManager } from '@/hooks/useScrollManager'
-import { useFileUpload } from '@/hooks/useFileUpload'
+import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
 import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import FilePreview from './FilePreview.vue'
@@ -283,7 +288,6 @@ const emit = defineEmits<{
     options?: {
       fileIds?: string[]
       serverFiles?: { id: string; url: string; name: string; type: string }[]
-      files?: { base64: string; type: string; name: string }[]
     }
   ]
 }>()
@@ -302,15 +306,14 @@ const isDragging = ref(false)
 let dragCounter = 0
 
 // 文件上传 Hook（添加时自动上传到服务器）
-const {
-  files: uploadedFiles,
-  addFiles,
-  removeFile,
-  clearFiles,
-  getFilesForSend,
-  getFileIdsForSend,
-  getUploadedFileInfos,
-  hasFiles,
+  const {
+    files: uploadedFiles,
+    addFiles,
+    removeFile,
+    clearFiles,
+    getFileIdsForSend,
+    getUploadedFileInfos,
+    hasFiles,
   isProcessing,
   canSendFiles
 } = useFileUpload()
@@ -393,7 +396,6 @@ const handleSend = () => {
   let sendOptions: {
     fileIds?: string[]
     serverFiles?: { id: string; url: string; name: string; type: string }[]
-    files?: { base64: string; type: string; name: string }[]
   } | undefined
 
   // 如果有已上传的文件，获取 fileIds
@@ -402,16 +404,10 @@ const handleSend = () => {
     const serverFiles = getUploadedFileInfos()
 
     if (fileIds.length > 0) {
-      // 使用 fileIds 方式（文件已在添加时上传完成）
+      // 主链路只使用 fileIds 方式（文件已在添加时上传完成）
       sendOptions = {
         fileIds,
         serverFiles
-      }
-    } else {
-      // 没有成功上传的文件，尝试用 base64 方式
-      const filesData = getFilesForSend()
-      if (filesData.length > 0) {
-        sendOptions = { files: filesData }
       }
     }
   }
@@ -693,14 +689,14 @@ $input-height: 50px;
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 40px 40px 12px 40px;
+    padding: 70px 40px 12px 40px;
     //max-width: 800px;
     width: 100%;
     margin: 0 auto;
     scroll-behavior: smooth; // CSS 原生平滑滚动支持
 
     @media (max-width: 768px) {
-      padding: $spacing-lg $spacing-md 120px;
+      padding: 84px $spacing-md 120px;
     }
 
     // 加载更多指示器
@@ -713,7 +709,7 @@ $input-height: 50px;
       margin-bottom: $spacing-md;
       background: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0));
       position: sticky;
-      top: 0;
+      top: 64px;
       z-index: 5;
 
       .loading-icon {
@@ -1188,67 +1184,6 @@ $input-height: 50px;
       padding: 0 $spacing-md;
     }
 
-    .model-toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: $spacing-md;
-      margin-bottom: 10px;
-      padding: 10px 14px;
-      background: $color-bg-input;
-      backdrop-filter: blur(40px);
-      border: 1px solid $color-border-light;
-      border-radius: $radius-md;
-      box-shadow: 0 2px 8px $color-shadow;
-
-      @media (max-width: 768px) {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .model-toolbar-label {
-        display: flex;
-        align-items: center;
-        gap: $spacing-sm;
-        color: $color-text-secondary;
-        font-size: $font-size-sm;
-        font-weight: 500;
-        flex-shrink: 0;
-
-        .model-toolbar-icon {
-          font-size: 16px;
-          color: $color-text-primary;
-        }
-      }
-
-      .model-select {
-        width: 320px;
-        flex-shrink: 0;
-
-        @media (max-width: 768px) {
-          width: 100%;
-        }
-
-        :deep(.ant-select-selector) {
-          background: rgba(0, 0, 0, 0.04) !important;
-          border: 1px solid transparent !important;
-          border-radius: 10px !important;
-          min-height: 26px !important;
-          box-shadow: none !important;
-        }
-
-        :deep(.ant-select-selection-item),
-        :deep(.ant-select-selection-search-input) {
-          color: $color-text-primary;
-          font-size: $font-size-sm;
-        }
-
-        :deep(.ant-select-arrow) {
-          color: $color-text-secondary;
-        }
-      }
-    }
-
     .input-wrapper {
       background: $color-bg-input;
       backdrop-filter: blur(40px);
@@ -1354,6 +1289,110 @@ $input-height: 50px;
           font-size: $font-size-lg;
           color: $color-bg-primary;
         }
+      }
+    }
+  }
+
+  .model-floating-switcher {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 15;
+    pointer-events: none;
+    padding: 10px;
+    background: #ffffff;
+
+    @media (max-width: 768px) {
+      padding: 12px 16px;
+    }
+
+    .model-floating-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 46px;
+      padding: 6px 0px 6px 8px;
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(40px);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      border-radius: 16px;
+      pointer-events: auto;
+
+      @media (max-width: 768px) {
+        width: 100%;
+      }
+    }
+
+    .model-floating-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #111111 0%, #2f2f2f 100%);
+      color: #ffffff;
+      flex-shrink: 0;
+
+      :deep(.anticon) {
+        font-size: 14px;
+      }
+    }
+
+    .model-floating-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 0;
+
+      @media (max-width: 768px) {
+        width: 100%;
+      }
+    }
+
+    .model-floating-select {
+      min-width: 208px;
+      max-width: 248px;
+      font-weight: 600;
+
+      @media (max-width: 768px) {
+        min-width: 0;
+        max-width: none;
+        width: 100%;
+      }
+
+      :deep(.ant-select-selector) {
+        min-height: 24px !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        display: flex !important;
+        align-items: center !important;
+      }
+
+      &:deep(.ant-select-focused .ant-select-selector) {
+        box-shadow: none !important;
+      }
+
+      :deep(.ant-select-selection-item),
+      :deep(.ant-select-selection-search-input) {
+        color: $color-text-primary;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 24px;
+      }
+
+      :deep(.ant-select-selection-item) {
+        display: flex;
+        align-items: center;
+        min-height: 24px;
+      }
+
+      :deep(.ant-select-arrow) {
+        color: $color-text-secondary;
+        font-size: 12px;
       }
     }
   }

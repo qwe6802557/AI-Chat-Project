@@ -1,10 +1,11 @@
-import { ref, onBeforeUnmount } from 'vue'
+import { ref, onBeforeUnmount, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { sendStreamMessage } from '@/api/chat'
 import type { StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores'
+import logger from '@/utils/logger'
 import type { Message, MessageAttachment } from '@/interface/conversation'
-import type { FileData, ServerFileInfo } from '@/interface/upload'
+import type { ServerFileInfo } from '@/interface/upload'
 
 /**
  * 将文件类型映射为附件类型
@@ -13,18 +14,6 @@ const mapFileTypeToAttachmentType = (mimeType: string): MessageAttachment['type'
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType === 'application/pdf') return 'pdf'
   return 'document'
-}
-
-/**
- * 将 FileData 转换为 MessageAttachment（兼容旧版）
- */
-const convertToAttachments = (files: FileData[]): MessageAttachment[] => {
-  return files.map(file => ({
-    type: mapFileTypeToAttachmentType(file.type),
-    name: file.name,
-    preview: file.type.startsWith('image/') ? file.base64 : '',
-    base64: file.base64
-  }))
 }
 
 /**
@@ -83,6 +72,16 @@ export function useStreamChat() {
   onBeforeUnmount(() => {
     cancelCurrentStream()
   })
+  // 会话切换时兜底取消旧流
+  watch(
+    () => conversationStore.currentConversationId,
+    (nextConversationId) => {
+      const activeConversationId = activeStreamContext.value?.conversationId
+      if (!activeConversationId) return
+      if (nextConversationId === activeConversationId) return
+      cancelCurrentStream()
+    }
+  )
 
   /**
    * 发送消息
@@ -93,7 +92,6 @@ export function useStreamChat() {
     options?: {
       fileIds?: string[]
       serverFiles?: ServerFileInfo[]
-      files?: FileData[]
       model?: string
     }
   ) => {
@@ -102,7 +100,6 @@ export function useStreamChat() {
     const {
       fileIds,
       serverFiles,
-      files,
       model = 'GLM-5'
     } = options || {}
 
@@ -112,16 +109,15 @@ export function useStreamChat() {
     }
 
     const hasContent = content.trim().length > 0
-    const hasFileIds = fileIds && fileIds.length > 0
-    const hasFiles = files && files.length > 0
-    const hasAnyFiles = hasFileIds || hasFiles
+    const hasFileIds = !!(fileIds && fileIds.length > 0)
+    const hasAnyFiles = hasFileIds
 
     if (!hasContent && !hasAnyFiles) {
       message.error('请输入消息内容或上传文件')
       return
     }
 
-    const firstFileName = serverFiles?.[0]?.name || files?.[0]?.name
+    const firstFileName = serverFiles?.[0]?.name
     const title = hasContent
       ? content
       : (firstFileName ? `[${firstFileName}]` : '新对话')
@@ -135,8 +131,6 @@ export function useStreamChat() {
     let attachments: MessageAttachment[] | undefined
     if (serverFiles && serverFiles.length > 0) {
       attachments = convertServerFilesToAttachments(serverFiles)
-    } else if (hasFiles) {
-      attachments = convertToAttachments(files!)
     }
 
     const userMessageId = createId()
@@ -184,7 +178,6 @@ export function useStreamChat() {
           message: content || '请分析这些文件',
           model,
           fileIds: hasFileIds ? fileIds : undefined,
-          files: (!hasFileIds && hasFiles) ? files : undefined
         },
         {
           onMessage: (delta: string) => {
@@ -238,7 +231,7 @@ export function useStreamChat() {
             conversationStore.clearMessageAttachmentBase64(sessionId, userMessageId)
             conversationStore.saveConversations({ immediate: true })
             loading.value = false
-            console.log('AI 回复完成，模型:', model)
+            logger.debug('AI 回复完成，模型:', model)
 
             activeController.value = null
             activeRequestId.value = null
@@ -270,7 +263,7 @@ export function useStreamChat() {
 
       activeController.value = controller
     } catch (error: unknown) {
-      console.log(error)
+      logger.error('发送消息失败:', error)
       message.error('发送消息失败，请稍后重试')
       if (assistantMessageId) {
         conversationStore.deleteMessageById(sessionId, assistantMessageId)

@@ -26,7 +26,7 @@ export interface UploadedFile {
   id: string
   file: File
   preview: string
-  base64: string
+  base64?: string
   type: AttachmentType
   name: string
   size: number

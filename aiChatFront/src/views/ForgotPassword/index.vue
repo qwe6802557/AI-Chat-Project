@@ -149,6 +149,7 @@ import {
   RightOutlined,
 } from '@ant-design/icons-vue'
 import { sendEmailCode, resetPassword } from '@/api/auth'
+import logger from '@/utils/logger'
 
 // 定义组件名称
 defineOptions({
@@ -217,7 +218,7 @@ const handleSendCode = async () => {
     // 开发环境下显示验证码
     if (import.meta.env.DEV && res.data?.code) {
       message.info(`开发模式 - 验证码: ${res.data.code}`, 5)
-      console.log('验证码:', res.data.code)
+      logger.debug('验证码:', res.data.code)
     }
 
     // 倒计时
@@ -229,7 +230,7 @@ const handleSendCode = async () => {
       }
     }, 1000)
   } catch (err: unknown) {
-    console.log('发送验证码失败:', err)
+    logger.debug('发送验证码失败:', err)
   } finally {
     sendingCode.value = false
   }
@@ -252,7 +253,7 @@ const handleResetPassword = async () => {
       router.push({ name: 'login' })
     }, 1000)
   } catch (err: unknown) {
-    console.log('重置密码失败:', err)
+    logger.debug('重置密码失败:', err)
   } finally {
     loading.value = false
   }

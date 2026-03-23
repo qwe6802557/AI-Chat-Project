@@ -6,19 +6,19 @@
         block
         @click="handleNewChat"
         class="new-chat-btn"
-        :disabled="isClearing"
+        :disabled="props.isClearing"
       >
         <PlusOutlined />
-        {{ isClearing ? '清空中...' : '新建对话' }}
+        {{ props.isClearing ? '清空中...' : '新建对话' }}
       </a-button>
     </div>
 
     <!-- 对话 -->
     <div class="conversations-list">
       <div
-        v-for="conversation in conversations"
+        v-for="conversation in props.conversations"
         :key="conversation.id"
-        :class="['conversation-item', { active: conversation.id === currentConversationId }]"
+        :class="['conversation-item', { active: conversation.id === props.currentConversationId }]"
         @click="handleConversationClick(conversation.id)"
       >
         <MessageOutlined class="conversation-icon" />
@@ -67,11 +67,11 @@
     <!-- 底部 -->
     <div class="sidebar-footer">
       <div
-        :class="['menu-item', { disabled: isClearing }]"
-        @click="!isClearing && handleClearConversations()"
+        :class="['menu-item', { disabled: props.isClearing }]"
+        @click="!props.isClearing && handleClearConversations()"
       >
         <DeleteOutlined class="menu-icon" />
-        <span>{{ isClearing ? '清空中...' : '清空对话' }}</span>
+        <span>{{ props.isClearing ? '清空中...' : '清空对话' }}</span>
       </div>
 <!--      <div class="menu-item">-->
 <!--        <BulbOutlined class="menu-icon" />-->
@@ -101,8 +101,6 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
   PlusOutlined,
@@ -116,22 +114,30 @@ import {
 } from '@ant-design/icons-vue'
 import AboutModal from './AboutModal.vue'
 import AccountModal from './AccountModal.vue'
-import { useAuthStore, useConversationStore } from '@/stores'
 import type { Conversation } from '@/interface/conversation'
 
 defineOptions({
   name: 'SidebarComponent',
 })
 
-// 清空中状态（本地管理）
-const isClearing = ref(false)
+interface Props {
+  conversations: Conversation[]
+  currentConversationId: string
+  isClearing?: boolean
+}
 
-const router = useRouter()
-const authStore = useAuthStore()
-const conversationStore = useConversationStore()
+const props = withDefaults(defineProps<Props>(), {
+  isClearing: false
+})
 
-// 从 store 获取响应式状态
-const { conversations, currentConversationId } = storeToRefs(conversationStore)
+const emit = defineEmits<{
+  'new-chat': []
+  'select-conversation': [conversationId: string]
+  'rename-conversation': [conversationId: string, title: string]
+  'delete-conversation': [conversationId: string]
+  'clear-conversations': []
+  'logout': []
+}>()
 
 // 更新与帮助弹窗
 const showAboutModal = ref(false)
@@ -147,15 +153,15 @@ const editInputRef = ref<HTMLInputElement | null>(null)
 
 // 新建对话
 const handleNewChat = () => {
-  if (isClearing.value) return
-  conversationStore.createConversation()
+  if (props.isClearing) return
+  emit('new-chat')
 }
 
 // 点击会话项
 const handleConversationClick = (id: string) => {
   // 如果正在编辑，不触发选择
   if (editingId.value) return
-  conversationStore.selectConversation(id)
+  emit('select-conversation', id)
 }
 
 // 菜单点击
@@ -179,7 +185,7 @@ const startEditing = (conversation: Conversation) => {
 }
 
 // 确认编辑
-const handleEditConfirm = async () => {
+const handleEditConfirm = () => {
   if (!editingId.value) return
 
   const newTitle = editingTitle.value.trim()
@@ -199,13 +205,7 @@ const handleEditConfirm = async () => {
   editingTitle.value = ''
   originalTitle.value = ''
 
-  // 直接调用 store 方法
-  const success = await conversationStore.updateConversationTitle(currentEditingId, newTitle)
-  if (success) {
-    message.success('重命名成功')
-  } else {
-    message.error('重命名失败')
-  }
+  emit('rename-conversation', currentEditingId, newTitle)
 }
 
 // 取消编辑
@@ -223,15 +223,14 @@ const handleDeleteConversation = (conversation: Conversation) => {
     okText: '删除',
     okType: 'danger',
     cancelText: '取消',
-    async onOk() {
-      await conversationStore.deleteConversation(conversation.id)
-      message.success('对话已删除')
+    onOk() {
+      emit('delete-conversation', conversation.id)
     }
   })
 }
 
 const handleClearConversations = () => {
-  const count = conversations.value.length
+  const count = props.conversations.length
   if (count === 0) {
     message.info('暂无对话可清空')
     return
@@ -243,21 +242,8 @@ const handleClearConversations = () => {
     okText: '清空全部',
     okType: 'danger',
     cancelText: '取消',
-    async onOk() {
-      isClearing.value = true
-      try {
-        const userId = authStore.getUserId()
-        const result = await conversationStore.clearAllConversations(userId || undefined)
-        if (result) {
-          message.success(`已清空 ${result.deletedCount} 个对话`)
-          // 清空后创建新对话
-          conversationStore.createConversation()
-        } else {
-          message.error('清空对话失败')
-        }
-      } finally {
-        isClearing.value = false
-      }
+    onOk() {
+      emit('clear-conversations')
     }
   })
 }
@@ -270,10 +256,7 @@ const handleLogout = () => {
     okType: 'danger',
     cancelText: '取消',
     onOk() {
-      // 清除认证状态
-      authStore.clearAuth()
-      message.success('已成功退出登录')
-      router.push('/login')
+      emit('logout')
     }
   })
 }

@@ -5,6 +5,7 @@ import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores'
 import { clearUserInfo } from "@/utils/common.ts";
+import logger from '@/utils/logger'
 
 // 响应数据接口
 export interface ResponseData<T = unknown> {
@@ -61,7 +62,7 @@ request.interceptors.request.use(
     return config
   },
   (error) => {
-    console.error('请求错误:', error)
+    logger.error('请求错误:', error)
     return Promise.reject(error)
   }
 )

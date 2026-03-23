@@ -1,3 +1,5 @@
+import type { UserInfo } from '@/types/user'
+
 /**
  * 验证码响应接口
  */
@@ -19,12 +21,8 @@ export interface LoginParams {
 /**
  * 登录用户信息
  */
-export interface LoginUserInfo {
-  id: string
-  username: string
-  phone: string
-  email?: string
-  role: string
+export interface LoginUserInfo extends UserInfo {
+  role: 'admin' | 'user'
   isActive: boolean
   createdAt: string
   updatedAt: string

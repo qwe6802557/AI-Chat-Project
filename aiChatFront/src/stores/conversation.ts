@@ -6,6 +6,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import logger from '@/utils/logger'
 import {
   getSessionList,
   createSession,
@@ -256,7 +257,7 @@ export const useConversationStore = defineStore('conversation', () => {
       }
       return null
     } catch (error) {
-      console.error('创建会话出错:', error)
+      logger.error('创建会话出错:', error)
       return null
     }
   }
@@ -351,7 +352,7 @@ export const useConversationStore = defineStore('conversation', () => {
       }
       return { hasMore: false, total: 0, totalPages: 0 }
     } catch (error) {
-      console.error('加载会话消息出错:', error)
+      logger.error('加载会话消息出错:', error)
       return { hasMore: false, total: 0, totalPages: 0 }
     }
   }
@@ -381,7 +382,7 @@ export const useConversationStore = defineStore('conversation', () => {
       }
       return null
     } catch (error) {
-      console.error('加载会话列表出错:', error)
+      logger.error('加载会话列表出错:', error)
       return null
     } finally {
       isLoading.value = false

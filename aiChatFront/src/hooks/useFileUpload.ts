@@ -1,22 +1,21 @@
 import { ref, computed, onBeforeUnmount, toRaw } from 'vue'
 import { message } from 'ant-design-vue'
 import { uploadFiles } from '@/api/chat'
+import logger from '@/utils/logger'
 import type { UploadedFile, UseFileUploadOptions, ServerFileInfo } from '@/interface/upload'
 
 export type { UploadedFile, UseFileUploadOptions } from '@/interface/upload'
 
-// 默认支持的文件类型
-const DEFAULT_ALLOWED_TYPES = [
+// 当前聊天上传能力：仅支持图片
+export const IMAGE_UPLOAD_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'image/bmp',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain'
-]
+ ] as const
+
+export const IMAGE_UPLOAD_ACCEPT = IMAGE_UPLOAD_MIME_TYPES.join(',')
 
 // 文件类型映射
 const FILE_TYPE_MAP: Record<string, UploadedFile['type']> = {
@@ -25,23 +24,15 @@ const FILE_TYPE_MAP: Record<string, UploadedFile['type']> = {
   'image/gif': 'image',
   'image/webp': 'image',
   'image/bmp': 'image',
-  'application/pdf': 'pdf',
-  'application/msword': 'document',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'document',
-  'text/plain': 'document'
 }
 
 // 文件类型友好名称
-const FILE_TYPE_NAMES: Record<string, string> = {
+const IMAGE_TYPE_NAMES: Record<string, string> = {
   'image/jpeg': 'JPG 图片',
   'image/png': 'PNG 图片',
   'image/gif': 'GIF 图片',
   'image/webp': 'WebP 图片',
   'image/bmp': 'BMP 图片',
-  'application/pdf': 'PDF 文档',
-  'application/msword': 'Word 文档',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word 文档',
-  'text/plain': '文本文件'
 }
 
 /**
@@ -53,7 +44,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   const {
     maxSize = 5 * 1024 * 1024, // 5MB（匹配后端限制）
     maxCount = 4,              // 最多4张（匹配后端限制）
-    allowedTypes = DEFAULT_ALLOWED_TYPES,
+    allowedTypes = [...IMAGE_UPLOAD_MIME_TYPES],
     autoCompress = true,
     compressThreshold = 2 * 1024 * 1024, // 2MB 开始压缩
     compressQuality = 0.8
@@ -101,10 +92,10 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     // 检查文件类型
     if (!allowedTypes.includes(file.type)) {
       const allowedNames = allowedTypes
-        .map(t => FILE_TYPE_NAMES[t] || t)
+        .map(t => IMAGE_TYPE_NAMES[t] || t)
         .filter((v, i, a) => a.indexOf(v) === i) // 去重
         .join('、')
-      return { valid: false, error: `不支持的文件类型，仅支持：${allowedNames}` }
+      return { valid: false, error: `当前仅支持上传图片，仅支持：${allowedNames}` }
     }
 
     // 检查文件大小
@@ -125,34 +116,13 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 将文件转换为 Base64
-   */
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const result = reader.result as string
-        resolve(result)
-      }
-      reader.onerror = () => reject(new Error('文件读取失败'))
-      reader.readAsDataURL(file)
-    })
-  }
-
-  /**
    * 压缩图片
    */
-  const compressImage = (file: File, quality: number = compressQuality): Promise<string> => {
+  const compressImage = (file: File, quality: number = compressQuality): Promise<File> => {
     return new Promise((resolve, reject) => {
-      // 非图片不压缩
-      if (!file.type.startsWith('image/')) {
-        fileToBase64(file).then(resolve).catch(reject)
-        return
-      }
-
-      // GIF不压缩-压则会丢失动画
-      if (file.type === 'image/gif') {
-        fileToBase64(file).then(resolve).catch(reject)
+      // 非图片或 GIF 不压缩，直接走原文件
+      if (!file.type.startsWith('image/') || file.type === 'image/gif') {
+        resolve(file)
         return
       }
 
@@ -179,7 +149,8 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         canvas.height = height
 
         if (!ctx) {
-          fileToBase64(file).then(resolve).catch(reject)
+          URL.revokeObjectURL(img.src)
+          resolve(file)
           return
         }
 
@@ -187,10 +158,21 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
         // 输出为 JPEG（压缩效果更好）或保持原格式
         const outputType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
-        const base64 = canvas.toDataURL(outputType, quality)
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(img.src)
 
-        resolve(base64)
-        URL.revokeObjectURL(img.src)
+          if (!blob) {
+            reject(new Error('图片压缩失败'))
+            return
+          }
+
+          resolve(
+            new File([blob], file.name, {
+              type: blob.type,
+              lastModified: file.lastModified,
+            })
+          )
+        }, outputType, quality)
       }
 
       img.onerror = () => {
@@ -221,7 +203,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     // 通过 ID 在 files.value 中查找-确保获取响应式代理对象
     const fileItem = files.value.find(f => f.id === fileId)
     if (!fileItem) {
-      console.error('[uploadSingleFile] 找不到文件:', fileId)
+      logger.warn('[uploadSingleFile] 找不到文件:', fileId)
       return false
     }
 
@@ -234,14 +216,14 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     }
 
     fileItem.status = 'uploading'
-    console.log('[uploadSingleFile] 开始上传:', fileItem.name)
+    logger.debug('[uploadSingleFile] 开始上传:', fileItem.name)
 
     try {
       // 使用 toRaw 获取原始 File 对象，避免 Vue Proxy 导致 instanceof 检查失败
       const rawFile = toRaw(fileItem.file)
-      console.log('[uploadSingleFile] rawFile instanceof File:', rawFile instanceof File)
+      logger.debug('[uploadSingleFile] rawFile instanceof File:', rawFile instanceof File)
       const response = await uploadFiles([rawFile])
-      console.log('[uploadSingleFile] 上传响应:', response)
+      logger.debug('[uploadSingleFile] 上传响应:', response)
 
       if (response.code === 0 && response.data && response.data.length > 0) {
         const serverFile = response.data[0]
@@ -256,7 +238,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         // 拼接完整 URL，确保预览时可以正确加载
         const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
         fileItem.serverUrl = `${baseURL}${serverFile.url}`
-        console.log('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
+        logger.debug('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
         return true
       } else {
         fileItem.status = 'error'
@@ -265,7 +247,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         return false
       }
     } catch (error) {
-      console.error('[uploadSingleFile] 上传异常:', error)
+      logger.error('[uploadSingleFile] 上传异常:', error)
       fileItem.status = 'error'
       fileItem.error = error instanceof Error ? error.message : '上传失败'
       message.error(`${fileItem.name} 上传失败`)
@@ -292,7 +274,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       file,
       preview: createPreview(file, fileType),
-      base64: '',
       type: fileType,
       name: file.name,
       size: file.size,
@@ -303,14 +284,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     files.value.push(uploadedFile)
 
     try {
-      // 转换为 Base64（图片可能需要压缩）- 用于兼容旧版发送
+      // 主链路不再先生成 base64；图片在需要时压缩成新的 File 后直接上传
       if (fileType === 'image' && autoCompress && file.size > compressThreshold) {
-        console.log(`[processFile] 压缩图片: ${file.name}, 原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
-        uploadedFile.base64 = await compressImage(file, compressQuality)
-        const compressedSize = Math.round((uploadedFile.base64.length * 3) / 4)
-        console.log(`[processFile] 压缩后大小: ${(compressedSize / 1024 / 1024).toFixed(2)}MB`)
-      } else {
-        uploadedFile.base64 = await fileToBase64(file)
+        logger.debug(`[processFile] 压缩图片: ${file.name}, 原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+        const processedFile = await compressImage(file, compressQuality)
+        uploadedFile.file = processedFile
+        logger.debug(`[processFile] 压缩后大小: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`)
       }
 
       // 本地处理完成后，立即上传到服务器
@@ -319,7 +298,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
 
       return uploadedFile
     } catch (error) {
-      console.error('[processFile] 文件处理失败:', error)
+      logger.error('[processFile] 文件处理失败:', error)
       uploadedFile.status = 'error'
       uploadedFile.error = error instanceof Error ? error.message : '文件处理失败'
       return null
@@ -376,19 +355,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   }
 
   /**
-   * 获取用于发送的文件数据（兼容旧版 base64 方式）
-   */
-  const getFilesForSend = (): { base64: string; type: string; name: string }[] => {
-    return files.value
-      .filter(f => f.status === 'uploaded' || f.base64)
-      .map(f => ({
-        base64: f.base64,
-        type: f.file.type,
-        name: f.name
-      }))
-  }
-
-  /**
    * 获取已上传到服务器的文件 ID 列表
    */
   const getFileIdsForSend = (): string[] => {
@@ -411,15 +377,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       }))
   }
 
-  /**
-   * 清理 Base64 数据（发送后调用，减少内存占用）
-   */
-  const clearBase64Data = (): void => {
-    files.value.forEach(f => {
-      f.base64 = ''
-    })
-  }
-
   // 组件卸载时清理
   onBeforeUnmount(() => {
     clearFiles()
@@ -439,10 +396,8 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     addFiles,
     removeFile,
     clearFiles,
-    getFilesForSend,
     getFileIdsForSend,
     getUploadedFileInfos,
-    clearBase64Data,
     validateFile
   }
 }

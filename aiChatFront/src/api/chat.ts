@@ -2,6 +2,8 @@
  * 聊天相关 API
  */
 import request, { type ResponseData } from '@/utils/request'
+import { useAuthStore } from '@/stores'
+import logger from '@/utils/logger'
 import type {
   BackendChatSession,
   SendMessageParams,
@@ -53,7 +55,8 @@ export function sendStreamMessage(
   }
 ): StreamRequestController {
   const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-  const token = localStorage.getItem('token')
+  const authStore = useAuthStore()
+  const token = authStore.getToken()
   const abortController = new AbortController()
 
   // 使用fetch发送并接收SSE流
@@ -127,7 +130,7 @@ export function sendStreamMessage(
                 return
               }
             } catch (e) {
-              console.log('解析 SSE 数据失败:', e, dataStr)
+              logger.debug('解析 SSE 数据失败:', e, dataStr)
             }
           }
         }
@@ -137,7 +140,7 @@ export function sendStreamMessage(
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
       }
-      console.log('流式请求失败:', error)
+      logger.debug('流式请求失败:', error)
       const errorMessage =
         error instanceof Error ? error.message : '流式请求失败'
       callbacks.onError(errorMessage)
@@ -189,21 +192,21 @@ export function updateSessionTitle(data: UpdateSessionTitleParams) {
  * - 服务端会自动压缩重编码
  */
 export async function uploadFiles(files: File[]): Promise<ResponseData<UploadedFileResponse[]>> {
-  console.log('[uploadFiles] 收到文件数量:', files.length)
-  console.log('[uploadFiles] 文件列表:', files)
+  logger.debug('[uploadFiles] 收到文件数量:', files.length)
+  logger.debug('[uploadFiles] 文件列表:', files)
 
   const formData = new FormData()
   files.forEach((file, index) => {
-    console.log(`[uploadFiles] 添加文件 ${index}:`, file?.name, file?.size, file instanceof File)
+    logger.debug(`[uploadFiles] 添加文件 ${index}:`, file?.name, file?.size, file instanceof File)
     if (file instanceof File) {
       formData.append('files', file)
     }
   })
 
   // 检查 FormData 内容
-  console.log('[uploadFiles] FormData entries:')
+  logger.debug('[uploadFiles] FormData entries:')
   for (const [key, value] of formData.entries()) {
-    console.log(`  ${key}:`, value)
+    logger.debug(`  ${key}:`, value)
   }
 
   // 不手动设置 Content-Type，让 axios 自动处理 boundary

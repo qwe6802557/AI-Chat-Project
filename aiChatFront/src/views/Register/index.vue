@@ -150,6 +150,8 @@ import {
 } from '@ant-design/icons-vue'
 import { sendEmailCode, register } from '@/api/auth'
 import type { RegisterParams } from '@/interface/auth'
+import { useAuthStore } from '@/stores'
+import logger from '@/utils/logger'
 
 // 定义组件名称
 defineOptions({
@@ -157,6 +159,7 @@ defineOptions({
 })
 
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const sendingCode = ref(false)
 const countdown = ref(0)
@@ -212,7 +215,7 @@ const handleSendCode = async () => {
     // 开发环境下显示验证码(便于测试)
     if (import.meta.env.DEV && res.data?.code) {
       message.info(`开发模式 - 验证码: ${res.data.code}`, 5)
-      console.log('验证码:', res.data.code)
+      logger.debug('验证码:', res.data.code)
     }
 
     // 开始倒计时
@@ -224,7 +227,7 @@ const handleSendCode = async () => {
       }
     }, 1000)
   } catch (err: any) {
-    console.error('发送验证码失败:', err)
+    logger.debug('发送验证码失败:', err)
     message.error(err?.message || '验证码发送失败，请稍后重试')
   } finally {
     sendingCode.value = false
@@ -245,12 +248,14 @@ const handleRegister = async () => {
 
     const res = await register(params)
 
-    message.success('注册成功! 正在跳转到登录页...')
+    message.success('注册成功! 正在跳转...')
 
-    // 保存用户信息到 localStorage
+    // 统一写入认证会话，确保刷新后可以完整恢复登录状态
     if (res.data?.token) {
-      localStorage.setItem('token', res.data.token)
-      localStorage.setItem('isAuthenticated', 'true')
+      authStore.setAuthSession({
+        token: res.data.token,
+        user: res.data.user
+      })
 
       // 注册成功后直接跳转到聊天页
       setTimeout(() => {
@@ -266,7 +271,7 @@ const handleRegister = async () => {
       }, 1000)
     }
   } catch (err: any) {
-    console.error('注册失败:', err)
+    logger.debug('注册失败:', err)
   } finally {
     loading.value = false
   }

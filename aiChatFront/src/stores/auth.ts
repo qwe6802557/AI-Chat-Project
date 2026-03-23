@@ -6,6 +6,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { UserInfo, UserCredits } from '@/types/user'
+import logger from '@/utils/logger'
 
 /**
  * localStorage 键名常量
@@ -83,7 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         userProfile.value = JSON.parse(storedProfile)
       } catch (e) {
-        console.error('解析用户资料失败:', e)
+        logger.warn('解析用户资料失败:', e)
       }
     }
 
@@ -131,12 +132,16 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null
     userId.value = null
     username.value = null
+    userProfile.value = null
+    userAvatar.value = null
 
-    // 清除 localStorage（保留 rememberedUsername）
+    // 清除 localStorage-保留 rememberedUsername
     localStorage.removeItem(STORAGE_KEYS.TOKEN)
     localStorage.removeItem(STORAGE_KEYS.USER_ID)
     localStorage.removeItem(STORAGE_KEYS.USERNAME)
     localStorage.removeItem(STORAGE_KEYS.IS_AUTHENTICATED)
+    localStorage.removeItem(STORAGE_KEYS.USER_PROFILE)
+    localStorage.removeItem(STORAGE_KEYS.USER_AVATAR)
   }
 
   /**
@@ -150,11 +155,32 @@ export const useAuthStore = defineStore('auth', () => {
   const getUserId = () => userId.value || ''
 
   /**
-   * 设置完整用户资料（登录时调用）
+   * 设置完整用户资料
    */
   const setUserProfile = (profile: UserInfo) => {
     userProfile.value = profile
+    userAvatar.value = profile.avatar || null
     localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile))
+    if (profile.avatar) {
+      localStorage.setItem(STORAGE_KEYS.USER_AVATAR, profile.avatar)
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.USER_AVATAR)
+    }
+  }
+
+  /**
+   * 统一设置认证会话
+   */
+  const setAuthSession = (data: {
+    token: string
+    user: UserInfo
+  }) => {
+    setAuthData({
+      token: data.token,
+      userId: data.user.id,
+      username: data.user.username,
+    })
+    setUserProfile(data.user)
   }
 
   /**
@@ -214,6 +240,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
     initFromStorage,
     setAuthData,
+    setAuthSession,
     setRememberedUsername,
     clearAuth,
     getToken,

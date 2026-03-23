@@ -1,7 +1,17 @@
 <template>
   <div class="chat-container">
     <!-- 侧边栏 -->
-    <Sidebar />
+    <Sidebar
+      :conversations="conversations"
+      :current-conversation-id="currentConversationId"
+      :is-clearing="isClearing"
+      @new-chat="handleNewConversation"
+      @select-conversation="handleSelectConversation"
+      @rename-conversation="handleRenameConversation"
+      @delete-conversation="handleDeleteConversation"
+      @clear-conversations="handleClearConversations"
+      @logout="handleLogout"
+    />
     <ChatArea
       :messages="currentMessages"
       :loading="loading"
@@ -20,9 +30,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
+import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
+import logger from '@/utils/logger'
 import { useStreamChat } from './hooks/useStreamChat'
 import { useAuthStore, useConversationStore } from '@/stores'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
@@ -34,17 +46,19 @@ defineOptions({
 })
 
 // 认证状态
+const router = useRouter()
 const authStore = useAuthStore()
 
 // 对话管理
 const conversationStore = useConversationStore()
 const {
+  conversations,
   currentConversationId,
   currentMessages
 } = storeToRefs(conversationStore)
 
 // 流式聊天
-const { loading, sendMessage } = useStreamChat()
+const { loading, sendMessage, cancelCurrentStream } = useStreamChat()
 
 // 模型选择
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
@@ -63,6 +77,7 @@ const getUserId = (): string => {
 
 // 分页状态
 const hasMoreMessages = ref(true)
+const isClearing = ref(false)
 
 // 发送消息
 const handleSendMessage = async (
@@ -70,7 +85,6 @@ const handleSendMessage = async (
   options?: {
     fileIds?: string[]
     serverFiles?: { id: string; url: string; name: string; type: string }[]
-    files?: { base64: string; type: string; name: string }[]
   }
 ) => {
   const userId = getUserId()
@@ -124,7 +138,7 @@ const loadModelOptions = async () => {
       saveSelectedModel()
     }
   } catch (error) {
-    console.error('加载模型列表失败:', error)
+    logger.error('加载模型列表失败:', error)
     message.warning('模型列表加载失败，已使用默认模型 GLM-5')
     selectedModel.value = 'GLM-5'
     saveSelectedModel()
@@ -139,6 +153,106 @@ const loadModelOptions = async () => {
 const handleModelChange = (modelId: string) => {
   selectedModel.value = modelId
   saveSelectedModel()
+}
+
+/**
+ * 新建对话
+ */
+const handleNewConversation = () => {
+  cancelCurrentStream()
+  conversationStore.createConversation()
+  hasMoreMessages.value = false
+}
+
+/**
+ * 选择对话
+ */
+const handleSelectConversation = async (conversationId: string) => {
+  if (conversationId === currentConversationId.value) return
+
+  cancelCurrentStream()
+  const paginationInfo = await conversationStore.selectConversation(conversationId)
+
+  if (paginationInfo) {
+    hasMoreMessages.value = paginationInfo.hasMore
+    return
+  }
+
+  const targetConversation = conversationStore.getConversationById(conversationId)
+  if (!targetConversation?.sessionId) {
+    hasMoreMessages.value = false
+  }
+}
+
+/**
+ * 重命名对话
+ */
+const handleRenameConversation = async (conversationId: string, title: string) => {
+  const success = await conversationStore.updateConversationTitle(conversationId, title)
+  if (success) {
+    message.success('重命名成功')
+  } else {
+    message.error('重命名失败')
+  }
+}
+
+/**
+ * 删除对话
+ */
+const handleDeleteConversation = async (conversationId: string) => {
+  const deletingCurrentConversation = conversationId === currentConversationId.value
+
+  if (deletingCurrentConversation) {
+    cancelCurrentStream()
+  }
+
+  await conversationStore.deleteConversation(conversationId)
+
+  if (deletingCurrentConversation) {
+    const nextConversationId = conversationStore.currentConversationId
+    if (!nextConversationId) {
+      hasMoreMessages.value = false
+    } else {
+      const nextConversation = conversationStore.getConversationById(nextConversationId)
+      if (!nextConversation?.sessionId) {
+        hasMoreMessages.value = false
+      }
+    }
+  }
+
+  message.success('对话已删除')
+}
+
+/**
+ * 清空所有对话
+ */
+const handleClearConversations = async () => {
+  const userId = getUserId()
+  isClearing.value = true
+
+  try {
+    cancelCurrentStream()
+    const result = await conversationStore.clearAllConversations(userId || undefined)
+    if (result) {
+      conversationStore.createConversation()
+      hasMoreMessages.value = false
+      message.success(`已清空 ${result.deletedCount} 个对话`)
+    } else {
+      message.error('清空对话失败')
+    }
+  } finally {
+    isClearing.value = false
+  }
+}
+
+/**
+ * 退出登录
+ */
+const handleLogout = async () => {
+  cancelCurrentStream()
+  authStore.clearAuth()
+  message.success('已成功退出登录')
+  await router.push('/login')
 }
 
 onMounted(async () => {

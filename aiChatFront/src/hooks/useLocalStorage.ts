@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import type { UseLocalStorageOptions } from '@/types/hooks'
+import logger from '@/utils/logger'
 
 export type { UseLocalStorageOptions } from '@/types/hooks'
 
@@ -33,7 +34,7 @@ export function useLocalStorage<T>(
         data.value = defaultValue
       }
     } catch (error) {
-      console.log(`[useLocalStorage] 加载数据失败 (key: ${key}):`, error)
+      logger.warn(`[useLocalStorage] 加载数据失败 (key: ${key}):`, error)
       data.value = defaultValue
     }
   }
@@ -46,7 +47,7 @@ export function useLocalStorage<T>(
       const serialized = options.serialize ? options.serialize(data.value) : data.value
       localStorage.setItem(key, JSON.stringify(serialized))
     } catch (error) {
-      console.error(`[useLocalStorage] 保存数据失败 (key: ${key}):`, error)
+      logger.error(`[useLocalStorage] 保存数据失败 (key: ${key}):`, error)
     }
   }
 
@@ -75,7 +76,7 @@ export function useLocalStorage<T>(
         saveTimer = null
       }
     } catch (error) {
-      console.error(`[useLocalStorage] 清除数据失败 (key: ${key}):`, error)
+      logger.error(`[useLocalStorage] 清除数据失败 (key: ${key}):`, error)
     }
   }
 

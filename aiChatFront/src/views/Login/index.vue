@@ -147,6 +147,7 @@ import {
 import { getCaptcha, login } from '@/api/auth'
 import type { LoginParams } from '@/interface/auth'
 import { useAuthStore } from '@/stores'
+import logger from '@/utils/logger'
 
 // 定义组件名称
 defineOptions({
@@ -176,7 +177,7 @@ const fetchCaptcha = async () => {
     captchaImage.value = response.data.captchaImage
     captchaId.value = response.data.captchaId
   } catch (error) {
-    console.error('获取验证码失败:', error)
+    logger.error('获取验证码失败:', error)
     message.error('获取验证码失败，请刷新页面重试')
   }
 }
@@ -237,11 +238,10 @@ const handleLogin = async () => {
     // 调用API
     const response = await login(loginParams)
 
-    // 保存认证数据
-    authStore.setAuthData({
+    // 统一写入认证会话
+    authStore.setAuthSession({
       token: response.data.token,
-      userId: response.data.user.id,
-      username: response.data.user.username
+      user: response.data.user
     })
 
     // 记住用户名
@@ -257,7 +257,7 @@ const handleLogin = async () => {
     const redirect = router.currentRoute.value.query.redirect as string
     router.push(redirect || '/chat')
   } catch (err: any) {
-    console.error('登录失败:', err)
+    logger.debug('登录失败:', err)
 
     // 登录失败后刷新验证码
     fetchCaptcha()

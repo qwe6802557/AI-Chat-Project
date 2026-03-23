@@ -7,6 +7,7 @@ import { marked, type Tokens } from 'marked'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/atom-one-dark.css'
 import DOMPurify from "dompurify";
+import logger from '@/utils/logger'
 
 // ---配置marked---
 
@@ -145,7 +146,7 @@ export function renderMarkdown(
     const html = marked.parse(content, { renderer }) as string
     return DOMPurify.sanitize(html)  // 引入DOMPurify防止xss攻击
   } catch (error) {
-    console.error('Markdown 渲染失败:', error)
+    logger.error('Markdown 渲染失败:', error)
     return DOMPurify.sanitize(`<p>${escapeHtml(content)}</p>`)
   }
 }
