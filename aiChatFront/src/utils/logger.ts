@@ -1,22 +1,22 @@
 /**
  * 轻量日志工具
- * 默认仅在开发环境输出，避免生产环境控制台噪音
+ * 默认仅在开发环境输出
  */
-const isDev = import.meta.env.DEV
+const isDebugEnabled = import.meta.env.DEV && import.meta.env.MODE !== 'test'
 
 export const logger = {
   debug: (...args: unknown[]) => {
-    if (isDev) {
+    if (isDebugEnabled) {
       console.debug(...args)
     }
   },
   warn: (...args: unknown[]) => {
-    if (isDev) {
+    if (isDebugEnabled) {
       console.warn(...args)
     }
   },
   error: (...args: unknown[]) => {
-    if (isDev) {
+    if (isDebugEnabled) {
       console.error(...args)
     }
   },

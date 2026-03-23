@@ -250,6 +250,7 @@ const handleClearConversations = async () => {
  */
 const handleLogout = async () => {
   cancelCurrentStream()
+  conversationStore.resetLocalState()
   authStore.clearAuth()
   message.success('已成功退出登录')
   await router.push('/login')

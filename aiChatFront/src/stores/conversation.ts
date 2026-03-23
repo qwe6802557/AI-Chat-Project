@@ -21,6 +21,7 @@ import type { Conversation, Message, MessageAttachment } from '@/interface/conve
 // 常量
 
 const MAX_PERSISTED_MESSAGES_PER_CONVERSATION = 50
+const CURRENT_CONVERSATION_STORAGE_KEY = 'currentConversationId'
 
 // 工具函数
 
@@ -106,7 +107,8 @@ export const useConversationStore = defineStore('conversation', () => {
   const {
     data: conversations,
     save: saveNow,
-    saveDebounced
+    saveDebounced,
+    clear: clearPersistedConversations,
   } = useLocalStorage<Conversation[]>(
     'chatConversations',
     [],
@@ -143,7 +145,7 @@ export const useConversationStore = defineStore('conversation', () => {
   )
 
   /** 当前选中的对话 ID */
-  const currentConversationId = ref('')
+  const currentConversationId = ref(localStorage.getItem(CURRENT_CONVERSATION_STORAGE_KEY) || '')
 
   /** 加载状态 */
   const isLoading = ref(false)
@@ -162,6 +164,27 @@ export const useConversationStore = defineStore('conversation', () => {
 
   /** 对话数量 */
   const conversationCount = computed(() => conversations.value.length)
+
+  const setCurrentConversationId = (conversationId: string): void => {
+    currentConversationId.value = conversationId
+    if (conversationId) {
+      localStorage.setItem(CURRENT_CONVERSATION_STORAGE_KEY, conversationId)
+    } else {
+      localStorage.removeItem(CURRENT_CONVERSATION_STORAGE_KEY)
+    }
+  }
+
+  const normalizeCurrentConversationSelection = (): void => {
+    if (conversations.value.length === 0) {
+      setCurrentConversationId('')
+      return
+    }
+
+    if (!currentConversationId.value || !getConversationById(currentConversationId.value)) {
+      const firstConversation = conversations.value[0]
+      setCurrentConversationId(firstConversation?.id || '')
+    }
+  }
 
   // Actions
 
@@ -236,7 +259,7 @@ export const useConversationStore = defineStore('conversation', () => {
     }
 
     conversations.value.unshift(newConversation)
-    currentConversationId.value = newConversation.id
+    setCurrentConversationId(newConversation.id)
     saveConversations()
 
     return newConversation.id
@@ -288,7 +311,7 @@ export const useConversationStore = defineStore('conversation', () => {
     conversation.title = sessionTitle
 
     if (currentConversationId.value === oldId) {
-      currentConversationId.value = serverSessionId
+      setCurrentConversationId(serverSessionId)
     }
 
     saveConversations()
@@ -309,7 +332,7 @@ export const useConversationStore = defineStore('conversation', () => {
       }
     }
 
-    currentConversationId.value = id
+    setCurrentConversationId(id)
 
     const targetConversation = conversations.value.find(c => c.id === id)
     if (targetConversation && targetConversation.sessionId && targetConversation.messages.length === 0) {
@@ -374,10 +397,11 @@ export const useConversationStore = defineStore('conversation', () => {
         saveConversations()
 
         if (serverConversations.length > 0 && serverConversations[0]) {
-          currentConversationId.value = serverConversations[0].id
+          setCurrentConversationId(serverConversations[0].id)
           return await loadMessagesForSession(serverConversations[0].id)
         }
 
+        setCurrentConversationId('')
         return null
       }
       return null
@@ -402,6 +426,8 @@ export const useConversationStore = defineStore('conversation', () => {
 
     if (conversations.value.length === 0) {
       createConversation()
+    } else {
+      normalizeCurrentConversationSelection()
     }
 
     return paginationInfo
@@ -426,7 +452,7 @@ export const useConversationStore = defineStore('conversation', () => {
     }
 
     conversations.value = []
-    currentConversationId.value = ''
+    setCurrentConversationId('')
     saveConversations()
 
     return { deletedCount: serverDeletedCount }
@@ -441,7 +467,7 @@ export const useConversationStore = defineStore('conversation', () => {
       conversations.value.splice(index, 1)
 
       if (currentConversationId.value === id) {
-        currentConversationId.value = conversations.value[0]?.id || ''
+        setCurrentConversationId(conversations.value[0]?.id || '')
       }
 
       saveConversations()
@@ -565,6 +591,16 @@ export const useConversationStore = defineStore('conversation', () => {
     saveConversations()
   }
 
+  /**
+   * 清空本地会话状态（不触发后端删除）
+   * 用于退出登录后的本地状态清理，避免会话残留到下一个登录会话
+   */
+  const resetLocalState = (): void => {
+    conversations.value = []
+    setCurrentConversationId('')
+    clearPersistedConversations()
+  }
+
   return {
     // State
     conversations,
@@ -592,6 +628,7 @@ export const useConversationStore = defineStore('conversation', () => {
     patchMessageById,
     clearMessageAttachmentBase64,
     deleteMessageById,
+    resetLocalState,
 
     // Actions - 持久化和初始化
     saveConversations,
