@@ -12,7 +12,10 @@ import { CreateChatDto, FileDataDto } from './dto';
 import { ChatMessage } from './entities/chat.entity';
 import { UserService } from '../user/user.service';
 import { ChatSessionService } from './chat-session.service';
-import { MultimodalContent } from './types/completion.types';
+import {
+  CompletionUsageStats,
+  MultimodalContent,
+} from './types/completion.types';
 import { FilesService } from '../files/files.service';
 
 @Injectable()
@@ -117,6 +120,19 @@ export class ChatService {
   }
 
   /**
+   * 主聊天链路已收敛为 fileIds 引用，不再接收 base64 内联文件。
+   */
+  private ensureNoInlineFiles(files?: FileDataDto[]): void {
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    throw new BadRequestException(
+      '聊天接口已不再接受 base64 文件，请先调用 /files/upload 上传文件，再通过 fileIds 引用附件',
+    );
+  }
+
+  /**
    * 创建聊天对话
    * @param createChatDto 聊天请求参数
    */
@@ -127,6 +143,8 @@ export class ChatService {
     if (!userId) {
       throw new BadRequestException('用户ID不能为空');
     }
+
+    this.ensureNoInlineFiles(createChatDto.files);
 
     // 验证用户是否存在
     const user = await this.userService.findById(userId);
@@ -153,7 +171,6 @@ export class ChatService {
       await this.filesService.prepareChatAttachments({
         userId,
         fileIds: createChatDto.fileIds,
-        files: createChatDto.files,
       });
 
     // 构建消息数组
@@ -216,11 +233,7 @@ export class ChatService {
       userMessage: createChatDto.message,
       aiMessage: assistantMessage,
       model: completion.model,
-      usage: {
-        promptTokens: completion.usage.promptTokens,
-        completionTokens: completion.usage.completionTokens,
-        totalTokens: completion.usage.totalTokens,
-      },
+      usage: completion.usage,
     });
 
     const savedMessage = await this.chatMessageRepository.save(chatMessage);
@@ -249,11 +262,7 @@ export class ChatService {
       sessionId: sessionId,
       message: assistantMessage,
       model: completion.model,
-      usage: {
-        promptTokens: completion.usage.promptTokens,
-        completionTokens: completion.usage.completionTokens,
-        totalTokens: completion.usage.totalTokens,
-      },
+      usage: completion.usage,
       createdAt: savedMessage.createdAt,
     };
   }
@@ -328,12 +337,12 @@ export class ChatService {
     // 转换附件格式
     const messagesWithAttachments = orderedMessages.map((msg) => ({
       ...msg,
-      attachments: (msg.attachments || []).map((att) => ({
-        id: att.id,
-        url: `/files/${att.id}`,
-        name: att.originalName,
-        type: att.storageMime,
-        sizeBytes: att.sizeBytes,
+        attachments: (msg.attachments || []).map((att) => ({
+          id: att.id,
+          url: this.filesService.buildSignedFileUrl(att.id),
+          name: att.originalName,
+          type: att.storageMime,
+          sizeBytes: att.sizeBytes,
         width: att.width,
         height: att.height,
       })),
@@ -363,6 +372,8 @@ export class ChatService {
       throw new BadRequestException('用户ID不能为空');
     }
 
+    this.ensureNoInlineFiles(createChatDto.files);
+
     // 验证用户是否存在
     const user = await this.userService.findById(userId);
     if (!user) {
@@ -388,7 +399,6 @@ export class ChatService {
       await this.filesService.prepareChatAttachments({
         userId,
         fileIds: createChatDto.fileIds,
-        files: createChatDto.files,
       });
 
     // 构建消息数组
@@ -461,11 +471,7 @@ export class ChatService {
     userMessage: string,
     aiMessage: string,
     model: string,
-    usage?: {
-      promptTokens: number;
-      completionTokens: number;
-      totalTokens: number;
-    },
+    usage?: CompletionUsageStats,
     attachmentIds?: string[],
   ) {
     // 保存聊天记录到数据库

@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -37,12 +38,47 @@ export class FilesService {
   constructor(
     @InjectRepository(ChatAttachment)
     private readonly attachmentRepository: Repository<ChatAttachment>,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.validateFileAccessConfig();
+  }
 
   private getUploadRoot(): string {
     const configured = process.env.UPLOAD_DIR?.trim();
     const root = configured ? configured : 'uploads';
     return path.resolve(process.cwd(), root);
+  }
+
+  private validateFileAccessConfig(): void {
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const signSecret = this.configService.get<string>('FILE_URL_SIGN_SECRET');
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    const ttlRaw = this.configService.get<string>('FILE_URL_TTL_SECONDS');
+
+    if (!signSecret && isProduction) {
+      throw new Error(
+        '生产环境必须配置 FILE_URL_SIGN_SECRET，避免附件签名与 JWT 密钥复用',
+      );
+    }
+
+    if (!signSecret && !jwtSecret) {
+      throw new Error(
+        'FILE_URL_SIGN_SECRET 或 JWT_SECRET 必须至少配置一个，附件签名 URL 才能工作',
+      );
+    }
+
+    if (ttlRaw !== undefined) {
+      const ttl = Number(ttlRaw);
+      if (!Number.isInteger(ttl) || ttl <= 0) {
+        throw new Error('FILE_URL_TTL_SECONDS 必须是大于 0 的整数秒数');
+      }
+    }
+
+    if (!signSecret) {
+      this.logger.warn(
+        'FILE_URL_SIGN_SECRET 未配置，当前环境将回退使用 JWT_SECRET 作为附件签名密钥',
+      );
+    }
   }
 
   private buildStoragePath(extension: string): {
@@ -66,10 +102,77 @@ export class FilesService {
     return path.join(this.getUploadRoot(), ...storagePath.split('/'));
   }
 
+  private getFileUrlTtlSeconds(): number {
+    const configuredTtl = Number(
+      this.configService.get<string>('FILE_URL_TTL_SECONDS') || '86400',
+    );
+
+    if (!Number.isFinite(configuredTtl) || configuredTtl <= 0) {
+      return 86400;
+    }
+
+    return Math.floor(configuredTtl);
+  }
+
+  private getFileUrlSignSecret(): string {
+    const secret =
+      this.configService.get<string>('FILE_URL_SIGN_SECRET') ||
+      this.configService.get<string>('JWT_SECRET');
+
+    if (!secret) {
+      throw new Error('FILE_URL_SIGN_SECRET 或 JWT_SECRET 必须至少配置一个');
+    }
+
+    return secret;
+  }
+
+  private createFileSignature(id: string, expires: number): string {
+    return createHmac('sha256', this.getFileUrlSignSecret())
+      .update(`${id}:${expires}`)
+      .digest('hex');
+  }
+
+  private verifyFileSignature(
+    id: string,
+    expiresRaw?: string,
+    signature?: string,
+  ): boolean {
+    if (!expiresRaw || !signature) {
+      return false;
+    }
+
+    const expires = Number(expiresRaw);
+    if (!Number.isInteger(expires)) {
+      return false;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (expires < now) {
+      return false;
+    }
+
+    const expectedSignature = this.createFileSignature(id, expires);
+    if (expectedSignature.length !== signature.length) {
+      return false;
+    }
+
+    return timingSafeEqual(
+      Buffer.from(expectedSignature, 'utf8'),
+      Buffer.from(signature, 'utf8'),
+    );
+  }
+
+  buildSignedFileUrl(id: string): string {
+    const expires = Math.floor(Date.now() / 1000) + this.getFileUrlTtlSeconds();
+    const signature = this.createFileSignature(id, expires);
+
+    return `/files/${id}?expires=${expires}&signature=${signature}`;
+  }
+
   private toPublicResult(entity: ChatAttachment): UploadedImageResult {
     return {
       id: entity.id,
-      url: `/files/${entity.id}`,
+      url: this.buildSignedFileUrl(entity.id),
       name: entity.originalName,
       mime: entity.storageMime,
       sizeBytes: entity.sizeBytes,
@@ -338,7 +441,8 @@ export class FilesService {
   }
 
   /**
-   * 统一入口：合并 fileIds + files（base64），并返回 AI 用 dataURL + 待绑定附件 id
+   * 统一入口：兼容 fileIds + files（base64），并返回 AI 用 dataURL + 待绑定附件 id
+   * 主聊天链路已收敛为 fileIds，这里仅保留兼容能力。
    */
   async prepareChatAttachments(params: {
     userId: string;
@@ -396,10 +500,19 @@ export class FilesService {
   }
 
   /**
-   * 根据附件 id 输出文件（公开访问，便于 img 直接加载）
+   * 根据附件 id 输出文件（仅允许签名 URL 访问）
    * 这里使用真实 HTTP 状态码，不走全局统一 JSON 包装。
    */
-  async streamFileById(id: string, res: Response): Promise<void> {
+  async streamFileById(
+    id: string,
+    res: Response,
+    access?: { expires?: string; signature?: string },
+  ): Promise<void> {
+    if (!this.verifyFileSignature(id, access?.expires, access?.signature)) {
+      res.status(403).end();
+      return;
+    }
+
     const attachment = await this.attachmentRepository.findOne({
       where: { id },
     });
@@ -421,9 +534,10 @@ export class FilesService {
     res.setHeader('Content-Type', attachment.storageMime);
     res.setHeader(
       'Cache-Control',
-      'public, max-age=31536000, immutable',
+      'private, max-age=3600',
     );
     res.setHeader('Content-Length', String(attachment.sizeBytes));
+    res.setHeader('Content-Disposition', 'inline');
 
     const stream = createReadStream(absolutePath);
     stream.on('error', (err) => {

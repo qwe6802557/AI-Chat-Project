@@ -169,7 +169,7 @@ export class CreateChatDto {
    * 附件文件列表（可选，用于多模态输入）
    */
   @ApiProperty({
-    description: '附件文件列表（图片、PDF、文档等）',
+    description: '旧版内联附件字段（已废弃，主链路请改用 fileIds）',
     example: [
       {
         base64: 'data:image/jpeg;base64,/9j/4AAQSkZJRg...',
@@ -179,6 +179,7 @@ export class CreateChatDto {
     ],
     required: false,
     type: [FileDataDto],
+    deprecated: true,
   })
   @IsOptional()
   @IsArray({ message: '文件列表必须是数组' })
@@ -190,7 +191,7 @@ export class CreateChatDto {
    * 已上传的附件 ID
    */
   @ApiProperty({
-    description: '已上传的附件ID列表',
+    description: '已上传的附件ID列表（推荐使用）',
     example: ['a1b2c3d4-e5f6-7890-abcd-ef1234567890'],
     required: false,
     type: [String],

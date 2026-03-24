@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChatSession } from './entities/chat-session.entity';
+import { ChatMessage } from './entities/chat.entity';
 import { CreateSessionDto, UpdateSessionDto } from './dto';
 import { UserService } from '../user/user.service';
 
@@ -71,12 +72,75 @@ export class ChatSessionService {
       });
     }
 
-    const sessions = await queryBuilder
+    queryBuilder
+      .addSelect(
+        (subQuery) =>
+          subQuery
+            .select(
+              `COALESCE(SUM(COALESCE((chat_message."usage"->>'promptTokens')::integer, 0)), 0)`,
+            )
+            .from(ChatMessage, 'chat_message')
+            .where('chat_message."sessionId" = session.id'),
+        'session_totalPromptTokens',
+      )
+      .addSelect(
+        (subQuery) =>
+          subQuery
+            .select(
+              `COALESCE(SUM(COALESCE((chat_message."usage"->>'completionTokens')::integer, 0)), 0)`,
+            )
+            .from(ChatMessage, 'chat_message')
+            .where('chat_message."sessionId" = session.id'),
+        'session_totalCompletionTokens',
+      )
+      .addSelect(
+        (subQuery) =>
+          subQuery
+            .select(
+              `COALESCE(SUM(COALESCE((chat_message."usage"->>'totalTokens')::integer, 0)), 0)`,
+            )
+            .from(ChatMessage, 'chat_message')
+            .where('chat_message."sessionId" = session.id'),
+        'session_totalTokens',
+      )
+      .addSelect(
+        (subQuery) =>
+          subQuery
+            .select(
+              `COALESCE(SUM(COALESCE((chat_message."usage"->>'estimatedTotalCost')::numeric, 0)), 0)`,
+            )
+            .from(ChatMessage, 'chat_message')
+            .where('chat_message."sessionId" = session.id'),
+        'session_totalEstimatedCost',
+      )
+      .addSelect(
+        (subQuery) =>
+          subQuery
+            .select('chat_message.model')
+            .from(ChatMessage, 'chat_message')
+            .where('chat_message."sessionId" = session.id')
+            .orderBy('chat_message."createdAt"', 'DESC')
+            .limit(1),
+        'session_lastModel',
+      );
+
+    const { entities, raw } = await queryBuilder
       .orderBy('session.lastActiveAt', 'DESC')
       .addOrderBy('session.createdAt', 'DESC')
-      .getMany();
+      .getRawAndEntities();
 
-    return sessions;
+    return entities.map((session, index) => {
+      const rawRow = raw[index] || {};
+      session.usageSummary = {
+        lastModel: rawRow.session_lastModel || null,
+        totalPromptTokens: Number(rawRow.session_totalPromptTokens || 0),
+        totalCompletionTokens: Number(rawRow.session_totalCompletionTokens || 0),
+        totalTokens: Number(rawRow.session_totalTokens || 0),
+        totalEstimatedCost: Number(rawRow.session_totalEstimatedCost || 0),
+      };
+
+      return session;
+    });
   }
 
   /**

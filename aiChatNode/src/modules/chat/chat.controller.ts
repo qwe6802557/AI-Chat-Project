@@ -22,6 +22,7 @@ import type { Request, Response } from 'express';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import type { CompletionUsageStats } from './types/completion.types';
 
 @ApiTags('聊天消息')
 @UseGuards(JwtAuthGuard)
@@ -159,6 +160,8 @@ export class ChatController {
         });
 
       let fullMessage = '';
+      let finalFinishReason: string | null = null;
+      let finalUsage: CompletionUsageStats | undefined;
 
       // 遍历流式响应
       for await (const chunk of stream) {
@@ -166,45 +169,52 @@ export class ChatController {
 
         const delta = chunk.delta?.content || '';
         fullMessage += delta;
+        if (chunk.finish_reason) {
+          finalFinishReason = chunk.finish_reason;
+        }
+        if (chunk.usage) {
+          finalUsage = chunk.usage;
+        }
 
         // 发送 SSE 事件
         const sseData = JSON.stringify({
           delta,
           finish_reason: chunk.finish_reason,
           sessionId,
+          usage: chunk.usage,
         });
 
         if (!res.writableEnded) {
           res.write(`data: ${sseData}\n\n`);
         }
+      }
 
-        // 如果流结束，保存完整消息
-        if (chunk.finish_reason) {
-          // 保存到数据库
-          await this.chatService.saveStreamMessage(
-            userId,
-            sessionId,
-            userMessage,
-            fullMessage,
-            modelId,
-            undefined,
-            attachmentIds,
-          );
+      if (clientClosed) {
+        return;
+      }
 
-          // 发送最终的完成事件
-          const finalData = JSON.stringify({
-            delta: '',
-            finish_reason: chunk.finish_reason,
-            sessionId,
-            message: fullMessage,
-            model: modelId,
-          });
+      if (finalFinishReason || fullMessage) {
+        await this.chatService.saveStreamMessage(
+          userId,
+          sessionId,
+          userMessage,
+          fullMessage,
+          modelId,
+          finalUsage,
+          attachmentIds,
+        );
+      }
 
-          if (!res.writableEnded) {
-            res.write(`data: ${finalData}\n\n`);
-          }
-          break;
-        }
+      if (!res.writableEnded && (finalFinishReason || finalUsage)) {
+        const finalData = JSON.stringify({
+          delta: '',
+          finish_reason: finalFinishReason,
+          sessionId,
+          message: fullMessage,
+          model: modelId,
+          usage: finalUsage,
+        });
+        res.write(`data: ${finalData}\n\n`);
       }
 
       // 结束响应

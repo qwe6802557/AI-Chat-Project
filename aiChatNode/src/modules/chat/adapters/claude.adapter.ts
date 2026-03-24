@@ -97,12 +97,38 @@ export class ClaudeAdapter implements IProviderAdapter {
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
           stream: true,
+          stream_options: {
+            include_usage: true,
+          },
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
 
       return this.transformStream(stream);
     } catch (error) {
+      if (
+        error instanceof OpenAI.APIError &&
+        error.status === 400 &&
+        /stream_options|include_usage/i.test(error.message)
+      ) {
+        this.logger.warn(
+          `${this.providerName} 不支持 stream_options.include_usage，将降级为无 usage 统计的流式请求`,
+        );
+
+        const fallbackStream = await this.getClient().chat.completions.create(
+          {
+            model,
+            messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
+            temperature: options?.temperature ?? 0.7,
+            max_tokens: options?.maxTokens ?? 4096,
+            stream: true,
+          },
+          options?.abortSignal ? { signal: options.abortSignal } : undefined,
+        );
+
+        return this.transformStream(fallbackStream);
+      }
+
       this.handleError(error);
     }
   }
@@ -138,6 +164,13 @@ export class ClaudeAdapter implements IProviderAdapter {
           role: delta?.role,
         },
         finish_reason: finishReason,
+        usage: chunk.usage
+          ? {
+              promptTokens: chunk.usage.prompt_tokens || 0,
+              completionTokens: chunk.usage.completion_tokens || 0,
+              totalTokens: chunk.usage.total_tokens || 0,
+            }
+          : null,
       };
     }
   }

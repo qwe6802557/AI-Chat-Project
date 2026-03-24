@@ -66,6 +66,9 @@ describe('useConversationStore', () => {
               promptTokens: 1,
               completionTokens: 1,
               totalTokens: 2,
+              estimatedInputCost: 0.001,
+              estimatedOutputCost: 0.002,
+              estimatedTotalCost: 0.003,
             },
             attachments: [
               {
@@ -107,6 +110,15 @@ describe('useConversationStore', () => {
       id: 'msg-1-assistant',
       role: 'assistant',
       content: '世界',
+      model: 'GLM-5',
+      usage: {
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        estimatedInputCost: 0.001,
+        estimatedOutputCost: 0.002,
+        estimatedTotalCost: 0.003,
+      },
     })
   })
 
@@ -138,5 +150,60 @@ describe('useConversationStore', () => {
     expect(result).toEqual({ deletedCount: 3 })
     expect(store.conversations).toEqual([])
     expect(store.currentConversationId).toBe('')
+  })
+
+  it('maps session usage summary from server list response', async () => {
+    const { useConversationStore } = await import('@/stores')
+    const store = useConversationStore()
+
+    mockGetSessionList.mockResolvedValue({
+      code: 0,
+      data: [
+        {
+          id: 'session-1',
+          userId: 'user-1',
+          title: '会话',
+          isArchived: false,
+          isDeleted: false,
+          lastMessagePreview: '你好',
+          lastActiveAt: '2026-01-01T00:00:00.000Z',
+          messageCount: 2,
+          usageSummary: {
+            lastModel: 'GLM-5',
+            totalPromptTokens: 100,
+            totalCompletionTokens: 40,
+            totalTokens: 140,
+            totalEstimatedCost: 0.1234,
+          },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      message: 'ok',
+    })
+    mockGetSessionMessages.mockResolvedValue({
+      code: 0,
+      data: {
+        messages: [],
+        total: 0,
+        page: 1,
+        pageSize: 5,
+        totalPages: 0,
+      },
+      message: 'ok',
+    })
+
+    await store.loadFromServer('user-1')
+
+    expect(store.conversations[0]).toMatchObject({
+      id: 'session-1',
+      usageSummary: {
+        lastModel: 'GLM-5',
+        totalPromptTokens: 100,
+        totalCompletionTokens: 40,
+        totalTokens: 140,
+        totalEstimatedCost: 0.1234,
+      },
+    })
   })
 })

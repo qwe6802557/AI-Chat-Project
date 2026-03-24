@@ -12,6 +12,14 @@ import {
 import { User } from '../../user/entities/user.entity';
 import { ChatMessage } from './chat.entity';
 
+export interface ChatSessionUsageSummary {
+  lastModel?: string | null;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+  totalEstimatedCost: number;
+}
+
 /**
  * 聊天会话实体
  * 用于管理用户的多个聊天对话
@@ -94,4 +102,9 @@ export class ChatSession {
    * 消息数量（虚拟字段，通过查询计算）
    */
   messageCount?: number;
+
+  /**
+   * 会话级 usage/cost 汇总（虚拟字段）
+   */
+  usageSummary?: ChatSessionUsageSummary;
 }

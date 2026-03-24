@@ -45,7 +45,19 @@ describe('useStreamChat', () => {
     const close = vi.fn()
     let callbacks: {
       onMessage: (delta: string) => void
-      onComplete: (fullMessage: string, sessionId: string, model: string) => void
+      onComplete: (
+        fullMessage: string,
+        sessionId: string,
+        model: string,
+        usage?: {
+          promptTokens: number
+          completionTokens: number
+          totalTokens: number
+          estimatedInputCost?: number
+          estimatedOutputCost?: number
+          estimatedTotalCost?: number
+        }
+      ) => void
       onError: (error: string) => void
     } | undefined
 

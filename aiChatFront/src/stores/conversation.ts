@@ -16,7 +16,7 @@ import {
   clearAllSessions
 } from '@/api/chat'
 import type { BackendChatSession, BackendChatMessage } from '@/interface/chat'
-import type { Conversation, Message, MessageAttachment } from '@/interface/conversation'
+import type { Conversation, Message, MessageAttachment, MessageUsageStats } from '@/interface/conversation'
 
 // 常量
 
@@ -33,6 +33,25 @@ const mapMimeToAttachmentType = (mimeType: string): MessageAttachment['type'] =>
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType === 'application/pdf') return 'pdf'
   return 'document'
+}
+
+const mapUsage = (
+  usage: BackendChatMessage['usage'] | undefined
+): MessageUsageStats | undefined => {
+  if (!usage) return undefined
+  return {
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    estimatedInputCost: usage.estimatedInputCost,
+    estimatedOutputCost: usage.estimatedOutputCost,
+    estimatedTotalCost: usage.estimatedTotalCost,
+  }
+}
+
+const hasPersistedAttachments = (conversation: Conversation | undefined): boolean => {
+  if (!conversation) return false
+  return conversation.messages.some((message) => (message.attachments?.length || 0) > 0)
 }
 
 /**
@@ -74,7 +93,9 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
         id: `${msg.id}-assistant`,
         role: 'assistant',
         content: msg.aiMessage,
-        timestamp: timestamp + 1
+        timestamp: timestamp + 1,
+        model: msg.model,
+        usage: mapUsage(msg.usage)
       })
     }
   })
@@ -90,6 +111,15 @@ const transformBackendSession = (session: BackendChatSession): Conversation => {
     id: session.id,
     title: session.title,
     messages: [],
+    usageSummary: session.usageSummary
+      ? {
+          lastModel: session.usageSummary.lastModel,
+          totalPromptTokens: session.usageSummary.totalPromptTokens,
+          totalCompletionTokens: session.usageSummary.totalCompletionTokens,
+          totalTokens: session.usageSummary.totalTokens,
+          totalEstimatedCost: session.usageSummary.totalEstimatedCost,
+        }
+      : undefined,
     createdAt: new Date(session.createdAt).getTime(),
     updatedAt: session.lastActiveAt
       ? new Date(session.lastActiveAt).getTime()
@@ -122,6 +152,7 @@ export const useConversationStore = defineStore('conversation', () => {
           return {
             id: conv.id,
             title: conv.title,
+            usageSummary: conv.usageSummary,
             createdAt: conv.createdAt,
             updatedAt: conv.updatedAt,
             sessionId: conv.sessionId,
@@ -130,6 +161,8 @@ export const useConversationStore = defineStore('conversation', () => {
               role: m.role,
               content: m.content,
               timestamp: m.timestamp,
+              model: m.model,
+              usage: m.usage,
               attachments: m.attachments?.map((att) => ({
                 type: att.type,
                 name: att.name,
@@ -335,7 +368,14 @@ export const useConversationStore = defineStore('conversation', () => {
     setCurrentConversationId(id)
 
     const targetConversation = conversations.value.find(c => c.id === id)
-    if (targetConversation && targetConversation.sessionId && targetConversation.messages.length === 0) {
+    if (
+      targetConversation &&
+      targetConversation.sessionId &&
+      (
+        targetConversation.messages.length === 0 ||
+        hasPersistedAttachments(targetConversation)
+      )
+    ) {
       const paginationInfo = await loadMessagesForSession(id)
       saveConversations()
       return paginationInfo

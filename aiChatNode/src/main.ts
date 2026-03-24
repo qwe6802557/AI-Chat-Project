@@ -11,9 +11,9 @@ async function bootstrap() {
     bodyParser: false, // 禁用默认body解析器
   });
 
-  // 增加body大小限制（支持base64图片上传，单张 5MB × 4 张 × 1.33 膨胀 ≈ 28MB）
-  app.useBodyParser('json', { limit: '30mb' });
-  app.useBodyParser('urlencoded', { limit: '30mb', extended: true });
+  // 主聊天链路已收敛为 fileIds，不再接受大体积 base64 附件 JSON
+  app.useBodyParser('json', { limit: '5mb' });
+  app.useBodyParser('urlencoded', { limit: '5mb', extended: true });
 
   // 跨域处理
   app.enableCors({
@@ -60,6 +60,10 @@ async function bootstrap() {
     .addTag('用户管理', '用户相关接口')
     .addTag('聊天会话', '聊天会话管理接口')
     .addTag('聊天消息', '聊天消息相关接口')
+    .addTag(
+      '文件附件',
+      '聊天附件上传与签名访问接口。相关环境变量：FILE_URL_SIGN_SECRET、FILE_URL_TTL_SECONDS',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

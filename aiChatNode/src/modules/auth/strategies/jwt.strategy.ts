@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../../user/user.service';
 
@@ -17,14 +18,22 @@ export interface JwtPayload {
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly userService: UserService) {
+  constructor(
+    private readonly userService: UserService,
+    configService: ConfigService,
+  ) {
+    const secret = configService.get<string>('JWT_SECRET');
+    if (!secret) {
+      throw new Error('JWT_SECRET 环境变量未配置，JWT 策略初始化失败');
+    }
+
     super({
       // 提取 Bearer token
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       // 不忽略过期时间
       ignoreExpiration: false,
-      // JWT 密钥（从环境变量获取，如果没有则使用默认值）
-      secretOrKey: process.env.JWT_SECRET || 'your-secret-key',
+      // JWT 密钥统一由配置中心提供
+      secretOrKey: secret,
     });
   }
 

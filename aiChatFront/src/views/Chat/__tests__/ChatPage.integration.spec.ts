@@ -212,7 +212,19 @@ describe('ChatPage integration', () => {
     let streamCallbacks:
       | {
           onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (fullMessage: string, sessionId: string, model: string) => void
+          onComplete: (
+            fullMessage: string,
+            sessionId: string,
+            model: string,
+            usage?: {
+              promptTokens: number
+              completionTokens: number
+              totalTokens: number
+              estimatedInputCost?: number
+              estimatedOutputCost?: number
+              estimatedTotalCost?: number
+            }
+          ) => void
           onError: (error: string) => void
         }
       | undefined
@@ -248,7 +260,14 @@ describe('ChatPage integration', () => {
     await nextTick()
     await waitForRaf()
 
-    streamCallbacks?.onComplete('世界', 'session-1', 'GLM-5')
+    streamCallbacks?.onComplete('世界', 'session-1', 'GLM-5', {
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+      estimatedInputCost: 0.01,
+      estimatedOutputCost: 0.02,
+      estimatedTotalCost: 0.03,
+    })
     await flushPromises()
 
     expect(wrapper.find('.session-probe').text()).toBe('session-1')
@@ -263,8 +282,17 @@ describe('ChatPage integration', () => {
       role: 'assistant',
       content: '世界',
       streaming: false,
+      model: 'GLM-5',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+        estimatedInputCost: 0.01,
+        estimatedOutputCost: 0.02,
+        estimatedTotalCost: 0.03,
+      },
     })
-  }, 10000)
+  }, 20000)
 
   it('falls back to default model and shows warning when model list loading fails', async () => {
     mockGetActiveModels.mockRejectedValueOnce(new Error('model load failed'))
@@ -358,7 +386,16 @@ describe('ChatPage integration', () => {
     let streamCallbacks:
       | {
           onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (fullMessage: string, sessionId: string, model: string) => void
+          onComplete: (
+            fullMessage: string,
+            sessionId: string,
+            model: string,
+            usage?: {
+              promptTokens: number
+              completionTokens: number
+              totalTokens: number
+            }
+          ) => void
           onError: (error: string) => void
         }
       | undefined
@@ -397,7 +434,16 @@ describe('ChatPage integration', () => {
     let streamCallbacks:
       | {
           onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (fullMessage: string, sessionId: string, model: string) => void
+          onComplete: (
+            fullMessage: string,
+            sessionId: string,
+            model: string,
+            usage?: {
+              promptTokens: number
+              completionTokens: number
+              totalTokens: number
+            }
+          ) => void
           onError: (error: string) => void
         }
       | undefined

@@ -2,6 +2,8 @@ import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 export default registerAs('database', (): TypeOrmModuleOptions => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   return {
     type: (process.env.DB_TYPE as any) || 'postgres',
     host: process.env.DB_HOST || 'localhost',
@@ -10,7 +12,8 @@ export default registerAs('database', (): TypeOrmModuleOptions => {
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_DATABASE || 'postgres',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-    synchronize: process.env.DB_SYNCHRONIZE === 'true' || false,
+    migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
+    synchronize: process.env.DB_SYNCHRONIZE === 'true' && !isProduction,
     logging: process.env.NODE_ENV === 'development',
   };
 });

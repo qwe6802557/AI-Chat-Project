@@ -1,10 +1,10 @@
 import { ref, onBeforeUnmount, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { sendStreamMessage } from '@/api/chat'
-import type { StreamRequestController } from '@/interface/chat'
+import type { StreamChunk, StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores'
 import logger from '@/utils/logger'
-import type { Message, MessageAttachment } from '@/interface/conversation'
+import type { Message, MessageAttachment, MessageUsageStats } from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
 
 /**
@@ -47,6 +47,20 @@ export function useStreamChat() {
       return (crypto as Crypto).randomUUID()
     }
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
+  const mapUsage = (
+    usage: StreamChunk['usage']
+  ): MessageUsageStats | undefined => {
+    if (!usage) return undefined
+    return {
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+      estimatedInputCost: usage.estimatedInputCost,
+      estimatedOutputCost: usage.estimatedOutputCost,
+      estimatedTotalCost: usage.estimatedTotalCost,
+    }
   }
 
   /**
@@ -202,7 +216,12 @@ export function useStreamChat() {
             scheduleFlushDelta()
           },
 
-          onComplete: (fullMessage: string, _sessionId: string, model: string) => {
+          onComplete: (
+            fullMessage: string,
+            _sessionId: string,
+            model: string,
+            usage?: StreamChunk['usage']
+          ) => {
             if (activeRequestId.value !== requestId) return
 
             if (flushRafId !== null) {
@@ -222,10 +241,16 @@ export function useStreamChat() {
                 content: fullMessage,
                 timestamp: Date.now(),
                 streaming: false,
+                model,
+                usage: mapUsage(usage),
               })
             } else {
               conversationStore.updateMessageContentById(sessionId, assistantMessageId, fullMessage, false)
-              conversationStore.patchMessageById(sessionId, assistantMessageId, { streaming: false })
+              conversationStore.patchMessageById(sessionId, assistantMessageId, {
+                streaming: false,
+                model,
+                usage: mapUsage(usage),
+              })
             }
 
             conversationStore.clearMessageAttachmentBase64(sessionId, userMessageId)

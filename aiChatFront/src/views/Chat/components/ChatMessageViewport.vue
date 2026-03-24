@@ -71,6 +71,27 @@
             :content="message.content"
             :streaming="message.streaming"
           />
+          <div
+            v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage)"
+            class="assistant-meta"
+          >
+            <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
+            <span v-if="message.usage" class="meta-chip">
+              输入 {{ message.usage.promptTokens }} tok
+            </span>
+            <span v-if="message.usage" class="meta-chip">
+              输出 {{ message.usage.completionTokens }} tok
+            </span>
+            <span v-if="message.usage" class="meta-chip">
+              总计 {{ message.usage.totalTokens }} tok
+            </span>
+            <span
+              v-if="message.usage?.estimatedTotalCost !== undefined"
+              class="meta-chip cost"
+            >
+              估算 ¥{{ formatCost(message.usage.estimatedTotalCost) }}
+            </span>
+          </div>
           <div v-else class="user-message-content">
             <div v-if="message.attachments?.length" class="message-attachments">
               <a-image-preview-group>
@@ -164,6 +185,10 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+
+const formatCost = (value: number): string => {
+  return value.toFixed(value >= 1 ? 4 : 6)
+}
 
 const hasMoreMessagesComputed = computed(() => props.hasMoreMessages ?? true)
 const hasStreamingAssistantMessage = computed(() =>
@@ -710,6 +735,29 @@ $avatar-size: 32px;
 
         :deep(.streaming-text) {
           opacity: 0.7;
+        }
+      }
+
+      .assistant-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+
+        .meta-chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 2px 8px;
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.05);
+          color: $color-text-secondary;
+          font-size: 12px;
+          line-height: 1.4;
+
+          &.cost {
+            color: #0b7a5c;
+            background: rgba(16, 163, 127, 0.12);
+          }
         }
       }
 

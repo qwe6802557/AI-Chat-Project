@@ -31,15 +31,17 @@ export class AiModel {
   modelId: string;
 
   /**
-   * 输入价格（每千个token的价格，单位：元）
+   * 输入价格
+   * 兼容当前供应商侧的大倍率型数值，保留 6 位小数
    */
-  @Column({ type: 'decimal', precision: 10, scale: 6, default: 0 })
+  @Column({ type: 'decimal', precision: 18, scale: 6, default: 0 })
   inputPrice: number;
 
   /**
-   * 输出价格（每千个token的价格，单位：元）
+   * 输出价格
+   * 兼容当前供应商侧的大倍率型数值，保留 6 位小数
    */
-  @Column({ type: 'decimal', precision: 10, scale: 6, default: 0 })
+  @Column({ type: 'decimal', precision: 18, scale: 6, default: 0 })
   outputPrice: number;
 
   /**

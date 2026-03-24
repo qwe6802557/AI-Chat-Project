@@ -124,6 +124,24 @@ export class AiModelService {
   }
 
   /**
+   * 根据模型ID获取模型-不存在时返回 null
+   */
+  async findByModelIdOrNull(
+    modelId: string,
+    includeProvider = false,
+  ): Promise<AiModel | null> {
+    const query = this.modelRepository.createQueryBuilder('model');
+
+    query.where('model.modelId = :modelId', { modelId });
+
+    if (includeProvider) {
+      query.leftJoinAndSelect('model.provider', 'provider');
+    }
+
+    return query.getOne();
+  }
+
+  /**
    * 更新模型
    */
   async update(id: string, updateModelDto: UpdateModelDto): Promise<AiModel> {

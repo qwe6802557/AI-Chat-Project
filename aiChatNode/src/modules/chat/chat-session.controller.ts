@@ -121,6 +121,13 @@ export class ChatSessionController {
             lastMessagePreview: '你好，请介绍一下你自己',
             lastActiveAt: '2025-11-16T21:10:53.000Z',
             messageCount: 5,
+            usageSummary: {
+              lastModel: 'GLM-5',
+              totalPromptTokens: 1200,
+              totalCompletionTokens: 860,
+              totalTokens: 2060,
+              totalEstimatedCost: 0.3284,
+            },
             createdAt: '2025-11-16T21:10:53.000Z',
             updatedAt: '2025-11-16T21:10:53.000Z',
           },

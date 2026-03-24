@@ -62,6 +62,12 @@
           </template>
         </a-dropdown>
       </div>
+
+      <div v-if="props.conversations.length === 0" class="empty-state">
+        <MessageOutlined class="empty-icon" />
+        <span class="empty-title">暂无会话</span>
+        <span class="empty-description">新建对话后会显示在这里</span>
+      </div>
     </div>
 
     <!-- 底部 -->
@@ -401,6 +407,31 @@ const handleLogout = () => {
           font-size: 14px;
           color: rgba(0, 0, 0, 0.6);
         }
+      }
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 24px 12px;
+      color: rgba(0, 0, 0, 0.45);
+      text-align: center;
+
+      .empty-icon {
+        font-size: 20px;
+      }
+
+      .empty-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(0, 0, 0, 0.62);
+      }
+
+      .empty-description {
+        font-size: 12px;
+        line-height: 1.5;
       }
     }
   }

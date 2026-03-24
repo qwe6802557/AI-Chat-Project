@@ -49,16 +49,24 @@ export interface CompletionOptions {
 }
 
 /**
+ * 用量统计
+ */
+export interface CompletionUsageStats {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedInputCost?: number;
+  estimatedOutputCost?: number;
+  estimatedTotalCost?: number;
+}
+
+/**
  * 补全响应
  */
 export interface CompletionResponse {
   content: string;
   model: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
+  usage: CompletionUsageStats;
 }
 
 /**
@@ -70,4 +78,5 @@ export interface CompletionChunk {
     role?: string;
   };
   finish_reason?: string | null;
+  usage?: CompletionUsageStats | null;
 }

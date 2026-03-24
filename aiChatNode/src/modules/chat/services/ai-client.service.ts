@@ -9,6 +9,7 @@ import {
   CompletionOptions,
   CompletionResponse,
   CompletionChunk,
+  CompletionUsageStats,
 } from '../types/completion.types';
 
 /**
@@ -27,6 +28,26 @@ export class AIClientService {
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
   ) {}
+
+  private buildUsageWithEstimatedCost(
+    usage: CompletionUsageStats,
+    pricing: {
+      inputPrice: number;
+      outputPrice: number;
+    },
+  ): CompletionUsageStats {
+    const estimatedInputCost =
+      (usage.promptTokens / 1000) * Number(pricing.inputPrice || 0);
+    const estimatedOutputCost =
+      (usage.completionTokens / 1000) * Number(pricing.outputPrice || 0);
+
+    return {
+      ...usage,
+      estimatedInputCost,
+      estimatedOutputCost,
+      estimatedTotalCost: estimatedInputCost + estimatedOutputCost,
+    };
+  }
 
   /**
    * 根据供应商选择适配器
@@ -91,7 +112,13 @@ export class AIClientService {
     await this.aiProviderService.incrementAccessCount(model.provider.id);
 
     // 返回结果
-    return completion;
+    return {
+      ...completion,
+      usage: this.buildUsageWithEstimatedCost(completion.usage, {
+        inputPrice: Number(model.inputPrice || 0),
+        outputPrice: Number(model.outputPrice || 0),
+      }),
+    };
   }
 
   /**
@@ -127,11 +154,36 @@ export class AIClientService {
     await this.aiProviderService.incrementAccessCount(model.provider.id);
 
     // 调用适配器
-    return adapter.createStreamChatCompletion(
+    const stream = await adapter.createStreamChatCompletion(
       messages,
       modelId,
       options,
     );
+
+    return this.decorateStreamWithEstimatedCost(stream, {
+      inputPrice: Number(model.inputPrice || 0),
+      outputPrice: Number(model.outputPrice || 0),
+    });
+  }
+
+  private async *decorateStreamWithEstimatedCost(
+    stream: AsyncIterable<CompletionChunk>,
+    pricing: {
+      inputPrice: number;
+      outputPrice: number;
+    },
+  ): AsyncIterable<CompletionChunk> {
+    for await (const chunk of stream) {
+      if (!chunk.usage) {
+        yield chunk;
+        continue;
+      }
+
+      yield {
+        ...chunk,
+        usage: this.buildUsageWithEstimatedCost(chunk.usage, pricing),
+      };
+    }
   }
 
   /**

@@ -81,6 +81,9 @@ export class ChatMessage {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    estimatedInputCost?: number;
+    estimatedOutputCost?: number;
+    estimatedTotalCost?: number;
   };
 
   /**

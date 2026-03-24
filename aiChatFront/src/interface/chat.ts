@@ -12,6 +12,18 @@ export interface BackendAttachment {
 }
 
 /**
+ * 用量统计
+ */
+export interface UsageStats {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  estimatedInputCost?: number
+  estimatedOutputCost?: number
+  estimatedTotalCost?: number
+}
+
+/**
  * 聊天消息
  */
 export interface BackendChatMessage {
@@ -21,11 +33,7 @@ export interface BackendChatMessage {
   userMessage: string
   aiMessage: string
   model: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
+  usage: UsageStats
   attachments?: BackendAttachment[]
   createdAt: string
   updatedAt: string
@@ -43,18 +51,16 @@ export interface BackendChatSession {
   lastMessagePreview: string | null
   lastActiveAt: string | null
   messageCount: number
+  usageSummary?: {
+    lastModel?: string | null
+    totalPromptTokens: number
+    totalCompletionTokens: number
+    totalTokens: number
+    totalEstimatedCost: number
+  }
   createdAt: string
   updatedAt: string
   chatMessages?: BackendChatMessage[]
-}
-
-/**
- * 文件数据接口
- */
-export interface FileDataParam {
-  base64: string
-  type: string
-  name: string
 }
 
 /**
@@ -68,7 +74,6 @@ export interface SendMessageParams {
   temperature?: number
   maxTokens?: number
   fileIds?: string[]
-  files?: FileDataParam[]
 }
 
 /**
@@ -79,11 +84,7 @@ export interface ChatMessageResponse {
   sessionId: string
   message: string
   model: string
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
+  usage: UsageStats
   createdAt: string
 }
 
@@ -96,6 +97,7 @@ export interface StreamChunk {
   sessionId?: string
   message?: string
   model?: string
+  usage?: UsageStats
   error?: string
 }
 

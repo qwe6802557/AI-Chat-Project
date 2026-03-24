@@ -100,6 +100,10 @@
           <span class="progress-text">已使用 {{ creditsPercent }}%</span>
         </div>
       </div>
+
+      <div class="session-stats-section">
+        <ChatStatsPanel :summary="conversationStatsSummary" />
+      </div>
     </div>
   </a-modal>
 </template>
@@ -112,9 +116,12 @@ import {
   WalletOutlined
 } from '@ant-design/icons-vue'
 import AvatarUploader from './AvatarUploader.vue'
+import ChatStatsPanel from './ChatStatsPanel.vue'
+import { useConversationStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import { ROLE_DISPLAY_MAP } from '@/types/user'
 import { formatPhone, formatDate } from '@/utils/common'
+import { buildConversationStatsSummary } from '../utils/conversationInsights'
 
 defineOptions({
   name: 'AccountModal'
@@ -129,9 +136,17 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const conversationStore = useConversationStore()
 
 // 获取用户账户信息
 const userAccount = computed(() => authStore.getMockUserAccount())
+
+const conversationStatsSummary = computed(() =>
+  buildConversationStatsSummary(
+    conversationStore.conversations,
+    conversationStore.conversations,
+  ),
+)
 
 // 积分百分比
 const creditsPercent = computed(() => {
@@ -419,6 +434,10 @@ $color-border: #d0d5dd;
         border-radius: 3px;
       }
     }
+  }
+
+  .session-stats-section {
+    margin-top: 16px;
   }
 }
 </style>

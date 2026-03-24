@@ -26,7 +26,6 @@ export type {
   BackendAttachment,
   BackendChatSession,
   BackendChatMessage,
-  FileDataParam,
   SendMessageParams,
   ChatMessageResponse,
   StreamChunk,
@@ -50,7 +49,12 @@ export function sendStreamMessage(
   data: SendMessageParams,
   callbacks: {
     onMessage: (delta: string, sessionId?: string) => void
-    onComplete: (fullMessage: string, sessionId: string, model: string) => void
+    onComplete: (
+      fullMessage: string,
+      sessionId: string,
+      model: string,
+      usage?: StreamChunk['usage']
+    ) => void
     onError: (error: string) => void
   }
 ): StreamRequestController {
@@ -85,6 +89,8 @@ export function sendStreamMessage(
 
       let fullMessage = ''
       let buffer = ''
+      let latestUsage: StreamChunk['usage'] | undefined
+      let latestModel = data.model || 'GLM-5'
 
       while (true) {
         if (abortController.signal.aborted) {
@@ -114,18 +120,27 @@ export function sendStreamMessage(
                 return
               }
 
+              if (chunk.usage) {
+                latestUsage = chunk.usage
+              }
+
+              if (chunk.model) {
+                latestModel = chunk.model
+              }
+
               // 处理增量内容
               if (chunk.delta) {
                 fullMessage += chunk.delta
                 callbacks.onMessage(chunk.delta, chunk.sessionId)
               }
 
-              // 检查是否完成
-              if (chunk.finish_reason) {
+              // 只在收到最终汇总事件时结束，避免错过 finish_reason 之后的 usage chunk
+              if (chunk.message !== undefined) {
                 callbacks.onComplete(
                   chunk.message || fullMessage,
                   chunk.sessionId || '',
-                  chunk.model || 'GLM-5'
+                  latestModel,
+                  latestUsage
                 )
                 return
               }
@@ -134,6 +149,15 @@ export function sendStreamMessage(
             }
           }
         }
+      }
+
+      if (fullMessage) {
+        callbacks.onComplete(
+          fullMessage,
+          data.sessionId || '',
+          latestModel,
+          latestUsage
+        )
       }
     } catch (error: unknown) {
       // 主动取消-不视为错误
