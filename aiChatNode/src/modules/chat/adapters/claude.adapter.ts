@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
-import { IProviderAdapter } from './provider-adapter.interface';
+import {
+  IProviderAdapter,
+  ProviderHealthCheckResult,
+} from './provider-adapter.interface';
 import {
   ChatMessage,
   CompletionOptions,
@@ -44,6 +47,25 @@ const readString = (value: unknown): string => {
   return typeof value === 'string' ? value : '';
 };
 
+const normalizeProviderError = (
+  providerName: string,
+  error: unknown,
+  context: 'request' | 'health-check',
+): Error => {
+  if (error instanceof OpenAI.APIError) {
+    if (context === 'health-check' && error.status === 404) {
+      return new Error(
+        `${providerName} 健康检查接口不可用：当前 BASE_URL 不支持 /models，请检查兼容路径配置`,
+      );
+    }
+
+    return new Error(`${providerName} API Error: ${error.message}`);
+  }
+
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return error instanceof Error ? error : new Error(errorMessage);
+};
+
 /**
  * Claude AI 适配器
  * 使用 OpenAI SDK 调用第三方 Claude API
@@ -54,6 +76,10 @@ export class ClaudeAdapter implements IProviderAdapter {
   private readonly logger = new Logger(ClaudeAdapter.name);
   private client: OpenAI | null = null;
   private enabled = false;
+
+  get isConfigured(): boolean {
+    return this.enabled;
+  }
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('CLAUDE_API_KEY');
@@ -170,6 +196,32 @@ export class ClaudeAdapter implements IProviderAdapter {
     }
   }
 
+  async healthCheck(options?: {
+    timeoutMs?: number;
+  }): Promise<ProviderHealthCheckResult> {
+    const startTime = Date.now();
+    const abortController = new AbortController();
+    const timeoutMs = options?.timeoutMs ?? 5000;
+    const timeoutHandle = setTimeout(() => abortController.abort(), timeoutMs);
+
+    try {
+      const modelsPage = await this.getClient().models.list({
+        signal: abortController.signal,
+      });
+
+      return {
+        status: 'up',
+        responseTimeMs: Date.now() - startTime,
+        modelCount: modelsPage.data.length,
+        sampleModelId: modelsPage.data[0]?.id,
+      };
+    } catch (error) {
+      throw normalizeProviderError(this.providerName, error, 'health-check');
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
   /**
    * 转换响应格式为统一格式
    */
@@ -221,15 +273,22 @@ export class ClaudeAdapter implements IProviderAdapter {
    * 错误处理
    */
   private handleError(error: unknown): never {
+    const normalizedError = normalizeProviderError(
+      this.providerName,
+      error,
+      'request',
+    );
+
     if (error instanceof OpenAI.APIError) {
       this.logger.error(
         `${this.providerName} API Error: ${error.status} - ${error.message}`,
       );
-      throw new Error(`${this.providerName} API Error: ${error.message}`);
+      throw normalizedError;
     }
 
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    this.logger.error(`${this.providerName} Unexpected error: ${errorMessage}`);
-    throw error instanceof Error ? error : new Error(errorMessage);
+    this.logger.error(
+      `${this.providerName} Unexpected error: ${normalizedError.message}`,
+    );
+    throw normalizedError;
   }
 }

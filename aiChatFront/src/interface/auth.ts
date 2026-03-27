@@ -59,6 +59,7 @@ export interface SendSmsParams {
  */
 export interface SendEmailParams {
   email: string
+  purpose: 'register' | 'reset-password'
 }
 
 /**

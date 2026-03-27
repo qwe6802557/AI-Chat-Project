@@ -8,6 +8,7 @@ import { CaptchaService } from './services/captcha.service';
 import { SmsService } from './services/sms.service';
 import { EmailService } from './services/email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { RedisModule } from '../../common/redis/redis.module';
 import { UserModule } from '../user/user.module';
 
 /**
@@ -19,6 +20,7 @@ import { UserModule } from '../user/user.module';
     ConfigModule,
     // 导入 UserModule 以使用 UserService
     UserModule,
+    RedisModule,
     // 配置 Passport
     PassportModule.register({ defaultStrategy: 'jwt' }),
     // 配置 JWT

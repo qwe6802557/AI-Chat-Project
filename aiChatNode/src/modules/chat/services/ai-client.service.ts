@@ -4,6 +4,7 @@ import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModelService } from '../../ai-provider/ai-model.service';
 import { AiProviderService } from '../../ai-provider/ai-provider.service';
+import { RedisService } from '../../../common/redis/redis.service';
 import {
   ChatMessage,
   CompletionOptions,
@@ -11,6 +12,20 @@ import {
   CompletionChunk,
   CompletionUsageStats,
 } from '../types/completion.types';
+
+export interface ProviderHealthStatus {
+  providerId: string;
+  name: string;
+  isActive: boolean;
+  isConfigured: boolean;
+  status: 'up' | 'down';
+  cached: boolean;
+  checkedAt: string;
+  message?: string;
+  responseTimeMs?: number;
+  modelCount?: number;
+  sampleModelId?: string;
+}
 
 /**
  * AI 客户端统一服务：
@@ -27,7 +42,67 @@ export class AIClientService {
     private readonly zaiwenAdapter: ZaiwenAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
+    private readonly redisService: RedisService,
   ) {}
+
+  private readonly DEFAULT_PROVIDER_HEALTH_CACHE_TTL_SECONDS = 60;
+
+  private buildProviderHealthCacheKey(providerId: string): string {
+    return `health:provider:${providerId}`;
+  }
+
+  private async getCachedProviderHealth(
+    providerId: string,
+  ): Promise<ProviderHealthStatus | null> {
+    try {
+      const cachedValue = await this.redisService.get(
+        this.buildProviderHealthCacheKey(providerId),
+      );
+      if (!cachedValue) {
+        return null;
+      }
+
+      const parsedValue = JSON.parse(cachedValue) as ProviderHealthStatus;
+      if (
+        !parsedValue ||
+        typeof parsedValue !== 'object' ||
+        typeof parsedValue.providerId !== 'string' ||
+        typeof parsedValue.name !== 'string' ||
+        typeof parsedValue.status !== 'string' ||
+        typeof parsedValue.checkedAt !== 'string'
+      ) {
+        return null;
+      }
+
+      return {
+        ...parsedValue,
+        cached: true,
+      };
+    } catch (error) {
+      this.logger.warn(
+        `读取 provider 健康检查缓存失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private async setCachedProviderHealth(
+    providerId: string,
+    value: ProviderHealthStatus,
+    ttlSeconds: number,
+  ): Promise<void> {
+    try {
+      await this.redisService.set(
+        this.buildProviderHealthCacheKey(providerId),
+        JSON.stringify(value),
+        { EX: ttlSeconds },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `写入 provider 健康检查缓存失败: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
 
   private buildUsageWithEstimatedCost(
     usage: CompletionUsageStats,
@@ -191,5 +266,94 @@ export class AIClientService {
    */
   async getAvailableModels() {
     return this.aiModelService.findActiveModels(true);
+  }
+
+  async checkProvidersHealth(options?: {
+    activeOnly?: boolean;
+    timeoutMs?: number;
+    cacheTtlSeconds?: number;
+    bypassCache?: boolean;
+  }): Promise<ProviderHealthStatus[]> {
+    const providers = await this.aiProviderService.findAll(false);
+    const targetProviders =
+      options?.activeOnly === false
+        ? providers
+        : providers.filter((provider) => provider.isActive);
+    const cacheTtlSeconds =
+      options?.cacheTtlSeconds ??
+      this.DEFAULT_PROVIDER_HEALTH_CACHE_TTL_SECONDS;
+
+    return Promise.all(
+      targetProviders.map(async (provider) => {
+        let adapter: IProviderAdapter;
+
+        try {
+          adapter = this.resolveAdapter(provider.name);
+        } catch (error) {
+          const result: ProviderHealthStatus = {
+            providerId: provider.id,
+            name: provider.name,
+            isActive: provider.isActive,
+            isConfigured: false,
+            status: 'down',
+            cached: false,
+            checkedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : String(error),
+          };
+          await this.setCachedProviderHealth(
+            provider.id,
+            result,
+            cacheTtlSeconds,
+          );
+          return result;
+        }
+
+        if (!options?.bypassCache) {
+          const cachedResult = await this.getCachedProviderHealth(provider.id);
+          if (cachedResult) {
+            return cachedResult;
+          }
+        }
+
+        try {
+          const result = await adapter.healthCheck({
+            timeoutMs: options?.timeoutMs,
+          });
+
+          const healthStatus: ProviderHealthStatus = {
+            providerId: provider.id,
+            name: provider.name,
+            isActive: provider.isActive,
+            isConfigured: adapter.isConfigured,
+            cached: false,
+            checkedAt: new Date().toISOString(),
+            ...result,
+          };
+          await this.setCachedProviderHealth(
+            provider.id,
+            healthStatus,
+            cacheTtlSeconds,
+          );
+          return healthStatus;
+        } catch (error) {
+          const result: ProviderHealthStatus = {
+            providerId: provider.id,
+            name: provider.name,
+            isActive: provider.isActive,
+            isConfigured: adapter.isConfigured,
+            status: 'down',
+            cached: false,
+            checkedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : String(error),
+          };
+          await this.setCachedProviderHealth(
+            provider.id,
+            result,
+            cacheTtlSeconds,
+          );
+          return result;
+        }
+      }),
+    );
   }
 }

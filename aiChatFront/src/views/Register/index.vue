@@ -99,7 +99,7 @@
                 autocomplete="off"
               />
               <a-button
-                :disabled="!canSendCode || countdown > 0"
+                :disabled="!canSendCode || countdown > 0 || sendingCode"
                 :loading="sendingCode"
                 @click="handleSendCode"
                 class="send-code-button"
@@ -202,12 +202,15 @@ const handleEmailInput = () => {
 
 // 发送验证码
 const handleSendCode = async () => {
-  if (!canSendCode.value || countdown.value > 0) return
+  if (!canSendCode.value || countdown.value > 0 || sendingCode.value) return
 
   sendingCode.value = true
   try {
     // 调用后端 API 发送验证码
-    const res = await sendEmailCode({ email: formState.email })
+    const res = await sendEmailCode({
+      email: formState.email,
+      purpose: 'register'
+    })
 
     // 发送成功提示
     message.success('验证码已发送到您的邮箱!')
@@ -228,7 +231,6 @@ const handleSendCode = async () => {
     }, 1000)
   } catch (err: any) {
     logger.debug('发送验证码失败:', err)
-    message.error(err?.message || '验证码发送失败，请稍后重试')
   } finally {
     sendingCode.value = false
   }

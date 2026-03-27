@@ -5,11 +5,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AIClientService } from './services/ai-client.service';
 import { CreateChatDto, FileDataDto } from './dto';
 import { ChatMessage as ChatRecord } from './entities/chat.entity';
+import { ChatSession } from './entities/chat-session.entity';
 import { UserService } from '../user/user.service';
 import { ChatSessionService } from './chat-session.service';
 import {
@@ -44,6 +45,11 @@ export type SessionMessageDto = Pick<
   attachments: SessionMessageAttachmentDto[];
 };
 
+interface PersistedChatMessageResult {
+  savedMessage: ChatRecord;
+  sessionId: string;
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
@@ -62,11 +68,74 @@ export class ChatService {
     private readonly aiClientService: AIClientService,
     @InjectRepository(ChatRecord)
     private chatMessageRepository: Repository<ChatRecord>,
+    private readonly dataSource: DataSource,
     private readonly userService: UserService,
     private readonly chatSessionService: ChatSessionService,
     private readonly configService: ConfigService,
     private readonly filesService: FilesService,
   ) {}
+
+  private buildMessagePreview(message: string): string {
+    return message.length > 50 ? `${message.substring(0, 50)}...` : message;
+  }
+
+  private async persistChatMessage(params: {
+    userId: string;
+    sessionId?: string;
+    userMessage: string;
+    aiMessage: string;
+    model: string;
+    usage: CompletionUsageStats;
+    attachmentIds: string[];
+  }): Promise<PersistedChatMessageResult> {
+    return this.dataSource.transaction(async (manager) => {
+      let targetSessionId = params.sessionId;
+      if (!targetSessionId) {
+        const chatSessionRepository = manager.getRepository(ChatSession);
+        const session = chatSessionRepository.create({
+          userId: params.userId,
+          title: '新对话',
+          lastActiveAt: new Date(),
+        });
+        const savedSession = await chatSessionRepository.save(session);
+        targetSessionId = savedSession.id;
+      }
+
+      const chatMessageRepository = manager.getRepository(ChatRecord);
+      const chatMessage = chatMessageRepository.create({
+        userId: params.userId,
+        sessionId: targetSessionId,
+        userMessage: params.userMessage,
+        aiMessage: params.aiMessage,
+        model: params.model,
+        usage: params.usage,
+      });
+
+      const savedMessage = await chatMessageRepository.save(chatMessage);
+
+      if (params.attachmentIds.length > 0) {
+        await this.filesService.bindAttachmentsToMessage(
+          {
+            userId: params.userId,
+            sessionId: targetSessionId,
+            messageId: savedMessage.id,
+            attachmentIds: params.attachmentIds,
+          },
+          manager,
+        );
+      }
+
+      await manager.getRepository(ChatSession).update(targetSessionId, {
+        lastActiveAt: new Date(),
+        lastMessagePreview: this.buildMessagePreview(params.userMessage),
+      });
+
+      return {
+        savedMessage,
+        sessionId: targetSessionId,
+      };
+    });
+  }
 
   /**
    * 获取默认聊天模型
@@ -178,16 +247,8 @@ export class ChatService {
       throw new NotFoundException('用户不存在');
     }
 
-    // 没有提供sessionId-则创建新会话
-    let sessionId = createChatDto.sessionId;
-    if (!sessionId) {
-      this.logger.log('未提供会话ID，创建新会话');
-      const newSession = await this.chatSessionService.create({
-        userId,
-        title: '新对话',
-      });
-      sessionId = newSession.id;
-    } else {
+    const sessionId = createChatDto.sessionId;
+    if (sessionId) {
       // 验证会话是否存在
       await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
@@ -203,7 +264,10 @@ export class ChatService {
     const messages: ChatMessage[] = [];
 
     // 没有提供历史消息-从数据库加载该会话的历史消息
-    if (!createChatDto.history || createChatDto.history.length === 0) {
+    if (
+      sessionId &&
+      (!createChatDto.history || createChatDto.history.length === 0)
+    ) {
       const historyMessages = await this.getSessionHistory(
         userId,
         sessionId,
@@ -215,7 +279,7 @@ export class ChatService {
           { role: 'assistant', content: msg.aiMessage },
         );
       });
-    } else {
+    } else if (createChatDto.history?.length) {
       messages.push(...createChatDto.history);
     }
 
@@ -256,40 +320,22 @@ export class ChatService {
 
     this.logger.log(`AI 回复: ${assistantMessage.substring(0, 50)}...`);
 
-    // 保存聊天记录到数据库
-    const chatMessage = this.chatMessageRepository.create({
-      userId,
-      sessionId: sessionId,
-      userMessage: createChatDto.message,
-      aiMessage: assistantMessage,
-      model: completion.model,
-      usage: completion.usage,
-    });
-
-    const savedMessage = await this.chatMessageRepository.save(chatMessage);
+    const { savedMessage, sessionId: persistedSessionId } =
+      await this.persistChatMessage({
+        userId,
+        sessionId,
+        userMessage: createChatDto.message,
+        aiMessage: assistantMessage,
+        model: completion.model,
+        usage: completion.usage,
+        attachmentIds,
+      });
 
     this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
 
-    // 绑定附件到消息-用于历史回看
-    if (attachmentIds.length > 0) {
-      await this.filesService.bindAttachmentsToMessage({
-        userId,
-        sessionId,
-        messageId: savedMessage.id,
-        attachmentIds,
-      });
-    }
-
-    // 更新最后活跃时间和消息预览
-    const preview =
-      createChatDto.message.length > 50
-        ? createChatDto.message.substring(0, 50) + '...'
-        : createChatDto.message;
-    await this.chatSessionService.updateLastActivity(sessionId, preview);
-
     return {
       id: savedMessage.id,
-      sessionId: sessionId,
+      sessionId: persistedSessionId,
       message: assistantMessage,
       model: completion.model,
       usage: completion.usage,
@@ -447,7 +493,7 @@ export class ChatService {
           { role: 'assistant', content: msg.aiMessage },
         );
       });
-    } else {
+    } else if (createChatDto.history?.length) {
       messages.push(...createChatDto.history);
     }
 
@@ -508,8 +554,7 @@ export class ChatService {
     usage?: CompletionUsageStats,
     attachmentIds?: string[],
   ) {
-    // 保存聊天记录到数据库
-    const chatMessage = this.chatMessageRepository.create({
+    const { savedMessage } = await this.persistChatMessage({
       userId,
       sessionId,
       userMessage,
@@ -520,28 +565,10 @@ export class ChatService {
         completionTokens: 0,
         totalTokens: 0,
       },
+      attachmentIds: attachmentIds || [],
     });
 
-    const savedMessage = await this.chatMessageRepository.save(chatMessage);
-
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);
-
-    // 绑定附件到消息-用于历史回看
-    if (attachmentIds && attachmentIds.length > 0) {
-      await this.filesService.bindAttachmentsToMessage({
-        userId,
-        sessionId,
-        messageId: savedMessage.id,
-        attachmentIds,
-      });
-    }
-
-    // 更新会话的最后活跃时间和消息预览
-    const preview =
-      userMessage.length > 50
-        ? userMessage.substring(0, 50) + '...'
-        : userMessage;
-    await this.chatSessionService.updateLastActivity(sessionId, preview);
 
     return savedMessage;
   }

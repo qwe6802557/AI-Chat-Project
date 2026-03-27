@@ -72,7 +72,7 @@
                 maxlength="6"
               />
               <a-button
-                :disabled="!canSendCode || countdown > 0"
+                :disabled="!canSendCode || countdown > 0 || sendingCode"
                 :loading="sendingCode"
                 @click="handleSendCode"
                 class="send-code-button"
@@ -206,12 +206,15 @@ const handleEmailInput = () => {
 
 // 发送验证码
 const handleSendCode = async () => {
-  if (!canSendCode.value || countdown.value > 0) return
+  if (!canSendCode.value || countdown.value > 0 || sendingCode.value) return
 
   sendingCode.value = true
   try {
     // 发送验证码
-    const res = await sendEmailCode({ email: formState.email })
+    const res = await sendEmailCode({
+      email: formState.email,
+      purpose: 'reset-password'
+    })
 
     message.success('验证码已发送到您的邮箱!')
 

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, Repository } from 'typeorm';
+import { EntityManager, In, IsNull, Repository } from 'typeorm';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { promises as fs } from 'node:fs';
@@ -47,6 +47,14 @@ export class FilesService {
     private readonly configService: ConfigService,
   ) {
     this.validateFileAccessConfig();
+  }
+
+  private getAttachmentRepository(
+    manager?: EntityManager,
+  ): Repository<ChatAttachment> {
+    return manager
+      ? manager.getRepository(ChatAttachment)
+      : this.attachmentRepository;
   }
 
   private isAllowedImageMimeType(mime: string): mime is AllowedImageMimeType {
@@ -492,16 +500,20 @@ export class FilesService {
   /**
    * 将附件绑定到消息（用于历史回看/跨设备同步）
    */
-  async bindAttachmentsToMessage(params: {
-    userId: string;
-    sessionId: string;
-    messageId: string;
-    attachmentIds: string[];
-  }): Promise<void> {
+  async bindAttachmentsToMessage(
+    params: {
+      userId: string;
+      sessionId: string;
+      messageId: string;
+      attachmentIds: string[];
+    },
+    manager?: EntityManager,
+  ): Promise<void> {
     const { attachmentIds } = params;
     if (!attachmentIds || attachmentIds.length === 0) return;
 
-    const result = await this.attachmentRepository.update(
+    const attachmentRepository = this.getAttachmentRepository(manager);
+    const result = await attachmentRepository.update(
       {
         id: In(attachmentIds),
         userId: params.userId,
@@ -514,8 +526,8 @@ export class FilesService {
     );
 
     if (result.affected !== attachmentIds.length) {
-      this.logger.warn(
-        `部分附件绑定失败: expected=${attachmentIds.length}, affected=${result.affected}`,
+      throw new BadRequestException(
+        `附件绑定失败: expected=${attachmentIds.length}, affected=${result.affected ?? 0}`,
       );
     }
   }

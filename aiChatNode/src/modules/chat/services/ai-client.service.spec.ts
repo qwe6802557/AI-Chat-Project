@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import type { AiModelService } from '../../ai-provider/ai-model.service';
 import type { AiProviderService } from '../../ai-provider/ai-provider.service';
+import type { RedisService } from '../../../common/redis/redis.service';
 import type { ClaudeAdapter } from '../adapters/claude.adapter';
 import type { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import type { CompletionChunk } from '../types/completion.types';
@@ -20,25 +21,39 @@ describe('AIClientService', () => {
     jest.fn<ClaudeAdapter['createChatCompletion']>();
   const claudeCreateStreamChatCompletionMock =
     jest.fn<ClaudeAdapter['createStreamChatCompletion']>();
+  const claudeHealthCheckMock = jest.fn<ClaudeAdapter['healthCheck']>();
   const claudeAdapter: Pick<
     ClaudeAdapter,
-    'providerName' | 'createChatCompletion' | 'createStreamChatCompletion'
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
   > = {
     providerName: 'Claude',
+    isConfigured: true,
     createChatCompletion: claudeCreateChatCompletionMock,
     createStreamChatCompletion: claudeCreateStreamChatCompletionMock,
+    healthCheck: claudeHealthCheckMock,
   };
   const zaiwenCreateChatCompletionMock =
     jest.fn<ZaiwenAdapter['createChatCompletion']>();
   const zaiwenCreateStreamChatCompletionMock =
     jest.fn<ZaiwenAdapter['createStreamChatCompletion']>();
+  const zaiwenHealthCheckMock = jest.fn<ZaiwenAdapter['healthCheck']>();
   const zaiwenAdapter: Pick<
     ZaiwenAdapter,
-    'providerName' | 'createChatCompletion' | 'createStreamChatCompletion'
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
   > = {
     providerName: 'Zaiwen',
+    isConfigured: true,
     createChatCompletion: zaiwenCreateChatCompletionMock,
     createStreamChatCompletion: zaiwenCreateStreamChatCompletionMock,
+    healthCheck: zaiwenHealthCheckMock,
   };
   const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
   const aiModelService: Pick<AiModelService, 'findByModelId'> = {
@@ -46,8 +61,19 @@ describe('AIClientService', () => {
   };
   const incrementAccessCountMock =
     jest.fn<AiProviderService['incrementAccessCount']>();
-  const aiProviderService: Pick<AiProviderService, 'incrementAccessCount'> = {
+  const findAllProvidersMock = jest.fn<AiProviderService['findAll']>();
+  const aiProviderService: Pick<
+    AiProviderService,
+    'incrementAccessCount' | 'findAll'
+  > = {
     incrementAccessCount: incrementAccessCountMock,
+    findAll: findAllProvidersMock,
+  };
+  const redisGetMock = jest.fn<RedisService['get']>();
+  const redisSetMock = jest.fn<RedisService['set']>();
+  const redisService: Pick<RedisService, 'get' | 'set'> = {
+    get: redisGetMock,
+    set: redisSetMock,
   };
 
   let service: AIClientService;
@@ -59,6 +85,7 @@ describe('AIClientService', () => {
       zaiwenAdapter as ZaiwenAdapter,
       aiModelService as AiModelService,
       aiProviderService as AiProviderService,
+      redisService as RedisService,
     );
   });
 
@@ -146,5 +173,109 @@ describe('AIClientService', () => {
     await expect(
       service.createStreamChatCompletion('GLM-5', []),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('checks provider health when requested', async () => {
+    findAllProvidersMock.mockResolvedValue([
+      { id: 'provider-1', name: 'Zaiwen', isActive: true },
+      { id: 'provider-2', name: 'Claude', isActive: true },
+    ]);
+    redisGetMock.mockResolvedValue(null);
+    redisSetMock.mockResolvedValue('OK');
+
+    zaiwenHealthCheckMock.mockResolvedValue({
+      status: 'up',
+      responseTimeMs: 120,
+      modelCount: 3,
+      sampleModelId: 'GLM-5',
+    });
+    claudeHealthCheckMock.mockRejectedValue(new Error('provider timeout'));
+
+    const result = await service.checkProvidersHealth({ timeoutMs: 5000 });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      providerId: 'provider-1',
+      name: 'Zaiwen',
+      isActive: true,
+      isConfigured: true,
+      status: 'up',
+      cached: false,
+      responseTimeMs: 120,
+      modelCount: 3,
+      sampleModelId: 'GLM-5',
+    });
+    expect(typeof result[0]?.checkedAt).toBe('string');
+    expect(result[1]).toMatchObject({
+      providerId: 'provider-2',
+      name: 'Claude',
+      isActive: true,
+      isConfigured: true,
+      status: 'down',
+      cached: false,
+      message: 'provider timeout',
+    });
+    expect(typeof result[1]?.checkedAt).toBe('string');
+  });
+
+  it('returns cached provider health when cache hit exists', async () => {
+    findAllProvidersMock.mockResolvedValue([
+      { id: 'provider-1', name: 'Zaiwen', isActive: true },
+    ]);
+    redisGetMock.mockResolvedValue(
+      JSON.stringify({
+        providerId: 'provider-1',
+        name: 'Zaiwen',
+        isActive: true,
+        isConfigured: true,
+        status: 'up',
+        cached: false,
+        checkedAt: '2026-03-27T15:00:00.000Z',
+        responseTimeMs: 80,
+        modelCount: 3,
+      }),
+    );
+
+    await expect(service.checkProvidersHealth()).resolves.toEqual([
+      {
+        providerId: 'provider-1',
+        name: 'Zaiwen',
+        isActive: true,
+        isConfigured: true,
+        status: 'up',
+        cached: true,
+        checkedAt: '2026-03-27T15:00:00.000Z',
+        responseTimeMs: 80,
+        modelCount: 3,
+      },
+    ]);
+
+    expect(zaiwenHealthCheckMock).not.toHaveBeenCalled();
+  });
+
+  it('maps provider health 404 to down status without bubbling adapter noise', async () => {
+    findAllProvidersMock.mockResolvedValue([
+      { id: 'provider-1', name: 'Zaiwen', isActive: true },
+    ]);
+    redisGetMock.mockResolvedValue(null);
+    redisSetMock.mockResolvedValue('OK');
+
+    zaiwenHealthCheckMock.mockRejectedValue(
+      new Error(
+        'Zaiwen 健康检查接口不可用：当前 BASE_URL 不支持 /models，请检查兼容路径配置',
+      ),
+    );
+
+    const result = await service.checkProvidersHealth({ timeoutMs: 3000 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      providerId: 'provider-1',
+      name: 'Zaiwen',
+      status: 'down',
+      cached: false,
+      message:
+        'Zaiwen 健康检查接口不可用：当前 BASE_URL 不支持 /models，请检查兼容路径配置',
+    });
   });
 });

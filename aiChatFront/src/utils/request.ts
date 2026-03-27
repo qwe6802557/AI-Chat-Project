@@ -23,6 +23,19 @@ const AUTH_ENDPOINTS = [
   '/auth/reset-password',
 ]
 
+const GLOBAL_ERROR_MESSAGE_KEY = 'global-request-error'
+
+/**
+ * 使用固定 key 展示错误，避免同类报错短时间内堆叠成多条 toast
+ */
+const showSingletonErrorMessage = (content: string): void => {
+  message.open({
+    key: GLOBAL_ERROR_MESSAGE_KEY,
+    type: 'error',
+    content,
+  })
+}
+
 /**
  * 判断当前请求是否属于认证页公开接口
  */
@@ -78,7 +91,7 @@ request.interceptors.response.use(
     }
 
     // 非成功
-    message.error(msg || '操作失败')
+    showSingletonErrorMessage(msg || '操作失败')
     return Promise.reject(new Error(msg || '操作失败'))
   },
   (error) => {
@@ -90,32 +103,32 @@ request.interceptors.response.use(
       const hasToken = !!authStore.getToken()
       const shouldClearAuth = status === 401 && hasToken && !isPublicAuthRequest(requestUrl)
 
-      switch (status) {
+        switch (status) {
         case 400:
-          message.error(data?.message || '请求参数错误')
+          showSingletonErrorMessage(data?.message || '请求参数错误')
           break
         case 401:
-          message.error(data?.message || '未授权')
+          showSingletonErrorMessage(data?.message || '未授权')
           if (shouldClearAuth) {
             clearUserInfo()
           }
           break
         case 403:
-          message.error('拒绝访问')
+          showSingletonErrorMessage('拒绝访问')
           break
         case 404:
-          message.error('请求的资源不存在')
+          showSingletonErrorMessage('请求的资源不存在')
           break
         case 500:
-          message.error(data?.message || '服务器错误')
+          showSingletonErrorMessage(data?.message || '服务器错误')
           break
         default:
-          message.error(data?.message || '网络错误')
+          showSingletonErrorMessage(data?.message || '网络错误')
       }
     } else if (error.request) {
-      message.error('网络连接失败，请检查网络')
+      showSingletonErrorMessage('网络连接失败，请检查网络')
     } else {
-      message.error(error.message || '请求失败')
+      showSingletonErrorMessage(error.message || '请求失败')
     }
 
     return Promise.reject(error)

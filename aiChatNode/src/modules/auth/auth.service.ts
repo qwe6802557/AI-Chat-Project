@@ -2,7 +2,6 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
-  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -13,7 +12,12 @@ import { toAuthenticatedUser } from './authenticated-user';
 import { CaptchaService } from './services/captcha.service';
 import { SmsService } from './services/sms.service';
 import { EmailService } from './services/email.service';
-import { LoginDto, RegisterDto, ResetPasswordDto } from './dto';
+import {
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  EmailVerificationPurpose,
+} from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 /**
@@ -21,6 +25,10 @@ import { JwtPayload } from './strategies/jwt.strategy';
  */
 @Injectable()
 export class AuthService {
+  private readonly invalidCredentialsMessage = '用户名或密码错误';
+  private readonly resetPasswordFailedMessage =
+    '重置密码失败，请确认邮箱和验证码';
+
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
@@ -36,7 +44,7 @@ export class AuthService {
     const { username, password, captcha, captchaId } = loginDto;
 
     // 验证图片验证码
-    const isCaptchaValid = this.captchaService.verifyCaptcha(
+    const isCaptchaValid = await this.captchaService.verifyCaptcha(
       captchaId,
       captcha,
     );
@@ -47,18 +55,18 @@ export class AuthService {
     // 查找用户
     const user = await this.userService.findByUsername(username);
     if (!user) {
-      throw new UnauthorizedException('用户名不存在');
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
 
     // 验证密码
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('用户名或密码错误');
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
 
     // 检查用户是否被禁用
     if (!user.isActive) {
-      throw new UnauthorizedException('用户已被禁用');
+      throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
 
     // 生成 JWT token
@@ -77,7 +85,7 @@ export class AuthService {
     const { username, password, email, emailCode, phone } = registerDto;
 
     // 验证邮箱验证码
-    const isEmailCodeValid = this.emailService.verifyEmailCode(
+    const isEmailCodeValid = await this.emailService.verifyEmailCode(
       email,
       emailCode,
     );
@@ -154,7 +162,17 @@ export class AuthService {
   /**
    * 发送邮件验证码
    */
-  async sendEmailCode(email: string) {
+  async sendEmailCode(email: string, purpose: EmailVerificationPurpose) {
+    const existingUser = await this.userService.findByEmail(email);
+
+    if (purpose === EmailVerificationPurpose.REGISTER && existingUser) {
+      throw new BadRequestException('该邮箱已注册');
+    }
+
+    if (purpose === EmailVerificationPurpose.RESET_PASSWORD && !existingUser) {
+      throw new BadRequestException('该邮箱未注册');
+    }
+
     return this.emailService.sendEmailCode(email);
   }
 
@@ -165,18 +183,18 @@ export class AuthService {
     const { email, emailCode, newPassword } = resetPasswordDto;
 
     // 验证邮箱验证码
-    const isEmailCodeValid = this.emailService.verifyEmailCode(
+    const isEmailCodeValid = await this.emailService.verifyEmailCode(
       email,
       emailCode,
     );
     if (!isEmailCodeValid) {
-      throw new BadRequestException('邮箱验证码错误或已过期');
+      throw new BadRequestException(this.resetPasswordFailedMessage);
     }
 
     // 查找用户
     const user = await this.userService.findByEmail(email);
     if (!user) {
-      throw new NotFoundException('该邮箱未注册');
+      throw new BadRequestException(this.resetPasswordFailedMessage);
     }
 
     // 加密新密码

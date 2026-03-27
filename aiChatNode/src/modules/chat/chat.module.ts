@@ -10,6 +10,7 @@ import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { RedisModule } from '../../common/redis/redis.module';
 import { UserModule } from '../user/user.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
 import { FilesModule } from '../files/files.module';
@@ -20,6 +21,7 @@ import { FilesModule } from '../files/files.module';
     UserModule,
     AiProviderModule,
     FilesModule, // 导入文件模块
+    RedisModule,
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [
@@ -29,6 +31,6 @@ import { FilesModule } from '../files/files.module';
     ClaudeAdapter, // Claude 适配器
     ZaiwenAdapter, // 在问适配器
   ],
-  exports: [ChatService, ChatSessionService],
+  exports: [ChatService, ChatSessionService, AIClientService],
 })
 export class ChatModule {}

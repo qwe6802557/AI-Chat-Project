@@ -116,8 +116,11 @@ export class AuthController {
       },
     },
   })
-  async sendEmailCode(@Body(ValidationPipe) sendEmailDto: SendEmailDto) {
-    return this.authService.sendEmailCode(sendEmailDto.email);
+  sendEmailCode(@Body(ValidationPipe) sendEmailDto: SendEmailDto) {
+    return this.authService.sendEmailCode(
+      sendEmailDto.email,
+      sendEmailDto.purpose,
+    );
   }
 
   /**
@@ -232,7 +235,7 @@ export class AuthController {
   @Post('reset-password')
   @ApiOperation({
     summary: '重置密码',
-    description: '通过短信验证码重置密码，用于忘记密码场景',
+    description: '通过邮箱验证码重置密码，用于忘记密码场景',
   })
   @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({
@@ -255,7 +258,7 @@ export class AuthController {
       example: {
         code: 1,
         data: null,
-        message: '短信验证码错误或已过期',
+        message: '重置密码失败，请确认邮箱和验证码',
       },
     },
   })
