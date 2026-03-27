@@ -1,6 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import type { Request } from 'express';
 import { ChatSessionController } from './chat-session.controller';
 import { ChatSessionService } from './chat-session.service';
 import { ChatService } from './chat.service';
@@ -34,10 +33,7 @@ describe('ChatSessionController', () => {
 
   it('rejects clearAll when request user does not match body userId', async () => {
     await expect(
-      controller.clearAll(
-        { userId: 'other-user' },
-        { user: { id: 'current-user' } } as unknown as Request,
-      ),
+      controller.clearAll({ userId: 'other-user' }, 'current-user'),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -45,10 +41,7 @@ describe('ChatSessionController', () => {
     chatSessionService.clearAllByUserId.mockResolvedValue({ deletedCount: 3 });
 
     await expect(
-      controller.clearAll(
-        { userId: 'current-user' },
-        { user: { id: 'current-user' } } as unknown as Request,
-      ),
+      controller.clearAll({ userId: 'current-user' }, 'current-user'),
     ).resolves.toEqual({
       message: '已清空所有会话',
       deletedCount: 3,

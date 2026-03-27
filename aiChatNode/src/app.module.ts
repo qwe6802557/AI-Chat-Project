@@ -10,6 +10,7 @@ import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
 import { FilesModule } from './modules/files/files.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import databaseConfig from './config/database.config';
+import { buildDatabaseCoreOptions } from './config/database-options';
 
 @Module({
   imports: [
@@ -29,16 +30,10 @@ import databaseConfig from './config/database.config';
           configService.get('DB_SYNCHRONIZE') === 'true' && !isProduction;
 
         return {
-          type: 'postgres',
-          host: configService.get('DB_HOST'),
-          port: configService.get('DB_PORT'),
-          username: configService.get('DB_USERNAME'),
-          password: configService.get('DB_PASSWORD'),
-          database: configService.get('DB_DATABASE'),
+          ...buildDatabaseCoreOptions(configService),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           synchronize: enableSynchronize,
-          logging: configService.get('NODE_ENV') === 'development',
         };
       },
     }),

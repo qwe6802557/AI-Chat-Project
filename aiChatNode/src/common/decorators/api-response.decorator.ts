@@ -4,7 +4,7 @@ import { ApiResponse } from '@nestjs/swagger';
 /**
  * 统一成功响应装饰器
  */
-export function ApiSuccessResponse(description: string, dataExample?: any) {
+export function ApiSuccessResponse(description: string, dataExample?: unknown) {
   return applyDecorators(
     ApiResponse({
       status: 200,
@@ -19,7 +19,7 @@ export function ApiSuccessResponse(description: string, dataExample?: any) {
           },
           data: {
             type: 'object',
-            example: dataExample || {},
+            example: dataExample ?? {},
             description: '响应数据',
           },
           message: {

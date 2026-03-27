@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UserService } from '../../user/user.service';
+import { toAuthenticatedUser } from '../authenticated-user';
 
 /**
  * JWT Token Payload 接口
@@ -56,8 +57,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     // 返回用户信息（会被注入到 request.user）
-    // 排除密码字段
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    return toAuthenticatedUser(user);
   }
 }

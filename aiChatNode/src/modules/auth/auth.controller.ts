@@ -40,7 +40,7 @@ export class AuthController {
       },
     },
   })
-  async getCaptcha() {
+  getCaptcha() {
     return this.authService.generateCaptcha();
   }
 
@@ -78,7 +78,7 @@ export class AuthController {
       },
     },
   })
-  async sendSmsCode(@Body(ValidationPipe) sendSmsDto: SendSmsDto) {
+  sendSmsCode(@Body(ValidationPipe) sendSmsDto: SendSmsDto) {
     return this.authService.sendSmsCode(sendSmsDto.phone);
   }
 

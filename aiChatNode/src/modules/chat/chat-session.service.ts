@@ -12,6 +12,7 @@ import { UserService } from '../user/user.service';
 @Injectable()
 export class ChatSessionService {
   private readonly logger = new Logger(ChatSessionService.name);
+  private readonly notFoundMessage = '会话不存在';
 
   constructor(
     @InjectRepository(ChatSession)
@@ -23,7 +24,9 @@ export class ChatSessionService {
    * 创建新会话
    */
   async create(createSessionDto: CreateSessionDto): Promise<ChatSession> {
-    this.logger.log(`创建新会话: userId=${createSessionDto.userId}, dto=${JSON.stringify(createSessionDto)}`);
+    this.logger.log(
+      `创建新会话: userId=${createSessionDto.userId}, dto=${JSON.stringify(createSessionDto)}`,
+    );
 
     // 验证 userId 是否有效
     if (!createSessionDto.userId) {
@@ -124,19 +127,29 @@ export class ChatSessionService {
         'session_lastModel',
       );
 
+    interface SessionUsageSummaryRow {
+      session_lastModel: string | null;
+      session_totalPromptTokens: string | number | null;
+      session_totalCompletionTokens: string | number | null;
+      session_totalTokens: string | number | null;
+      session_totalEstimatedCost: string | number | null;
+    }
+
     const { entities, raw } = await queryBuilder
       .orderBy('session.lastActiveAt', 'DESC')
       .addOrderBy('session.createdAt', 'DESC')
-      .getRawAndEntities();
+      .getRawAndEntities<SessionUsageSummaryRow>();
 
     return entities.map((session, index) => {
-      const rawRow = raw[index] || {};
+      const rawRow = raw[index];
       session.usageSummary = {
-        lastModel: rawRow.session_lastModel || null,
-        totalPromptTokens: Number(rawRow.session_totalPromptTokens || 0),
-        totalCompletionTokens: Number(rawRow.session_totalCompletionTokens || 0),
-        totalTokens: Number(rawRow.session_totalTokens || 0),
-        totalEstimatedCost: Number(rawRow.session_totalEstimatedCost || 0),
+        lastModel: rawRow?.session_lastModel || null,
+        totalPromptTokens: Number(rawRow?.session_totalPromptTokens || 0),
+        totalCompletionTokens: Number(
+          rawRow?.session_totalCompletionTokens || 0,
+        ),
+        totalTokens: Number(rawRow?.session_totalTokens || 0),
+        totalEstimatedCost: Number(rawRow?.session_totalEstimatedCost || 0),
       };
 
       return session;
@@ -153,7 +166,7 @@ export class ChatSessionService {
     });
 
     if (!session) {
-      throw new NotFoundException('会话不存在');
+      throw new NotFoundException(this.notFoundMessage);
     }
 
     session.messageCount = session.chatMessages?.length || 0;
@@ -164,13 +177,16 @@ export class ChatSessionService {
    * 根据 ID 获取会话详情（仅限会话所有者）
    * - 不加载 chatMessages 关联，避免长会话导致的性能问题
    */
-  async findByIdForUser(sessionId: string, userId: string): Promise<ChatSession> {
+  async findByIdForUser(
+    sessionId: string,
+    userId: string,
+  ): Promise<ChatSession> {
     const session = await this.chatSessionRepository.findOne({
       where: { id: sessionId, userId, isDeleted: false },
     });
 
     if (!session) {
-      throw new NotFoundException('会话不存在');
+      throw new NotFoundException(this.notFoundMessage);
     }
 
     return session;
@@ -183,7 +199,9 @@ export class ChatSessionService {
     sessionId: string,
     updateSessionDto: UpdateSessionDto,
   ): Promise<ChatSession> {
-    this.logger.log(`更新会话: sessionId=${sessionId}, dto=${JSON.stringify(updateSessionDto)}`);
+    this.logger.log(
+      `更新会话: sessionId=${sessionId}, dto=${JSON.stringify(updateSessionDto)}`,
+    );
 
     // 查询会话（不加载 chatMessages 关联，节省性能）
     const session = await this.chatSessionRepository.findOne({
@@ -191,7 +209,7 @@ export class ChatSessionService {
     });
 
     if (!session) {
-      throw new NotFoundException('会话不存在');
+      throw new NotFoundException(this.notFoundMessage);
     }
 
     // 更新字段
@@ -201,12 +219,11 @@ export class ChatSessionService {
     if (updateSessionDto.isArchived !== undefined) {
       session.isArchived = updateSessionDto.isArchived;
     }
-    if (updateSessionDto.isDeleted !== undefined) {
-      session.isDeleted = updateSessionDto.isDeleted;
-    }
 
     const savedSession = await this.chatSessionRepository.save(session);
-    this.logger.log(`会话更新成功: ${savedSession.id}, title=${savedSession.title}`);
+    this.logger.log(
+      `会话更新成功: ${savedSession.id}, title=${savedSession.title}`,
+    );
 
     return savedSession;
   }
@@ -229,7 +246,14 @@ export class ChatSessionService {
    */
   async delete(sessionId: string): Promise<void> {
     this.logger.log(`删除会话: sessionId=${sessionId}`);
-    await this.update(sessionId, { isDeleted: true });
+    const result = await this.chatSessionRepository.update(
+      { id: sessionId, isDeleted: false },
+      { isDeleted: true },
+    );
+
+    if (!result.affected) {
+      throw new NotFoundException(this.notFoundMessage);
+    }
   }
 
   /**

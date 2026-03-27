@@ -2,6 +2,7 @@ import { PassThrough } from 'node:stream';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { ConfigService } from '@nestjs/config';
+import type { Response } from 'express';
 import type { Repository } from 'typeorm';
 import { FilesService } from './files.service';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
@@ -21,8 +22,9 @@ class MockStreamResponse extends PassThrough {
 }
 
 describe('FilesService', () => {
+  const findOneMock = jest.fn();
   const attachmentRepository = {
-    findOne: jest.fn(),
+    findOne: findOneMock,
   } as unknown as Repository<ChatAttachment>;
 
   const configService = {
@@ -62,24 +64,30 @@ describe('FilesService', () => {
   });
 
   it('rejects file access when signature is invalid', async () => {
-    const res = new MockStreamResponse();
+    const res = new MockStreamResponse() as unknown as Response;
 
-    await service.streamFileById('file-1', res as any, {
+    await service.streamFileById('file-1', res, {
       expires: `${Math.floor(Date.now() / 1000) + 3600}`,
       signature: 'invalid-signature',
     });
 
-    expect(res.statusCodeValue).toBe(403);
-    expect(attachmentRepository.findOne).not.toHaveBeenCalled();
+    expect((res as unknown as MockStreamResponse).statusCodeValue).toBe(403);
+    expect(findOneMock).not.toHaveBeenCalled();
   });
 
   it('streams file when signature is valid', async () => {
     const storagePath = 'chat/2099/01/demo.webp';
-    const absolutePath = path.join(uploadsRoot, 'chat', '2099', '01', 'demo.webp');
+    const absolutePath = path.join(
+      uploadsRoot,
+      'chat',
+      '2099',
+      '01',
+      'demo.webp',
+    );
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, 'signed-file-content', 'utf8');
 
-    attachmentRepository.findOne = jest.fn().mockResolvedValue({
+    findOneMock.mockResolvedValue({
       id: 'file-1',
       storagePath,
       storageMime: 'image/webp',
@@ -91,9 +99,9 @@ describe('FilesService', () => {
 
     const res = new MockStreamResponse();
     const chunks: Buffer[] = [];
-    res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    res.on('data', (chunk: Buffer) => chunks.push(chunk));
 
-    await service.streamFileById('file-1', res as any, {
+    await service.streamFileById('file-1', res as unknown as Response, {
       expires: url.searchParams.get('expires') || undefined,
       signature: url.searchParams.get('signature') || undefined,
     });
@@ -105,7 +113,7 @@ describe('FilesService', () => {
     expect(Buffer.concat(chunks).toString('utf8')).toBe('signed-file-content');
   });
 
-  it('throws when ttl config is invalid', async () => {
+  it('throws when ttl config is invalid', () => {
     const invalidConfigService = {
       get: jest.fn((key: string) => {
         const values: Record<string, string> = {
@@ -121,7 +129,7 @@ describe('FilesService', () => {
     ).toThrow('FILE_URL_TTL_SECONDS 必须是大于 0 的整数秒数');
   });
 
-  it('requires dedicated sign secret in production', async () => {
+  it('requires dedicated sign secret in production', () => {
     const productionConfigService = {
       get: jest.fn((key: string) => {
         const values: Record<string, string> = {

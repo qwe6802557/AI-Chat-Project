@@ -9,7 +9,6 @@ import {
   UseInterceptors,
   Res,
   UseGuards,
-  Req,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -19,8 +18,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { memoryStorage } from 'multer';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { FilesService } from './files.service';
 
@@ -55,7 +55,8 @@ export class FilesController {
         fileSize: FilesService.MAX_FILE_SIZE_BYTES,
       },
       fileFilter: (_req, file, cb) => {
-        const allowedTypes: readonly string[] = FilesService.ALLOWED_IMAGE_MIME_TYPES;
+        const allowedTypes: readonly string[] =
+          FilesService.ALLOWED_IMAGE_MIME_TYPES;
         if (!allowedTypes.includes(file.mimetype)) {
           return cb(
             new BadRequestException(`不支持的文件类型: ${file.mimetype}`),
@@ -68,13 +69,11 @@ export class FilesController {
   )
   async uploadImages(
     @UploadedFiles() files: Express.Multer.File[],
-    @Req() req: Request,
+    @CurrentUser('id') userId?: string,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException('请至少上传 1 张图片');
     }
-
-    const userId = (req.user as any)?.id as string | undefined;
     return this.filesService.saveUploadedImages(userId, files);
   }
 

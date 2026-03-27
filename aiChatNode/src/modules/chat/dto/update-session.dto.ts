@@ -24,14 +24,4 @@ export class UpdateSessionDto {
     required: false,
   })
   isArchived?: boolean;
-
-  /**
-   * 是否删除（软删除）
-   */
-  @ApiProperty({
-    description: '是否删除（软删除）',
-    example: false,
-    required: false,
-  })
-  isDeleted?: boolean;
 }

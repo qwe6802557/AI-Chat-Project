@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Observable } from 'rxjs';
+import type { AuthenticatedUser } from '../authenticated-user';
 
 /**
  * JWT 认证守卫
@@ -23,11 +24,25 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   /**
    * 处理认证失败的情况
    */
-  handleRequest(err: any, user: any, info: any) {
+  handleRequest<TUser = AuthenticatedUser>(
+    err: unknown,
+    user: AuthenticatedUser | false | null,
+    info: unknown,
+    context: ExecutionContext,
+    status?: unknown,
+  ): TUser {
+    void info;
+    void context;
+    void status;
+
     // 抛出未授权异常
     if (err || !user) {
-      throw err || new UnauthorizedException('未授权，请先登录');
+      if (err instanceof Error) {
+        throw err;
+      }
+
+      throw new UnauthorizedException('未授权，请先登录');
     }
-    return user;
+    return user as TUser;
   }
 }

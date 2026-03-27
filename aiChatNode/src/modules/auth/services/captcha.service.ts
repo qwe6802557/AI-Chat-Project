@@ -34,7 +34,8 @@ export class CaptchaService {
       width: 100,
       height: 40,
       fontSize: 50,
-      charPreset: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+      charPreset:
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
     });
 
     // 生成唯一 ID
@@ -101,4 +102,3 @@ export class CaptchaService {
     return this.captchaStore.size;
   }
 }
-

@@ -21,6 +21,12 @@ export interface UploadedImageResult {
   height?: number | null;
 }
 
+type AllowedImageMimeType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'image/gif';
+
 @Injectable()
 export class FilesService {
   static readonly MAX_FILES = 4;
@@ -43,6 +49,12 @@ export class FilesService {
     this.validateFileAccessConfig();
   }
 
+  private isAllowedImageMimeType(mime: string): mime is AllowedImageMimeType {
+    return (
+      FilesService.ALLOWED_IMAGE_MIME_TYPES as readonly string[]
+    ).includes(mime);
+  }
+
   private getUploadRoot(): string {
     const configured = process.env.UPLOAD_DIR?.trim();
     const root = configured ? configured : 'uploads';
@@ -50,7 +62,8 @@ export class FilesService {
   }
 
   private validateFileAccessConfig(): void {
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
     const signSecret = this.configService.get<string>('FILE_URL_SIGN_SECRET');
     const jwtSecret = this.configService.get<string>('JWT_SECRET');
     const ttlRaw = this.configService.get<string>('FILE_URL_TTL_SECONDS');
@@ -240,13 +253,15 @@ export class FilesService {
   private parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
     const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || '');
     if (!match) {
-      throw new BadRequestException('非法的 base64 数据（必须是 data:*;base64, 前缀）');
+      throw new BadRequestException(
+        '非法的 base64 数据（必须是 data:*;base64, 前缀）',
+      );
     }
 
     const mime = match[1] || '';
     const base64 = match[2] || '';
 
-    if (!FilesService.ALLOWED_IMAGE_MIME_TYPES.includes(mime as any)) {
+    if (!this.isAllowedImageMimeType(mime)) {
       throw new BadRequestException(`不支持的文件类型: ${mime}`);
     }
 
@@ -290,13 +305,15 @@ export class FilesService {
     }
 
     if (files.length > FilesService.MAX_FILES) {
-      throw new BadRequestException(`最多只能上传 ${FilesService.MAX_FILES} 张图片`);
+      throw new BadRequestException(
+        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+      );
     }
 
     const results: UploadedImageResult[] = [];
 
     for (const file of files) {
-      if (!FilesService.ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype as any)) {
+      if (!this.isAllowedImageMimeType(file.mimetype)) {
         throw new BadRequestException(`不支持的文件类型: ${file.mimetype}`);
       }
 
@@ -307,9 +324,8 @@ export class FilesService {
       }
 
       const processed = await this.processImageBuffer(file);
-      const { storagePath, absoluteDir, absolutePath } = this.buildStoragePath(
-        'webp',
-      );
+      const { storagePath, absoluteDir, absolutePath } =
+        this.buildStoragePath('webp');
 
       await fs.mkdir(absoluteDir, { recursive: true });
       await fs.writeFile(absolutePath, processed.buffer, { flag: 'wx' });
@@ -344,7 +360,9 @@ export class FilesService {
     }
 
     if (files.length > FilesService.MAX_FILES) {
-      throw new BadRequestException(`最多只能上传 ${FilesService.MAX_FILES} 张图片`);
+      throw new BadRequestException(
+        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+      );
     }
 
     const attachmentIds: string[] = [];
@@ -361,9 +379,8 @@ export class FilesService {
       }
 
       const processed = await this.processImageRawBuffer(buffer);
-      const { storagePath, absoluteDir, absolutePath } = this.buildStoragePath(
-        'webp',
-      );
+      const { storagePath, absoluteDir, absolutePath } =
+        this.buildStoragePath('webp');
 
       await fs.mkdir(absoluteDir, { recursive: true });
       await fs.writeFile(absolutePath, processed.buffer, { flag: 'wx' });
@@ -405,7 +422,9 @@ export class FilesService {
     }
 
     if (fileIds.length > FilesService.MAX_FILES) {
-      throw new BadRequestException(`最多只能上传 ${FilesService.MAX_FILES} 张图片`);
+      throw new BadRequestException(
+        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+      );
     }
 
     const attachments = await this.attachmentRepository.find({
@@ -453,7 +472,9 @@ export class FilesService {
     const inlineFiles = params.files || [];
 
     if (fileIds.length + inlineFiles.length > FilesService.MAX_FILES) {
-      throw new BadRequestException(`最多只能上传 ${FilesService.MAX_FILES} 张图片`);
+      throw new BadRequestException(
+        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+      );
     }
 
     const fromIds = await this.getImageDataForAIByIds(params.userId, fileIds);
@@ -532,10 +553,7 @@ export class FilesService {
     }
 
     res.setHeader('Content-Type', attachment.storageMime);
-    res.setHeader(
-      'Cache-Control',
-      'private, max-age=3600',
-    );
+    res.setHeader('Cache-Control', 'private, max-age=3600');
     res.setHeader('Content-Length', String(attachment.sizeBytes));
     res.setHeader('Content-Disposition', 'inline');
 

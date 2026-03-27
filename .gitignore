@@ -48,6 +48,7 @@ logs/
 *.tmp
 *.temp
 .cache/
+.codex/
 
 # ===== 操作系统文件 =====
 Thumbs.db

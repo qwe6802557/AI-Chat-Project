@@ -6,8 +6,12 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ResponseDto } from '../dto/response.dto';
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null;
+};
 
 /**
  * 统一异常过滤器
@@ -20,10 +24,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest();
+    const request = ctx.getRequest<Request>();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = '服务器内部错误';
+    let message: string | string[] = '服务器内部错误';
 
     // 处理 HttpException
     if (exception instanceof HttpException) {
@@ -32,21 +36,26 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
-      } else if (typeof exceptionResponse === 'object') {
-        message =
-          (exceptionResponse as any).message ||
-          (exceptionResponse as any).error ||
-          message;
+      } else if (isRecord(exceptionResponse)) {
+        const errorMessage = exceptionResponse.message;
+        const errorType = exceptionResponse.error;
 
-        // 如果 message 是数组（如验证错误），取第一个
-        if (Array.isArray(message)) {
-          message = message[0];
+        if (Array.isArray(errorMessage)) {
+          message = errorMessage;
+        } else if (typeof errorMessage === 'string') {
+          message = errorMessage;
+        } else if (typeof errorType === 'string') {
+          message = errorType;
         }
       }
     }
     // 处理普通 Error
     else if (exception instanceof Error) {
       message = exception.message;
+    }
+
+    if (Array.isArray(message)) {
+      message = message[0] || '服务器内部错误';
     }
 
     // 记录错误日志

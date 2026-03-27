@@ -168,12 +168,24 @@ export class InitSchema1774317600000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_attachments_user_session_id";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_attachments_user_message_id";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_messages_user_created_at";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_messages_session_created_at";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_sessions_user_deleted_archived";`);
-    await queryRunner.query(`DROP INDEX IF EXISTS "idx_chat_sessions_user_last_active_at";`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_attachments_user_session_id";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_attachments_user_message_id";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_messages_user_created_at";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_messages_session_created_at";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_sessions_user_deleted_archived";`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS "idx_chat_sessions_user_last_active_at";`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS "chat_attachments";`);
     await queryRunner.query(`DROP TABLE IF EXISTS "chat_messages";`);
     await queryRunner.query(`DROP TABLE IF EXISTS "chat_sessions";`);

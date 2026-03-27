@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsUUID, IsOptional, IsString, IsBoolean, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsUUID,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * 更新聊天会话请求 DTO（用于 API Body）
@@ -42,17 +49,4 @@ export class UpdateSessionBodyDto {
   @IsOptional()
   @IsBoolean({ message: 'isArchived 必须是布尔值' })
   isArchived?: boolean;
-
-  /**
-   * 是否删除（软删除）
-   */
-  @ApiProperty({
-    description: '是否删除（软删除）',
-    example: false,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean({ message: 'isDeleted 必须是布尔值' })
-  isDeleted?: boolean;
 }
-

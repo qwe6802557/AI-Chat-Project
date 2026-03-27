@@ -9,6 +9,41 @@ import {
   CompletionChunk,
 } from '../types/completion.types';
 
+interface ProviderUsageLike {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
+interface ProviderChoiceLike {
+  message?: {
+    content?: unknown;
+  };
+  delta?: {
+    content?: unknown;
+    role?: unknown;
+  };
+  finish_reason?: string | null;
+}
+
+interface ProviderCompletionLike {
+  choices?: ProviderChoiceLike[];
+  model?: string;
+  usage?: ProviderUsageLike | null;
+}
+
+const asProviderCompletionLike = (value: unknown): ProviderCompletionLike => {
+  if (typeof value !== 'object' || value === null) {
+    return {};
+  }
+
+  return value as ProviderCompletionLike;
+};
+
+const readString = (value: unknown): string => {
+  return typeof value === 'string' ? value : '';
+};
+
 /**
  * 在问 AI 适配器
  * 使用 OpenAI SDK 对接在问提供的 OpenAI 兼容接口
@@ -25,7 +60,9 @@ export class ZaiwenAdapter implements IProviderAdapter {
     const baseURL = this.configService.get<string>('ZAIWEN_BASE_URL');
 
     if (!apiKey || !baseURL) {
-      this.logger.warn('Zaiwen 适配器未启用：ZAIWEN_API_KEY 或 ZAIWEN_BASE_URL 缺失');
+      this.logger.warn(
+        'Zaiwen 适配器未启用：ZAIWEN_API_KEY 或 ZAIWEN_BASE_URL 缺失',
+      );
       return;
     }
 
@@ -134,14 +171,17 @@ export class ZaiwenAdapter implements IProviderAdapter {
   /**
    * 转换响应格式为统一格式
    */
-  private transformResponse(completion: any): CompletionResponse {
+  private transformResponse(completion: unknown): CompletionResponse {
+    const normalizedCompletion = asProviderCompletionLike(completion);
+    const firstChoice = normalizedCompletion.choices?.[0];
+
     return {
-      content: completion.choices[0]?.message?.content || '',
-      model: completion.model,
+      content: readString(firstChoice?.message?.content),
+      model: normalizedCompletion.model || '',
       usage: {
-        promptTokens: completion.usage?.prompt_tokens || 0,
-        completionTokens: completion.usage?.completion_tokens || 0,
-        totalTokens: completion.usage?.total_tokens || 0,
+        promptTokens: normalizedCompletion.usage?.prompt_tokens || 0,
+        completionTokens: normalizedCompletion.usage?.completion_tokens || 0,
+        totalTokens: normalizedCompletion.usage?.total_tokens || 0,
       },
     };
   }
@@ -150,23 +190,25 @@ export class ZaiwenAdapter implements IProviderAdapter {
    * 转换流式响应为统一格式
    */
   private async *transformStream(
-    stream: AsyncIterable<any>,
+    stream: AsyncIterable<unknown>,
   ): AsyncIterable<CompletionChunk> {
     for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-      const finishReason = chunk.choices[0]?.finish_reason;
+      const normalizedChunk = asProviderCompletionLike(chunk);
+      const firstChoice = normalizedChunk.choices?.[0];
+      const delta = firstChoice?.delta;
+      const finishReason = firstChoice?.finish_reason;
 
       yield {
         delta: {
-          content: delta?.content || '',
-          role: delta?.role,
+          content: readString(delta?.content),
+          role: typeof delta?.role === 'string' ? delta.role : undefined,
         },
         finish_reason: finishReason,
-        usage: chunk.usage
+        usage: normalizedChunk.usage
           ? {
-              promptTokens: chunk.usage.prompt_tokens || 0,
-              completionTokens: chunk.usage.completion_tokens || 0,
-              totalTokens: chunk.usage.total_tokens || 0,
+              promptTokens: normalizedChunk.usage.prompt_tokens || 0,
+              completionTokens: normalizedChunk.usage.completion_tokens || 0,
+              totalTokens: normalizedChunk.usage.total_tokens || 0,
             }
           : null,
       };
@@ -176,7 +218,7 @@ export class ZaiwenAdapter implements IProviderAdapter {
   /**
    * 错误处理
    */
-  private handleError(error: any): never {
+  private handleError(error: unknown): never {
     if (error instanceof OpenAI.APIError) {
       this.logger.error(
         `${this.providerName} API Error: ${error.status} - ${error.message}`,
@@ -184,9 +226,8 @@ export class ZaiwenAdapter implements IProviderAdapter {
       throw new Error(`${this.providerName} API Error: ${error.message}`);
     }
 
-    this.logger.error(
-      `${this.providerName} Unexpected error: ${error.message}`,
-    );
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    this.logger.error(`${this.providerName} Unexpected error: ${errorMessage}`);
+    throw error instanceof Error ? error : new Error(errorMessage);
   }
 }

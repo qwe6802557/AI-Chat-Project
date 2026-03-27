@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { AuthenticatedRequest } from '../../modules/auth/authenticated-user';
 import { UserRole } from '../../modules/user/entities/user.entity';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
@@ -36,7 +37,7 @@ export class RolesGuard implements CanActivate {
     }
 
     // 获取当前请求的用户信息
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
     // 如果用户不存在（未登录），则拒绝访问

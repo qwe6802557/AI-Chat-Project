@@ -25,7 +25,11 @@ export interface ChatSessionUsageSummary {
  * 用于管理用户的多个聊天对话
  */
 @Index('idx_chat_sessions_user_last_active_at', ['userId', 'lastActiveAt'])
-@Index('idx_chat_sessions_user_deleted_archived', ['userId', 'isDeleted', 'isArchived'])
+@Index('idx_chat_sessions_user_deleted_archived', [
+  'userId',
+  'isDeleted',
+  'isArchived',
+])
 @Entity('chat_sessions')
 export class ChatSession {
   @PrimaryGeneratedColumn('uuid')

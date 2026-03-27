@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Matches, MinLength, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * 登录 DTO
@@ -70,4 +76,3 @@ export class LoginDto {
   @IsString({ message: '验证码ID必须是字符串' })
   captchaId: string;
 }
-

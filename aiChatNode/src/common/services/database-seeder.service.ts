@@ -7,9 +7,9 @@ import { ZAIWEN_CHAT_MODEL_SEEDS } from '../../modules/ai-provider/constants/zai
 
 interface SeedSummary {
   createdProviders: number;
-  updatedProviders: number;
+  skippedProviders: number;
   createdModels: number;
-  updatedModels: number;
+  skippedModels: number;
 }
 
 /**
@@ -39,7 +39,7 @@ export class DatabaseSeederService implements OnModuleInit {
 
       const summary = await this.seedAiProviders();
       this.logger.log(
-        `AI 种子校验完成: 新建供应商 ${summary.createdProviders} 个，更新供应商 ${summary.updatedProviders} 个，新建模型 ${summary.createdModels} 个，更新模型 ${summary.updatedModels} 个`,
+        `AI 种子校验完成: 新建供应商 ${summary.createdProviders} 个，跳过已存在供应商 ${summary.skippedProviders} 个，新建模型 ${summary.createdModels} 个，跳过已存在模型 ${summary.skippedModels} 个`,
       );
 
       this.logger.log('数据库初始化完成！');
@@ -62,9 +62,9 @@ export class DatabaseSeederService implements OnModuleInit {
 
     const summary: SeedSummary = {
       createdProviders: 0,
-      updatedProviders: 0,
+      skippedProviders: 0,
       createdModels: 0,
-      updatedModels: 0,
+      skippedModels: 0,
     };
 
     const claudeProviderResult = await this.ensureProvider({
@@ -73,7 +73,7 @@ export class DatabaseSeederService implements OnModuleInit {
       website: 'https://anthropic.com',
     });
     summary[
-      claudeProviderResult.created ? 'createdProviders' : 'updatedProviders'
+      claudeProviderResult.created ? 'createdProviders' : 'skippedProviders'
     ] += 1;
 
     const claudeModelResult = await this.ensureModel({
@@ -88,7 +88,9 @@ export class DatabaseSeederService implements OnModuleInit {
       tps: 100,
       description: 'Anthropic 的兼容接入模型',
     });
-    summary[claudeModelResult === 'created' ? 'createdModels' : 'updatedModels'] += 1;
+    summary[
+      claudeModelResult === 'created' ? 'createdModels' : 'skippedModels'
+    ] += 1;
 
     const zaiwenProviderResult = await this.ensureProvider({
       name: 'Zaiwen',
@@ -96,7 +98,7 @@ export class DatabaseSeederService implements OnModuleInit {
       website: 'https://www.zaiwenai.com',
     });
     summary[
-      zaiwenProviderResult.created ? 'createdProviders' : 'updatedProviders'
+      zaiwenProviderResult.created ? 'createdProviders' : 'skippedProviders'
     ] += 1;
 
     for (const model of ZAIWEN_CHAT_MODEL_SEEDS) {
@@ -112,7 +114,7 @@ export class DatabaseSeederService implements OnModuleInit {
         tps: 0,
         description: `在问官方支持模型，输入倍率 ${model.inputMultiplier}，输出倍率 ${model.outputMultiplier}`,
       });
-      summary[result === 'created' ? 'createdModels' : 'updatedModels'] += 1;
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
 
     return summary;
@@ -130,15 +132,9 @@ export class DatabaseSeederService implements OnModuleInit {
       payload.name,
     );
     if (existingProvider) {
-      await this.aiProviderService.update(existingProvider.id, {
-        description: payload.description,
-        website: payload.website,
-        isActive: true,
-      });
-
-      this.logger.log(`供应商已存在，已校准配置: ${payload.name}`);
+      this.logger.log(`供应商已存在，跳过覆盖: ${payload.name}`);
       return {
-        provider: await this.aiProviderService.findOne(existingProvider.id),
+        provider: existingProvider,
         created: false,
       };
     }
@@ -168,27 +164,14 @@ export class DatabaseSeederService implements OnModuleInit {
     availability: number;
     tps: number;
     description: string;
-  }): Promise<'created' | 'updated'> {
+  }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,
     );
 
     if (existingModel) {
-      await this.aiModelService.update(existingModel.id, {
-        providerId: payload.providerId,
-        modelName: payload.modelName,
-        inputPrice: payload.inputPrice,
-        outputPrice: payload.outputPrice,
-        contextLength: payload.contextLength,
-        maxOutput: payload.maxOutput,
-        availability: payload.availability,
-        tps: payload.tps,
-        description: payload.description,
-        isActive: true,
-      });
-
-      this.logger.log(`模型已存在，已校准配置: ${payload.modelId}`);
-      return 'updated';
+      this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
+      return 'skipped';
     }
 
     await this.aiModelService.create({

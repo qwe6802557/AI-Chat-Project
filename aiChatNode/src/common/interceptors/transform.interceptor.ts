@@ -17,11 +17,11 @@ export class TransformInterceptor<T>
   implements NestInterceptor<T, ResponseDto<T>>
 {
   intercept(
-    context: ExecutionContext,
+    _context: ExecutionContext,
     next: CallHandler,
   ): Observable<ResponseDto<T>> {
     return next.handle().pipe(
-      map((data) => {
+      map((data: T | ResponseDto<T>): ResponseDto<T> => {
         // 如果返回的数据已经是 ResponseDto 格式 直接返回
         if (data instanceof ResponseDto) {
           return data;

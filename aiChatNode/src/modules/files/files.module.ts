@@ -11,4 +11,3 @@ import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
   exports: [FilesService],
 })
 export class FilesModule {}
-

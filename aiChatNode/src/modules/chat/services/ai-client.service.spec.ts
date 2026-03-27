@@ -1,20 +1,53 @@
 import { BadRequestException } from '@nestjs/common';
+import type { AiModelService } from '../../ai-provider/ai-model.service';
+import type { AiProviderService } from '../../ai-provider/ai-provider.service';
+import type { ClaudeAdapter } from '../adapters/claude.adapter';
+import type { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
+import type { CompletionChunk } from '../types/completion.types';
 import { AIClientService } from './ai-client.service';
 
+async function* createAsyncChunks(
+  chunks: CompletionChunk[],
+): AsyncIterable<CompletionChunk> {
+  for (const chunk of chunks) {
+    await Promise.resolve();
+    yield chunk;
+  }
+}
+
 describe('AIClientService', () => {
-  const claudeAdapter = {
-    createChatCompletion: jest.fn(),
-    createStreamChatCompletion: jest.fn(),
+  const claudeCreateChatCompletionMock =
+    jest.fn<ClaudeAdapter['createChatCompletion']>();
+  const claudeCreateStreamChatCompletionMock =
+    jest.fn<ClaudeAdapter['createStreamChatCompletion']>();
+  const claudeAdapter: Pick<
+    ClaudeAdapter,
+    'providerName' | 'createChatCompletion' | 'createStreamChatCompletion'
+  > = {
+    providerName: 'Claude',
+    createChatCompletion: claudeCreateChatCompletionMock,
+    createStreamChatCompletion: claudeCreateStreamChatCompletionMock,
   };
-  const zaiwenAdapter = {
-    createChatCompletion: jest.fn(),
-    createStreamChatCompletion: jest.fn(),
+  const zaiwenCreateChatCompletionMock =
+    jest.fn<ZaiwenAdapter['createChatCompletion']>();
+  const zaiwenCreateStreamChatCompletionMock =
+    jest.fn<ZaiwenAdapter['createStreamChatCompletion']>();
+  const zaiwenAdapter: Pick<
+    ZaiwenAdapter,
+    'providerName' | 'createChatCompletion' | 'createStreamChatCompletion'
+  > = {
+    providerName: 'Zaiwen',
+    createChatCompletion: zaiwenCreateChatCompletionMock,
+    createStreamChatCompletion: zaiwenCreateStreamChatCompletionMock,
   };
-  const aiModelService = {
-    findByModelId: jest.fn(),
+  const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
+  const aiModelService: Pick<AiModelService, 'findByModelId'> = {
+    findByModelId: findByModelIdMock,
   };
-  const aiProviderService = {
-    incrementAccessCount: jest.fn(),
+  const incrementAccessCountMock =
+    jest.fn<AiProviderService['incrementAccessCount']>();
+  const aiProviderService: Pick<AiProviderService, 'incrementAccessCount'> = {
+    incrementAccessCount: incrementAccessCountMock,
   };
 
   let service: AIClientService;
@@ -22,22 +55,22 @@ describe('AIClientService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new AIClientService(
-      claudeAdapter as any,
-      zaiwenAdapter as any,
-      aiModelService as any,
-      aiProviderService as any,
+      claudeAdapter as ClaudeAdapter,
+      zaiwenAdapter as ZaiwenAdapter,
+      aiModelService as AiModelService,
+      aiProviderService as AiProviderService,
     );
   });
 
   it('decorates non-stream usage with estimated cost', async () => {
-    aiModelService.findByModelId.mockResolvedValue({
+    findByModelIdMock.mockResolvedValue({
       isActive: true,
       inputPrice: 0.5,
       outputPrice: 2,
       provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
       modelName: 'GLM-5',
     });
-    zaiwenAdapter.createChatCompletion.mockResolvedValue({
+    zaiwenCreateChatCompletionMock.mockResolvedValue({
       content: 'ok',
       model: 'GLM-5',
       usage: {
@@ -60,20 +93,20 @@ describe('AIClientService', () => {
   });
 
   it('decorates stream usage with estimated cost', async () => {
-    aiModelService.findByModelId.mockResolvedValue({
+    findByModelIdMock.mockResolvedValue({
       isActive: true,
       inputPrice: 0.5,
       outputPrice: 2,
       provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
       modelName: 'GLM-5',
     });
-    zaiwenAdapter.createStreamChatCompletion.mockResolvedValue(
-      (async function* () {
-        yield {
+    zaiwenCreateStreamChatCompletionMock.mockResolvedValue(
+      createAsyncChunks([
+        {
           delta: { content: 'hi' },
           finish_reason: null,
-        };
-        yield {
+        },
+        {
           delta: { content: '' },
           finish_reason: null,
           usage: {
@@ -81,12 +114,15 @@ describe('AIClientService', () => {
             completionTokens: 50,
             totalTokens: 150,
           },
-        };
-      })(),
+        },
+      ]),
     );
 
-    const chunks = [];
-    for await (const chunk of await service.createStreamChatCompletion('GLM-5', [])) {
+    const chunks: CompletionChunk[] = [];
+    for await (const chunk of await service.createStreamChatCompletion(
+      'GLM-5',
+      [],
+    )) {
       chunks.push(chunk);
     }
 
@@ -101,14 +137,14 @@ describe('AIClientService', () => {
   });
 
   it('throws when provider is disabled', async () => {
-    aiModelService.findByModelId.mockResolvedValue({
+    findByModelIdMock.mockResolvedValue({
       isActive: true,
       provider: { id: 'provider-1', name: 'Zaiwen', isActive: false },
       modelName: 'GLM-5',
     });
 
-    await expect(service.createStreamChatCompletion('GLM-5', [])).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.createStreamChatCompletion('GLM-5', []),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

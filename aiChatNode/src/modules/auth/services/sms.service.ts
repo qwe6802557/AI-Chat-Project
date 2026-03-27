@@ -29,10 +29,13 @@ export class SmsService {
    * @param phone 手机号
    * @returns 验证码（仅开发环境返回）
    */
-  async sendSmsCode(phone: string): Promise<{ code?: string; message: string }> {
+  sendSmsCode(phone: string): { code?: string; message: string } {
     // 检查是否在发送间隔内
     const existingData = this.smsCodeStore.get(phone);
-    if (existingData && Date.now() - existingData.sentAt < this.SMS_SEND_INTERVAL) {
+    if (
+      existingData &&
+      Date.now() - existingData.sentAt < this.SMS_SEND_INTERVAL
+    ) {
       const remainingSeconds = Math.ceil(
         (this.SMS_SEND_INTERVAL - (Date.now() - existingData.sentAt)) / 1000,
       );
@@ -57,14 +60,17 @@ export class SmsService {
     //   templateParam: { code },
     // });
 
-    // 暂时打印到控制台（仅开发环境）
-    console.log(`\n📱 [短信验证码] 手机号: ${phone}, 验证码: ${code}, 有效期: 5分钟\n`);
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (isDevelopment) {
+      console.log(
+        `\n📱 [短信验证码] 手机号: ${phone}, 验证码: ${code}, 有效期: 5分钟\n`,
+      );
+    }
 
     // 定时清理过期验证码
     this.cleanExpiredSmsCodes();
 
     // 仅开发环境返回验证码（生产环境不应返回）
-    const isDevelopment = process.env.NODE_ENV !== 'production';
     return {
       message: '验证码已发送',
       ...(isDevelopment && { code }), // 仅开发环境返回验证码
@@ -124,4 +130,3 @@ export class SmsService {
     return this.smsCodeStore.size;
   }
 }
-

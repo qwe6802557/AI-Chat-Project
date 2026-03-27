@@ -15,7 +15,7 @@ export enum BusinessCode {
 /**
  * 统一响应数据结构
  */
-export class ResponseDto<T = any> {
+export class ResponseDto<T = unknown> {
   /**
    * 状态码：
    * - 0: 成功
@@ -66,14 +66,14 @@ export class ResponseDto<T = any> {
   /**
    * 权限错误响应（401未登录、403无权限）
    */
-  static authError(message: string, data?: any): ResponseDto {
+  static authError<T = unknown>(message: string, data?: T): ResponseDto<T> {
     return new ResponseDto(BusinessCode.AUTH_ERROR, data, message);
   }
 
   /**
    * 业务错误响应（参数错误、业务逻辑错误、系统错误）
    */
-  static businessError(message: string, data?: any): ResponseDto {
+  static businessError<T = unknown>(message: string, data?: T): ResponseDto<T> {
     return new ResponseDto(BusinessCode.BUSINESS_ERROR, data, message);
   }
 
@@ -86,8 +86,8 @@ export class ResponseDto<T = any> {
   static errorByStatus(
     httpStatus: number,
     message: string,
-    data?: any,
-  ): ResponseDto {
+    data?: unknown,
+  ): ResponseDto<unknown> {
     // 401 未授权 和 403 禁止访问 返回 code: 1
     if (httpStatus === 401 || httpStatus === 403) {
       return ResponseDto.authError(message, data);

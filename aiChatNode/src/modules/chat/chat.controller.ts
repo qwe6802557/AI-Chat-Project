@@ -7,7 +7,6 @@ import {
   Res,
   HttpStatus,
   UseGuards,
-  Req,
   ForbiddenException,
 } from '@nestjs/common';
 import {
@@ -18,7 +17,8 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -87,8 +87,10 @@ export class ChatController {
       },
     },
   })
-  async create(@Body() createChatDto: CreateChatDto, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async create(
+    @Body() createChatDto: CreateChatDto,
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -124,9 +126,8 @@ export class ChatController {
   async createStream(
     @Body() createChatDto: CreateChatDto,
     @Res() res: Response,
-    @Req() req: Request,
+    @CurrentUser('id') currentUserId?: string,
   ) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -221,14 +222,14 @@ export class ChatController {
       if (!res.writableEnded) {
         res.end();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (clientClosed || abortController.signal.aborted) {
         return;
       }
 
       // 发送错误事件
       const errorData = JSON.stringify({
-        error: error?.message || '流式请求失败',
+        error: error instanceof Error ? error.message : '流式请求失败',
       });
 
       if (!res.writableEnded) {
@@ -292,12 +293,11 @@ export class ChatController {
     },
   })
   async getHistory(
-    @Req() req: Request,
+    @CurrentUser('id') currentUserId?: string,
     @Query('userId') userId?: string,
     @Query('sessionId') sessionId?: string,
     @Query('limit') limit?: number,
   ) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -308,7 +308,11 @@ export class ChatController {
 
     // 优先使用 sessionId 查询
     if (sessionId) {
-      return this.chatService.getSessionHistory(currentUserId, sessionId, limit);
+      return this.chatService.getSessionHistory(
+        currentUserId,
+        sessionId,
+        limit,
+      );
     }
 
     return this.chatService.getUserChatHistory(currentUserId, limit);

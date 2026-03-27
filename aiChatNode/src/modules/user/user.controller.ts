@@ -8,6 +8,7 @@ import {
 } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { toAuthenticatedUser } from '../auth/authenticated-user';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -69,11 +70,7 @@ export class UserController {
   })
   async create(@Body() createUserDto: CreateUserDto) {
     const user = await this.userService.create(createUserDto);
-
-    // 返回时排除密码字段
-    const { password, ...userWithoutPassword } = user;
-
-    return userWithoutPassword;
+    return toAuthenticatedUser(user);
   }
 
   /**

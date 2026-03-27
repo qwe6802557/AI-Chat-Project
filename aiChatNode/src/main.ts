@@ -83,4 +83,4 @@ async function bootstrap() {
   console.log(`\n 应用已启动: http://localhost:${port}`);
   console.log(`API 文档地址: http://localhost:${port}/api-docs\n`);
 }
-bootstrap();
+void bootstrap();

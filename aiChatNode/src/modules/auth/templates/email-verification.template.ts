@@ -9,7 +9,9 @@ export interface EmailVerificationTemplateData {
 /**
  * 生成邮箱验证码邮件HTML
  */
-export function getEmailVerificationTemplate(data: EmailVerificationTemplateData): string {
+export function getEmailVerificationTemplate(
+  data: EmailVerificationTemplateData,
+): string {
   const { code, expiresIn } = data;
 
   return `
@@ -192,7 +194,9 @@ export function getEmailVerificationTemplate(data: EmailVerificationTemplateData
 /**
  * 生成邮箱验证码邮件纯文本版本（备用）
  */
-export function getEmailVerificationTextTemplate(data: EmailVerificationTemplateData): string {
+export function getEmailVerificationTextTemplate(
+  data: EmailVerificationTemplateData,
+): string {
   const { code, expiresIn } = data;
 
   return `

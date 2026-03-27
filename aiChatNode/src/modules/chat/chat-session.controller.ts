@@ -6,7 +6,6 @@ import {
   Query,
   Logger,
   UseGuards,
-  Req,
   ForbiddenException,
 } from '@nestjs/common';
 import {
@@ -17,10 +16,10 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatSessionService } from './chat-session.service';
 import { ChatService } from './chat.service';
-import { CreateSessionDto, GetSessionMessagesDto } from './dto';
+import { CreateSessionDto } from './dto';
 import { UpdateSessionBodyDto } from './dto/update-session-body.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -69,8 +68,10 @@ export class ChatSessionController {
       },
     },
   })
-  async create(@Body() createSessionDto: CreateSessionDto, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async create(
+    @Body() createSessionDto: CreateSessionDto,
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -137,11 +138,10 @@ export class ChatSessionController {
     },
   })
   async getList(
-    @Req() req: Request,
+    @CurrentUser('id') currentUserId?: string,
     @Query('userId') userId?: string,
     @Query('includeArchived') includeArchived?: string,
   ) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -225,12 +225,11 @@ export class ChatSessionController {
   })
   async getMessages(
     @Query('sessionId') sessionId: string,
-    @Req() req: Request,
+    @CurrentUser('id') currentUserId?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('order') order?: 'asc' | 'desc',
   ) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -265,8 +264,10 @@ export class ChatSessionController {
     status: 200,
     description: '获取成功',
   })
-  async getById(@Query('id') id: string, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async getById(
+    @Query('id') id: string,
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -287,8 +288,10 @@ export class ChatSessionController {
     status: 200,
     description: '更新成功',
   })
-  async update(@Body() updateSessionDto: UpdateSessionBodyDto, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async update(
+    @Body() updateSessionDto: UpdateSessionBodyDto,
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -330,8 +333,10 @@ export class ChatSessionController {
       },
     },
   })
-  async delete(@Body() body: { id: string }, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async delete(
+    @Body() body: { id: string },
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -381,10 +386,10 @@ export class ChatSessionController {
     status: 403,
     description: '无权操作他人会话',
   })
-  async clearAll(@Body() body: { userId: string }, @Req() req: Request) {
-    // 获取当前登录用户 ID
-    const currentUserId = (req.user as any)?.id as string | undefined;
-
+  async clearAll(
+    @Body() body: { userId: string },
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     // 只能清空自己的会话
     if (!currentUserId || body.userId !== currentUserId) {
       this.logger.warn(
@@ -426,8 +431,10 @@ export class ChatSessionController {
     status: 200,
     description: '归档成功',
   })
-  async archive(@Body() body: { id: string }, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async archive(
+    @Body() body: { id: string },
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }
@@ -461,8 +468,10 @@ export class ChatSessionController {
     status: 200,
     description: '取消归档成功',
   })
-  async unarchive(@Body() body: { id: string }, @Req() req: Request) {
-    const currentUserId = (req.user as any)?.id as string | undefined;
+  async unarchive(
+    @Body() body: { id: string },
+    @CurrentUser('id') currentUserId?: string,
+  ) {
     if (!currentUserId) {
       throw new ForbiddenException('未授权，请先登录');
     }

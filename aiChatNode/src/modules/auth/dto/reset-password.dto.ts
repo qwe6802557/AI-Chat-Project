@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsEmail, Matches, MinLength, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsEmail,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 /**
  * 重置密码 DTO

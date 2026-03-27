@@ -9,14 +9,40 @@ import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { AIClientService } from './services/ai-client.service';
 import { CreateChatDto, FileDataDto } from './dto';
-import { ChatMessage } from './entities/chat.entity';
+import { ChatMessage as ChatRecord } from './entities/chat.entity';
 import { UserService } from '../user/user.service';
 import { ChatSessionService } from './chat-session.service';
 import {
+  ChatMessage,
   CompletionUsageStats,
   MultimodalContent,
 } from './types/completion.types';
 import { FilesService } from '../files/files.service';
+
+export interface SessionMessageAttachmentDto {
+  id: string;
+  url: string;
+  name: string;
+  type: string;
+  sizeBytes: number;
+  width?: number | null;
+  height?: number | null;
+}
+
+export type SessionMessageDto = Pick<
+  ChatRecord,
+  | 'id'
+  | 'userId'
+  | 'sessionId'
+  | 'userMessage'
+  | 'aiMessage'
+  | 'model'
+  | 'usage'
+  | 'createdAt'
+  | 'updatedAt'
+> & {
+  attachments: SessionMessageAttachmentDto[];
+};
 
 @Injectable()
 export class ChatService {
@@ -34,8 +60,8 @@ export class ChatService {
 
   constructor(
     private readonly aiClientService: AIClientService,
-    @InjectRepository(ChatMessage)
-    private chatMessageRepository: Repository<ChatMessage>,
+    @InjectRepository(ChatRecord)
+    private chatMessageRepository: Repository<ChatRecord>,
     private readonly userService: UserService,
     private readonly chatSessionService: ChatSessionService,
     private readonly configService: ConfigService,
@@ -174,11 +200,15 @@ export class ChatService {
       });
 
     // 构建消息数组
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
-      const historyMessages = await this.getSessionHistory(userId, sessionId, 10);
+      const historyMessages = await this.getSessionHistory(
+        userId,
+        sessionId,
+        10,
+      );
       historyMessages.forEach((msg) => {
         messages.push(
           { role: 'user', content: msg.userMessage },
@@ -285,7 +315,7 @@ export class ChatService {
     userId: string,
     sessionId: string,
     limit: number = 50,
-  ): Promise<ChatMessage[]> {
+  ): Promise<ChatRecord[]> {
     await this.chatSessionService.findByIdForUser(sessionId, userId);
 
     const messages = await this.chatMessageRepository.find({
@@ -312,7 +342,7 @@ export class ChatService {
     pageSize: number = 20,
     order: 'asc' | 'desc' = 'desc',
   ): Promise<{
-    messages: any[];
+    messages: SessionMessageDto[];
     total: number;
     page: number;
     pageSize: number;
@@ -337,12 +367,12 @@ export class ChatService {
     // 转换附件格式
     const messagesWithAttachments = orderedMessages.map((msg) => ({
       ...msg,
-        attachments: (msg.attachments || []).map((att) => ({
-          id: att.id,
-          url: this.filesService.buildSignedFileUrl(att.id),
-          name: att.originalName,
-          type: att.storageMime,
-          sizeBytes: att.sizeBytes,
+      attachments: (msg.attachments || []).map((att) => ({
+        id: att.id,
+        url: this.filesService.buildSignedFileUrl(att.id),
+        name: att.originalName,
+        type: att.storageMime,
+        sizeBytes: att.sizeBytes,
         width: att.width,
         height: att.height,
       })),
@@ -402,11 +432,15 @@ export class ChatService {
       });
 
     // 构建消息数组
-    const messages: any[] = [];
+    const messages: ChatMessage[] = [];
 
     // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
-      const historyMessages = await this.getSessionHistory(userId, sessionId, 10);
+      const historyMessages = await this.getSessionHistory(
+        userId,
+        sessionId,
+        10,
+      );
       historyMessages.forEach((msg) => {
         messages.push(
           { role: 'user', content: msg.userMessage },

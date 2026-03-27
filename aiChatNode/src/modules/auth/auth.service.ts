@@ -7,7 +7,9 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../user/user.service';
+import type { User } from '../user/entities/user.entity';
 import { UserRole } from '../user/entities/user.entity';
+import { toAuthenticatedUser } from './authenticated-user';
 import { CaptchaService } from './services/captcha.service';
 import { SmsService } from './services/sms.service';
 import { EmailService } from './services/email.service';
@@ -62,12 +64,9 @@ export class AuthService {
     // 生成 JWT token
     const token = this.generateToken(user);
 
-    // 返回用户信息）
-    const { password: _, ...userWithoutPassword } = user;
-
     return {
       token,
-      user: userWithoutPassword,
+      user: toAuthenticatedUser(user),
     };
   }
 
@@ -119,19 +118,16 @@ export class AuthService {
     // 生成token
     const token = this.generateToken(user);
 
-    // 返回用户信息（排除密码）
-    const { password: _, ...userWithoutPassword } = user;
-
     return {
       token,
-      user: userWithoutPassword,
+      user: toAuthenticatedUser(user),
     };
   }
 
   /**
    * 生成 JWT token
    */
-  private generateToken(user: any): string {
+  private generateToken(user: Pick<User, 'id' | 'username' | 'role'>): string {
     const payload: JwtPayload = {
       userId: user.id,
       username: user.username,
@@ -151,7 +147,7 @@ export class AuthService {
   /**
    * 发送短信验证码
    */
-  async sendSmsCode(phone: string) {
+  sendSmsCode(phone: string) {
     return this.smsService.sendSmsCode(phone);
   }
 
