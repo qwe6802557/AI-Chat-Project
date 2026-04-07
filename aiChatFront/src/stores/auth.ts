@@ -21,6 +21,79 @@ const STORAGE_KEYS = {
   USER_AVATAR: 'userAvatar'
 } as const
 
+const EMPTY_USER_CREDITS: UserCredits = {
+  total: 0,
+  consumed: 0,
+  remaining: 0,
+  reserved: 0,
+}
+
+const normalizeCredits = (
+  credits?: Partial<UserCredits> | null,
+): UserCredits => {
+  return {
+    total: Number(credits?.total ?? 0),
+    consumed: Number(credits?.consumed ?? 0),
+    remaining: Number(credits?.remaining ?? 0),
+    reserved: Number(credits?.reserved ?? 0),
+  }
+}
+
+const normalizeUserProfile = (profile: UserInfo): UserInfo => {
+  return {
+    ...profile,
+    credits: normalizeCredits(profile.credits),
+  }
+}
+
+interface JwtPayload {
+  exp?: number
+}
+
+const decodeBase64Url = (value: string): string | null => {
+  try {
+    const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - normalized.length % 4) % 4),
+      '=',
+    )
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    return new TextDecoder().decode(bytes)
+  } catch {
+    return null
+  }
+}
+
+const parseJwtPayload = (rawToken?: string | null): JwtPayload | null => {
+  if (!rawToken) return null
+
+  const segments = rawToken.split('.')
+  if (segments.length < 2) {
+    return null
+  }
+
+  const payloadJson = decodeBase64Url(segments[1] || '')
+  if (!payloadJson) {
+    return null
+  }
+
+  try {
+    return JSON.parse(payloadJson) as JwtPayload
+  } catch {
+    return null
+  }
+}
+
+const isJwtExpired = (rawToken?: string | null): boolean => {
+  const payload = parseJwtPayload(rawToken)
+  if (!payload || typeof payload.exp !== 'number') {
+    return true
+  }
+
+  return payload.exp * 1000 <= Date.now()
+}
+
 /**
  * 认证 Store
  */
@@ -45,17 +118,12 @@ export const useAuthStore = defineStore('auth', () => {
   /** 用户头像 URL */
   const userAvatar = ref<string | null>(null)
 
-  /** 模拟积分数据 */
-  const userCredits = ref<UserCredits>({
-    total: 10000,
-    consumed: 3500,
-    remaining: 6500
-  })
-
   // Getters
 
   /** 是否已认证 */
-  const isAuthenticated = computed(() => !!token.value && !!userId.value)
+  const isAuthenticated = computed(() => {
+    return !!token.value && !!userId.value && !isJwtExpired(token.value)
+  })
 
   /** 用户信息 */
   const userInfo = computed<UserInfo | null>(() => {
@@ -78,11 +146,17 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = localStorage.getItem(STORAGE_KEYS.USERNAME)
     rememberedUsername.value = localStorage.getItem(STORAGE_KEYS.REMEMBERED_USERNAME)
 
+    if (token.value && isJwtExpired(token.value)) {
+      logger.warn('检测到本地登录态已过期，自动清理认证信息')
+      clearAuth()
+      return
+    }
+
     // 加载用户资料
     const storedProfile = localStorage.getItem(STORAGE_KEYS.USER_PROFILE)
     if (storedProfile) {
       try {
-        userProfile.value = JSON.parse(storedProfile)
+        userProfile.value = normalizeUserProfile(JSON.parse(storedProfile) as UserInfo)
       } catch (e) {
         logger.warn('解析用户资料失败:', e)
       }
@@ -145,9 +219,32 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
+   * 检查并清理已过期的会话
+   */
+  const purgeExpiredSession = (): boolean => {
+    if (!token.value) {
+      return false
+    }
+
+    if (!isJwtExpired(token.value)) {
+      return false
+    }
+
+    logger.warn('检测到运行中会话已过期，自动清理认证信息')
+    clearAuth()
+    return true
+  }
+
+  /**
    * 获取 token
    */
-  const getToken = () => token.value
+  const getToken = () => {
+    if (purgeExpiredSession()) {
+      return null
+    }
+
+    return token.value
+  }
 
   /**
    * 获取用户 ID
@@ -158,13 +255,29 @@ export const useAuthStore = defineStore('auth', () => {
    * 设置完整用户资料
    */
   const setUserProfile = (profile: UserInfo) => {
-    userProfile.value = profile
-    userAvatar.value = profile.avatar || null
-    localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(profile))
-    if (profile.avatar) {
-      localStorage.setItem(STORAGE_KEYS.USER_AVATAR, profile.avatar)
+    const normalizedProfile = normalizeUserProfile(profile)
+    userProfile.value = normalizedProfile
+    userAvatar.value = normalizedProfile.avatar || null
+    localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(normalizedProfile))
+    if (normalizedProfile.avatar) {
+      localStorage.setItem(STORAGE_KEYS.USER_AVATAR, normalizedProfile.avatar)
     } else {
       localStorage.removeItem(STORAGE_KEYS.USER_AVATAR)
+    }
+  }
+
+  /**
+   * 更新用户积分
+   */
+  const setUserCredits = (credits: UserCredits) => {
+    const normalizedCredits = normalizeCredits(credits)
+
+    if (userProfile.value) {
+      userProfile.value = {
+        ...userProfile.value,
+        credits: normalizedCredits,
+      }
+      localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(userProfile.value))
     }
   }
 
@@ -190,6 +303,7 @@ export const useAuthStore = defineStore('auth', () => {
     userAvatar.value = avatarUrl
     if (userProfile.value) {
       userProfile.value.avatar = avatarUrl
+      localStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(userProfile.value))
     }
     localStorage.setItem(STORAGE_KEYS.USER_AVATAR, avatarUrl)
   }
@@ -205,10 +319,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * 获取模拟的完整用户信息
-   * 用于纯前端开发阶段
+   * 获取当前完整用户账户信息
    */
-  const getMockUserAccount = () => {
+  const getUserAccount = () => {
     return {
       id: userId.value || 'mock-user-id',
       username: username.value || '测试用户',
@@ -216,10 +329,10 @@ export const useAuthStore = defineStore('auth', () => {
       email: userProfile.value?.email || 'user@example.com',
       avatar: userAvatar.value || null,
       role: (userProfile.value?.role || 'user') as 'admin' | 'user',
-      isActive: true,
+      isActive: userProfile.value?.isActive ?? true,
       createdAt: userProfile.value?.createdAt || '2024-01-15T08:30:00Z',
-      updatedAt: new Date().toISOString(),
-      credits: userCredits.value
+      updatedAt: userProfile.value?.updatedAt || new Date().toISOString(),
+      credits: normalizeCredits(userProfile.value?.credits || EMPTY_USER_CREDITS),
     }
   }
 
@@ -231,7 +344,6 @@ export const useAuthStore = defineStore('auth', () => {
     rememberedUsername,
     userProfile,
     userAvatar,
-    userCredits,
 
     // Getters
     isAuthenticated,
@@ -243,11 +355,13 @@ export const useAuthStore = defineStore('auth', () => {
     setAuthSession,
     setRememberedUsername,
     clearAuth,
+    purgeExpiredSession,
     getToken,
     getUserId,
     setUserProfile,
+    setUserCredits,
     setUserAvatar,
     updatePhone,
-    getMockUserAccount
+    getUserAccount
   }
 })

@@ -1,3 +1,5 @@
+import type { UserCredits } from '@/types/user'
+
 /**
  * 返回的附件信息
  */
@@ -23,6 +25,22 @@ export interface UsageStats {
   estimatedTotalCost?: number
 }
 
+export interface ChatChargeSummary {
+  id: string
+  clientRequestId: string
+  modelId: string
+  billingMode: string
+  credits: number
+  status: string
+}
+
+export interface BackendReasoning {
+  mode: 'summary' | 'raw' | 'omitted'
+  source: 'provider_summary' | 'provider_block' | 'extracted_tag' | 'none'
+  title?: string
+  content: string
+}
+
 /**
  * 聊天消息
  */
@@ -32,8 +50,10 @@ export interface BackendChatMessage {
   sessionId: string
   userMessage: string
   aiMessage: string
+  reasoning?: BackendReasoning | null
   model: string
-  usage: UsageStats
+  usage?: UsageStats | null
+  charge?: ChatChargeSummary | null
   attachments?: BackendAttachment[]
   createdAt: string
   updatedAt: string
@@ -57,6 +77,7 @@ export interface BackendChatSession {
     totalCompletionTokens: number
     totalTokens: number
     totalEstimatedCost: number
+    totalChargedCredits: number
   }
   createdAt: string
   updatedAt: string
@@ -69,6 +90,7 @@ export interface BackendChatSession {
 export interface SendMessageParams {
   userId: string
   sessionId?: string
+  clientRequestId?: string
   message: string
   model?: string
   temperature?: number
@@ -83,8 +105,11 @@ export interface ChatMessageResponse {
   id: string
   sessionId: string
   message: string
+  reasoning?: BackendReasoning | null
   model: string
-  usage: UsageStats
+  usage?: UsageStats | null
+  charge?: ChatChargeSummary
+  creditsSnapshot?: UserCredits
   createdAt: string
 }
 
@@ -92,12 +117,16 @@ export interface ChatMessageResponse {
  * 流式聊天数据块
  */
 export interface StreamChunk {
-  delta: string
+  type?: 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
+  delta?: string
   finish_reason: string | null
   sessionId?: string
   message?: string
+  reasoning?: BackendReasoning | null
   model?: string
   usage?: UsageStats
+  charge?: ChatChargeSummary
+  creditsSnapshot?: UserCredits
   error?: string
 }
 

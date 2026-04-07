@@ -1,11 +1,8 @@
 <template>
-  <a-modal
-    :open="open"
-    :footer="null"
-    :closable="true"
-    :centered="true"
-    :width="'90%'"
-    class="account-modal"
+  <component
+    :is="inline ? 'div' : 'a-modal'"
+    v-bind="containerProps"
+    :class="['account-modal', { 'account-inline': inline, 'account-page-layout': layoutMode === 'page' }]"
     @cancel="handleClose"
   >
     <div class="account-shell">
@@ -190,9 +187,64 @@
 
           <ChatStatsPanel :summary="conversationStatsSummary" />
         </section>
+
+        <section class="surface-panel ledger-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <WalletOutlined class="panel-icon" />
+              <div>
+                <h4>最近积分流水</h4>
+                <p>展示最近的积分赠送、扣费和释放记录</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="ledgerLoading" class="ledger-state">
+            正在加载最近积分流水...
+          </div>
+          <div v-else-if="recentCreditLedger.length === 0" class="ledger-state empty">
+            暂无积分流水
+          </div>
+          <div v-else class="ledger-list">
+            <article
+              v-for="item in recentCreditLedger"
+              :key="item.id"
+              class="ledger-item"
+            >
+              <div class="ledger-main">
+                <div class="ledger-copy">
+                  <strong class="ledger-title">{{ item.title }}</strong>
+                  <span v-if="item.description" class="ledger-description">
+                    {{ item.description }}
+                  </span>
+                  <span class="ledger-time">{{ formatLedgerTime(item.createdAt) }}</span>
+                </div>
+                <div class="ledger-metrics">
+                  <strong :class="['ledger-amount', getLedgerAmountClass(item.amount)]">
+                    {{ formatLedgerAmount(item.amount) }}
+                  </strong>
+                  <span class="ledger-balance">
+                    余额 {{ item.balanceAfter.toLocaleString() }}
+                  </span>
+                </div>
+              </div>
+            </article>
+
+            <div v-if="ledgerHasMore" class="ledger-actions">
+              <a-button
+                type="default"
+                :loading="ledgerLoadingMore"
+                class="ledger-more-btn"
+                @click="handleLoadMoreLedger"
+              >
+                查看更多
+              </a-button>
+            </div>
+          </div>
+        </section>
       </section>
     </div>
-  </a-modal>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -208,10 +260,13 @@ import {
 } from '@ant-design/icons-vue'
 import AvatarUploader from './AvatarUploader.vue'
 import ChatStatsPanel from './ChatStatsPanel.vue'
+import { getCurrentUserAccount } from '@/api/user'
 import { useConversationStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
+import type { RecentCreditLedgerItem } from '@/types/user'
 import { ROLE_DISPLAY_MAP } from '@/types/user'
 import { formatDate, formatPhone } from '@/utils/common'
+import logger from '@/utils/logger'
 import { buildConversationStatsSummary } from '../utils/conversationInsights'
 
 defineOptions({
@@ -219,7 +274,9 @@ defineOptions({
 })
 
 const props = defineProps<{
-  open: boolean
+  open?: boolean
+  inline?: boolean
+  layoutMode?: 'modal' | 'page'
 }>()
 
 const emit = defineEmits<{
@@ -228,8 +285,28 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const conversationStore = useConversationStore()
+const ledgerLoading = ref(false)
+const ledgerLoadingMore = ref(false)
+const recentCreditLedger = ref<RecentCreditLedgerItem[]>([])
+const isVisible = computed(() => props.inline || !!props.open)
+const containerProps = computed(() => {
+  if (props.inline) {
+    return {}
+  }
 
-const userAccount = computed(() => authStore.getMockUserAccount())
+  return {
+    open: props.open,
+    footer: null,
+    closable: true,
+    centered: true,
+    width: '90%',
+  }
+})
+const ledgerPage = ref(1)
+const ledgerPageSize = 10
+const ledgerHasMore = ref(false)
+
+const userAccount = computed(() => authStore.getUserAccount())
 
 const conversationStatsSummary = computed(() =>
   buildConversationStatsSummary(
@@ -323,22 +400,131 @@ const handleAvatarChange = (avatarUrl: string) => {
   authStore.setUserAvatar(avatarUrl)
 }
 
+const fetchAccountDetails = async (options?: {
+  page?: number
+  append?: boolean
+}) => {
+  if (!authStore.isAuthenticated) {
+    recentCreditLedger.value = []
+    ledgerHasMore.value = false
+    return
+  }
+
+  const page = options?.page || 1
+  const append = options?.append === true
+
+  if (append) {
+    ledgerLoadingMore.value = true
+  } else {
+    ledgerLoading.value = true
+  }
+
+  try {
+    const response = await getCurrentUserAccount({
+      ledgerPage: page,
+      ledgerPageSize,
+    })
+    if (response.data.user?.credits) {
+      authStore.setUserCredits(response.data.user.credits)
+    }
+
+    const ledgerPageData = response.data.recentLedger
+    const items = ledgerPageData?.items || []
+
+    recentCreditLedger.value = append
+      ? [...recentCreditLedger.value, ...items]
+      : items
+    ledgerPage.value = ledgerPageData?.page || page
+    ledgerHasMore.value = !!ledgerPageData?.hasMore
+  } catch (error) {
+    logger.error('加载账户详情失败:', error)
+    message.warning('加载积分流水失败，请稍后重试')
+  } finally {
+    if (append) {
+      ledgerLoadingMore.value = false
+    } else {
+      ledgerLoading.value = false
+    }
+  }
+}
+
+const handleLoadMoreLedger = () => {
+  if (ledgerLoading.value || ledgerLoadingMore.value || !ledgerHasMore.value) {
+    return
+  }
+
+  void fetchAccountDetails({
+    page: ledgerPage.value + 1,
+    append: true,
+  })
+}
+
+const formatLedgerTime = (value: string): string => {
+  if (!value) {
+    return '未知时间'
+  }
+
+  try {
+    return new Date(value).toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return value
+  }
+}
+
+const formatLedgerAmount = (amount: number): string => {
+  if (amount > 0) {
+    return `+${amount.toLocaleString()}`
+  }
+  if (amount < 0) {
+    return amount.toLocaleString()
+  }
+  return '0'
+}
+
+const getLedgerAmountClass = (amount: number): string => {
+  if (amount > 0) return 'positive'
+  if (amount < 0) return 'negative'
+  return 'neutral'
+}
+
 const getRoleDisplayName = (role: string): string => {
   return ROLE_DISPLAY_MAP[role] || '普通用户'
 }
 
 const handleClose = () => {
+  if (props.inline) {
+    return
+  }
   isEditingPhone.value = false
   editingPhone.value = ''
   emit('update:open', false)
 }
 
-watch(() => props.open, (newValue) => {
+watch(isVisible, (newValue) => {
+  if (newValue) {
+    ledgerPage.value = 1
+    ledgerHasMore.value = false
+    recentCreditLedger.value = []
+    void fetchAccountDetails({ page: 1, append: false })
+    return
+  }
+
   if (!newValue) {
     isEditingPhone.value = false
     editingPhone.value = ''
+    ledgerLoading.value = false
+    ledgerLoadingMore.value = false
+    ledgerPage.value = 1
+    ledgerHasMore.value = false
+    recentCreditLedger.value = []
   }
-})
+}, { immediate: true })
 </script>
 
 <style scoped lang="scss">
@@ -392,6 +578,205 @@ $color-shadow: rgba(15, 23, 42, 0.12);
       font-size: 16px;
       color: $color-ink;
     }
+  }
+}
+
+.account-inline {
+  display: block;
+}
+
+.account-page-layout {
+  width: 100%;
+  min-height: 0;
+
+  .account-shell {
+    grid-template-columns: 252px minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    border-radius: 30px;
+    overflow: hidden;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: linear-gradient(180deg, #fcfdff 0%, #f5f7fb 100%);
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.12);
+  }
+
+  .identity-rail {
+    gap: 12px;
+    padding: 18px 18px 16px;
+    background:
+      radial-gradient(circle at top left, rgba(21, 112, 239, 0.18), transparent 34%),
+      linear-gradient(180deg, #f8fafd 0%, #eef2f7 100%);
+  }
+
+  .credit-spotlight {
+    padding: 12px 14px;
+
+    .spotlight-value {
+      font-size: 30px;
+    }
+
+    .spotlight-description {
+      margin: 6px 0 8px;
+    }
+  }
+
+  .rail-stats {
+    gap: 2px;
+  }
+
+  .rail-stat {
+    padding: 8px 0;
+  }
+
+  .account-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'header header'
+      'profile ledger'
+      'summary ledger';
+    align-content: stretch;
+    gap: 12px;
+    padding: 18px;
+    overflow: hidden;
+  }
+
+  .main-header {
+    grid-area: header;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+    gap: 12px;
+    align-items: center;
+  }
+
+  .main-header h3 {
+    font-size: 22px;
+  }
+
+  .main-description {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .profile-panel {
+    grid-area: profile;
+  }
+
+  .summary-grid {
+    grid-area: summary;
+    gap: 10px;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .ledger-panel {
+    grid-area: ledger;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .surface-panel {
+    padding: 14px 16px;
+    border-radius: 18px;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .panel-header {
+    margin-bottom: 12px;
+  }
+
+  .profile-grid {
+    gap: 8px;
+  }
+
+  .profile-row {
+    min-height: 56px;
+    padding: 10px 12px;
+  }
+
+  .usage-main {
+    grid-template-columns: minmax(0, 1fr) minmax(168px, 0.86fr);
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .usage-primary .usage-value {
+    font-size: 28px;
+  }
+
+  .ledger-state {
+    height: 100%;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ledger-list {
+    min-height: 0;
+    overflow: auto;
+    padding-right: 4px;
+  }
+
+  .ledger-panel {
+    .ledger-list {
+      gap: 8px;
+    }
+
+    .ledger-item {
+      padding: 10px 12px;
+      border-radius: 14px;
+    }
+
+    .ledger-main {
+      align-items: flex-start;
+    }
+
+    .ledger-copy {
+      gap: 2px;
+    }
+
+    .ledger-amount {
+      font-size: 15px;
+    }
+  }
+
+  :deep(.chat-stats-panel) {
+    height: 100%;
+    padding: 14px 16px;
+    border-radius: 18px;
+    box-shadow: none;
+    background: rgba(249, 250, 251, 0.92);
+  }
+
+  :deep(.chat-stats-panel .stats-header) {
+    margin-bottom: 10px;
+  }
+
+  :deep(.chat-stats-panel .hero-figure) {
+    padding: 12px 0;
+    margin-bottom: 6px;
+  }
+
+  :deep(.chat-stats-panel .hero-main .hero-value) {
+    font-size: 26px;
+  }
+
+  :deep(.chat-stats-panel .hero-side .hero-side-value) {
+    font-size: 18px;
+  }
+
+  :deep(.chat-stats-panel .stats-list) {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  :deep(.chat-stats-panel .stats-row) {
+    padding: 7px 0;
   }
 }
 
@@ -749,6 +1134,102 @@ $color-shadow: rgba(15, 23, 42, 0.12);
   gap: 12px;
 }
 
+.ledger-panel {
+  .ledger-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .ledger-actions {
+    display: flex;
+    justify-content: center;
+    padding-top: 4px;
+  }
+
+  .ledger-more-btn {
+    min-width: 120px;
+    border-radius: 999px;
+  }
+
+  .ledger-item {
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: rgba(249, 250, 251, 0.84);
+    border: 1px solid rgba(15, 23, 42, 0.05);
+    transition: background 0.2s ease, border-color 0.2s ease;
+
+    &:hover {
+      background: #ffffff;
+      border-color: rgba(15, 23, 42, 0.1);
+    }
+  }
+
+  .ledger-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .ledger-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ledger-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: $color-ink;
+  }
+
+  .ledger-description,
+  .ledger-time,
+  .ledger-balance {
+    font-size: 12px;
+    line-height: 1.5;
+    color: $color-muted;
+  }
+
+  .ledger-metrics {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  .ledger-amount {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+
+    &.positive {
+      color: #1570ef;
+    }
+
+    &.negative {
+      color: #d97706;
+    }
+
+    &.neutral {
+      color: $color-ink;
+    }
+  }
+}
+
+.ledger-state {
+  padding: 18px 0 6px;
+  text-align: center;
+  font-size: 13px;
+  color: $color-muted;
+
+  &.empty {
+    padding-bottom: 2px;
+  }
+}
+
 .usage-main {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(180px, 0.9fr);
@@ -826,6 +1307,35 @@ $color-shadow: rgba(15, 23, 42, 0.12);
   }
 }
 
+@media (max-width: 1180px), (max-height: 780px) {
+  .account-page-layout {
+    .account-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .account-main {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto minmax(260px, 1fr);
+      grid-template-areas:
+        'header'
+        'profile'
+        'summary'
+        'ledger';
+      overflow: auto;
+    }
+
+    .main-header,
+    .summary-grid,
+    .usage-main {
+      grid-template-columns: 1fr;
+    }
+
+    .ledger-panel {
+      min-height: 260px;
+    }
+  }
+}
+
 @media (max-width: 920px) {
   .account-shell {
     grid-template-columns: 1fr;
@@ -841,6 +1351,15 @@ $color-shadow: rgba(15, 23, 42, 0.12);
   .summary-grid,
   .usage-main {
     grid-template-columns: 1fr;
+  }
+
+  .ledger-panel .ledger-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .ledger-panel .ledger-metrics {
+    align-items: flex-start;
   }
 }
 

@@ -21,6 +21,13 @@
       :current-session-id="currentConversationId"
       :has-more-messages="hasMoreMessages"
       :load-more-messages="handleLoadMoreMessages"
+      :selected-model-input-price="selectedModelInputPrice"
+      :selected-model-output-price="selectedModelOutputPrice"
+      :selected-model-reserve-credits="selectedModelReserveCredits"
+      :selected-model-reasoning-capability="selectedModelReasoningCapability"
+      :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
+      :current-credits-remaining="currentCreditsRemaining"
+      :has-credit-snapshot="hasCreditSnapshot"
       @update:selected-model="handleModelChange"
       @send-message="handleSendMessage"
     />
@@ -28,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -39,6 +46,18 @@ import { useStreamChat } from './hooks/useStreamChat'
 import { useAuthStore, useConversationStore } from '@/stores'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { getActiveModels } from '@/api/model'
+import { isAuthFailureError } from '@/utils/request'
+
+interface ChatModelOption {
+  label: string
+  value: string
+  inputPrice: number
+  outputPrice: number
+  reserveCredits: number
+  reasoningCapability?: 'none' | 'summary' | 'raw'
+  reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
+  reasoningBadgeLabel?: string
+}
 
 // 定义组件名称
 defineOptions({
@@ -65,10 +84,32 @@ const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>
   'selectedChatModel',
   'GLM-5'
 )
-const modelOptions = ref<Array<{ label: string; value: string }>>([
-  { label: 'GLM-5', value: 'GLM-5' }
+const modelOptions = ref<ChatModelOption[]>([
+  { label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }
 ])
 const modelsLoading = ref(false)
+const hasCreditSnapshot = computed(() => !!authStore.userProfile?.credits)
+const currentCreditsRemaining = computed(() => {
+  return Number(authStore.userProfile?.credits?.remaining ?? 0)
+})
+const selectedModelOption = computed(() => {
+  return modelOptions.value.find((model) => model.value === selectedModel.value) || modelOptions.value[0]
+})
+const selectedModelInputPrice = computed(() => {
+  return Number(selectedModelOption.value?.inputPrice ?? 0)
+})
+const selectedModelOutputPrice = computed(() => {
+  return Number(selectedModelOption.value?.outputPrice ?? 0)
+})
+const selectedModelReserveCredits = computed(() => {
+  return Number(selectedModelOption.value?.reserveCredits ?? 100)
+})
+const selectedModelReasoningCapability = computed(() => {
+  return selectedModelOption.value?.reasoningCapability || 'none'
+})
+const selectedModelReasoningBadgeLabel = computed(() => {
+  return selectedModelOption.value?.reasoningBadgeLabel || ''
+})
 
 // 获取当前用户ID
 const getUserId = (): string => {
@@ -90,6 +131,13 @@ const handleSendMessage = async (
   const userId = getUserId()
   if (!userId) {
     message.warning('未获取到用户信息，请重新登录')
+    return
+  }
+
+  if (hasCreditSnapshot.value && currentCreditsRemaining.value < selectedModelReserveCredits.value) {
+    message.warning(
+      `当前模型发送前至少需预留 ${selectedModelReserveCredits.value} 积分，最终按实际 token 结算，剩余 ${currentCreditsRemaining.value} 积分`,
+    )
     return
   }
 
@@ -126,7 +174,13 @@ const loadModelOptions = async () => {
       .sort((a, b) => a.modelId.localeCompare(b.modelId, 'en'))
       .map((model) => ({
         label: model.modelId,
-        value: model.modelId
+        value: model.modelId,
+        inputPrice: Number(model.inputPrice ?? 0),
+        outputPrice: Number(model.outputPrice ?? 0),
+        reserveCredits: Number(model.creditCost ?? 100),
+        reasoningCapability: model.reasoningCapability || 'none',
+        reasoningStrategy: model.reasoningStrategy,
+        reasoningBadgeLabel: model.reasoningBadgeLabel,
       }))
 
     if (zaiwenModels.length > 0) {
@@ -139,6 +193,9 @@ const loadModelOptions = async () => {
     }
   } catch (error) {
     logger.error('加载模型列表失败:', error)
+    if (isAuthFailureError(error)) {
+      return
+    }
     message.warning('模型列表加载失败，已使用默认模型 GLM-5')
     selectedModel.value = 'GLM-5'
     saveSelectedModel()

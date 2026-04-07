@@ -84,7 +84,18 @@ export class ChatMessage {
     estimatedInputCost?: number;
     estimatedOutputCost?: number;
     estimatedTotalCost?: number;
-  };
+  } | null;
+
+  /**
+   * 思考过程/推理摘要
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  reasoning: {
+    mode: 'summary' | 'raw' | 'omitted';
+    source: 'provider_summary' | 'provider_block' | 'extracted_tag' | 'none';
+    title?: string;
+    content: string;
+  } | null;
 
   /**
    * 创建时间

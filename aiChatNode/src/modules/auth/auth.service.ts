@@ -19,6 +19,12 @@ import {
   EmailVerificationPurpose,
 } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { CreditsService } from '../credits/credits.service';
+import {
+  CreditBusinessType,
+  DEFAULT_REGISTER_CREDITS,
+} from '../credits/types/credits.types';
+import { DataSource } from 'typeorm';
 
 /**
  * 认证服务
@@ -35,6 +41,8 @@ export class AuthService {
     private readonly captchaService: CaptchaService,
     private readonly smsService: SmsService,
     private readonly emailService: EmailService,
+    private readonly creditsService: CreditsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
@@ -71,10 +79,14 @@ export class AuthService {
 
     // 生成 JWT token
     const token = this.generateToken(user);
+    const credits = await this.creditsService.getSnapshotForUser(user.id);
 
     return {
       token,
-      user: toAuthenticatedUser(user),
+      user: {
+        ...toAuthenticatedUser(user),
+        credits,
+      },
     };
   }
 
@@ -114,21 +126,41 @@ export class AuthService {
     //   }
     // }
 
-    // 创建用户
-    const user = await this.userService.create({
-      username,
-      password,
-      email,
-      phone,
-      role: UserRole.USER, // 默认角色为普通用户
+    const user = await this.dataSource.transaction(async (manager) => {
+      const createdUser = await this.userService.create(
+        {
+          username,
+          password,
+          email,
+          phone,
+          role: UserRole.USER, // 默认角色为普通用户
+        },
+        manager,
+      );
+
+      await this.creditsService.ensureAccount(
+        createdUser.id,
+        {
+          initialCredits: DEFAULT_REGISTER_CREDITS,
+          businessType: CreditBusinessType.REGISTER_BONUS,
+          remark: '新用户注册赠送积分',
+        },
+        manager,
+      );
+
+      return createdUser;
     });
 
     // 生成token
     const token = this.generateToken(user);
+    const credits = await this.creditsService.getSnapshotForUser(user.id);
 
     return {
       token,
-      user: toAuthenticatedUser(user),
+      user: {
+        ...toAuthenticatedUser(user),
+        credits,
+      },
     };
   }
 

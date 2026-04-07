@@ -23,7 +23,10 @@ const AUTH_ENDPOINTS = [
   '/auth/reset-password',
 ]
 
+const AUTH_ERROR_CODE = 1
+
 const GLOBAL_ERROR_MESSAGE_KEY = 'global-request-error'
+const AUTH_FAILURE_MESSAGES = ['未授权', '未授权，请先登录', 'Unauthorized']
 
 /**
  * 使用固定 key 展示错误，避免同类报错短时间内堆叠成多条 toast
@@ -42,6 +45,34 @@ const showSingletonErrorMessage = (content: string): void => {
 const isPublicAuthRequest = (url?: string): boolean => {
   if (!url) return false
   return AUTH_ENDPOINTS.some((endpoint) => url.includes(endpoint))
+}
+
+/**
+ * 判断错误消息是否表示认证失效
+ */
+const isAuthFailureMessage = (content?: string): boolean => {
+  if (!content) return false
+  return AUTH_FAILURE_MESSAGES.some((message) => content.includes(message))
+}
+
+/**
+ * 判断请求错误是否属于认证失效
+ */
+export const isAuthFailureError = (error: unknown): boolean => {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status
+    const responseMessage = typeof error.response?.data?.message === 'string'
+      ? error.response.data.message
+      : ''
+
+    return status === 401 || isAuthFailureMessage(responseMessage)
+  }
+
+  if (error instanceof Error) {
+    return isAuthFailureMessage(error.message)
+  }
+
+  return false
 }
 
 // 创建 axios 实例
@@ -84,6 +115,14 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response: AxiosResponse<ResponseData>) => {
     const { code, message: msg } = response.data
+    const requestUrl = response.config?.url as string | undefined
+    const authStore = useAuthStore()
+    const hasToken = !!authStore.getToken()
+    const shouldClearAuth =
+      code === AUTH_ERROR_CODE &&
+      hasToken &&
+      !isPublicAuthRequest(requestUrl) &&
+      isAuthFailureMessage(msg)
 
     // 成功
     if (code === 0) {
@@ -92,6 +131,9 @@ request.interceptors.response.use(
 
     // 非成功
     showSingletonErrorMessage(msg || '操作失败')
+    if (shouldClearAuth) {
+      clearUserInfo()
+    }
     return Promise.reject(new Error(msg || '操作失败'))
   },
   (error) => {
@@ -101,7 +143,10 @@ request.interceptors.response.use(
       const requestUrl = error.config?.url as string | undefined
       const authStore = useAuthStore()
       const hasToken = !!authStore.getToken()
-      const shouldClearAuth = status === 401 && hasToken && !isPublicAuthRequest(requestUrl)
+      const shouldClearAuth =
+        hasToken &&
+        !isPublicAuthRequest(requestUrl) &&
+        (status === 401 || isAuthFailureMessage(data?.message))
 
         switch (status) {
         case 400:
@@ -109,9 +154,6 @@ request.interceptors.response.use(
           break
         case 401:
           showSingletonErrorMessage(data?.message || '未授权')
-          if (shouldClearAuth) {
-            clearUserInfo()
-          }
           break
         case 403:
           showSingletonErrorMessage('拒绝访问')
@@ -124,6 +166,10 @@ request.interceptors.response.use(
           break
         default:
           showSingletonErrorMessage(data?.message || '网络错误')
+      }
+
+      if (shouldClearAuth) {
+        clearUserInfo()
       }
     } else if (error.request) {
       showSingletonErrorMessage('网络连接失败，请检查网络')

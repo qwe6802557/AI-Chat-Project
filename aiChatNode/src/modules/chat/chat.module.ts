@@ -13,6 +13,7 @@ import { ChatAttachment } from './entities/chat-attachment.entity';
 import { RedisModule } from '../../common/redis/redis.module';
 import { UserModule } from '../user/user.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
+import { CreditsModule } from '../credits/credits.module';
 import { FilesModule } from '../files/files.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { FilesModule } from '../files/files.module';
     TypeOrmModule.forFeature([ChatMessage, ChatSession, ChatAttachment]),
     UserModule,
     AiProviderModule,
+    CreditsModule,
     FilesModule, // 导入文件模块
     RedisModule,
   ],

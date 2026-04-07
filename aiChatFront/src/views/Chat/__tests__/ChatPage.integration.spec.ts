@@ -92,6 +92,30 @@ const ChatAreaStub = defineComponent({
       type: String,
       default: '',
     },
+    modelOptions: {
+      type: Array,
+      required: true,
+    },
+    selectedModelInputPrice: {
+      type: Number,
+      default: 0,
+    },
+    selectedModelOutputPrice: {
+      type: Number,
+      default: 0,
+    },
+    selectedModelReserveCredits: {
+      type: Number,
+      default: 0,
+    },
+    currentCreditsRemaining: {
+      type: Number,
+      default: 0,
+    },
+    hasCreditSnapshot: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: ['send-message', 'update:selected-model'],
   template: `
@@ -99,6 +123,12 @@ const ChatAreaStub = defineComponent({
       <div class="session-probe">{{ currentSessionId }}</div>
       <div class="loading-probe">{{ loading }}</div>
       <div class="model-probe">{{ selectedModel }}</div>
+      <div class="model-input-price-probe">{{ selectedModelInputPrice }}</div>
+      <div class="model-output-price-probe">{{ selectedModelOutputPrice }}</div>
+      <div class="model-reserve-credits-probe">{{ selectedModelReserveCredits }}</div>
+      <div class="model-options-probe">{{ JSON.stringify(modelOptions) }}</div>
+      <div class="current-credits-probe">{{ currentCreditsRemaining }}</div>
+      <div class="has-credit-snapshot-probe">{{ hasCreditSnapshot }}</div>
       <div class="messages-probe">{{ JSON.stringify(messages) }}</div>
       <button class="send-text" @click="$emit('send-message', '你好')">send</button>
       <button class="change-model" @click="$emit('update:selected-model', 'MODEL-X')">change-model</button>
@@ -124,6 +154,12 @@ const waitForRaf = async () => {
 const mountChatPage = async (userOverrides?: Partial<{
   id: string
   username: string
+  credits: {
+    total: number
+    consumed: number
+    remaining: number
+    reserved?: number
+  }
   role: 'admin' | 'user'
   isActive: boolean
   createdAt: string
@@ -134,14 +170,20 @@ const mountChatPage = async (userOverrides?: Partial<{
 
   const { useAuthStore } = await import('@/stores')
   const authStore = useAuthStore()
-  authStore.setAuthSession({
-    token: 'token-1',
-    user: {
-      id: 'user-1',
-      username: 'tester',
-      role: 'user',
-      isActive: true,
-      createdAt: '2026-01-01T00:00:00.000Z',
+    authStore.setAuthSession({
+      token: 'token-1',
+      user: {
+        id: 'user-1',
+        username: 'tester',
+        credits: {
+          total: 2000,
+          consumed: 0,
+          remaining: 2000,
+          reserved: 0,
+        },
+        role: 'user',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
       ...userOverrides,
     },
@@ -199,6 +241,9 @@ describe('ChatPage integration', () => {
       data: [
         {
           modelId: 'GLM-5',
+          inputPrice: 1.83,
+          outputPrice: 7.32,
+          creditCost: 100,
           provider: {
             name: 'Zaiwen',
           },
@@ -211,20 +256,8 @@ describe('ChatPage integration', () => {
   it('creates a session and writes streamed assistant response back into page state', async () => {
     let streamCallbacks:
       | {
-          onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (
-            fullMessage: string,
-            sessionId: string,
-            model: string,
-            usage?: {
-              promptTokens: number
-              completionTokens: number
-              totalTokens: number
-              estimatedInputCost?: number
-              estimatedOutputCost?: number
-              estimatedTotalCost?: number
-            }
-          ) => void
+          onChunk: (chunk: Record<string, unknown>) => void
+          onComplete: (chunk: Record<string, unknown>) => void
           onError: (error: string) => void
         }
       | undefined
@@ -240,6 +273,10 @@ describe('ChatPage integration', () => {
 
     expect(mockGetSessionList).toHaveBeenCalledWith({ userId: 'user-1' })
     expect(mockGetActiveModels).toHaveBeenCalledWith({ includeProvider: true })
+    expect(wrapper.find('.model-input-price-probe').text()).toBe('1.83')
+    expect(wrapper.find('.model-output-price-probe').text()).toBe('7.32')
+    expect(wrapper.find('.model-reserve-credits-probe').text()).toBe('100')
+    expect(wrapper.find('.model-options-probe').text()).toContain('"label":"GLM-5"')
 
     await wrapper.find('.send-text').trigger('click')
     await flushPromises()
@@ -256,17 +293,68 @@ describe('ChatPage integration', () => {
       model: 'GLM-5',
     })
 
-    streamCallbacks?.onMessage('世界')
+    streamCallbacks?.onChunk({
+      type: 'reasoning_start',
+      reasoning: {
+        mode: 'raw',
+        source: 'provider_block',
+        title: 'Think',
+        content: '',
+      },
+    })
+    streamCallbacks?.onChunk({
+      type: 'reasoning_delta',
+      delta: '先分析问题意图',
+      reasoning: {
+        mode: 'raw',
+        source: 'provider_block',
+        title: 'Think',
+        content: '',
+      },
+    })
+    streamCallbacks?.onChunk({
+      type: 'reasoning_done',
+    })
+    streamCallbacks?.onChunk({
+      type: 'answer_delta',
+      delta: '世界',
+    })
     await nextTick()
     await waitForRaf()
 
-    streamCallbacks?.onComplete('世界', 'session-1', 'GLM-5', {
-      promptTokens: 10,
-      completionTokens: 5,
-      totalTokens: 15,
-      estimatedInputCost: 0.01,
-      estimatedOutputCost: 0.02,
-      estimatedTotalCost: 0.03,
+    streamCallbacks?.onComplete({
+      type: 'done',
+      message: '世界',
+      sessionId: 'session-1',
+      model: 'GLM-5',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
+        estimatedInputCost: 0.01,
+        estimatedOutputCost: 0.02,
+        estimatedTotalCost: 0.03,
+      },
+      creditsSnapshot: {
+        total: 2000,
+        consumed: 100,
+        remaining: 1900,
+        reserved: 0,
+      },
+      charge: {
+        id: 'charge-1',
+        clientRequestId: 'request-1',
+        modelId: 'GLM-5',
+        billingMode: 'flat_per_request',
+        credits: 100,
+        status: 'captured',
+      },
+      reasoning: {
+        mode: 'raw',
+        source: 'provider_block',
+        title: 'Think',
+        content: '先分析问题意图',
+      },
     })
     await flushPromises()
 
@@ -291,7 +379,25 @@ describe('ChatPage integration', () => {
         estimatedOutputCost: 0.02,
         estimatedTotalCost: 0.03,
       },
+      charge: {
+        id: 'charge-1',
+        clientRequestId: 'request-1',
+        modelId: 'GLM-5',
+        billingMode: 'flat_per_request',
+        credits: 100,
+        status: 'captured',
+      },
+      reasoning: {
+        mode: 'raw',
+        source: 'provider_block',
+        title: 'Think',
+        content: '先分析问题意图',
+        status: 'done',
+      },
     })
+
+    const { useAuthStore } = await import('@/stores')
+    expect(useAuthStore().userProfile?.credits?.remaining).toBe(1900)
   }, 20000)
 
   it('falls back to default model and shows warning when model list loading fails', async () => {
@@ -300,6 +406,15 @@ describe('ChatPage integration', () => {
     const { wrapper } = await mountChatPage()
 
     expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 GLM-5')
+    expect(wrapper.find('.model-probe').text()).toBe('GLM-5')
+  })
+
+  it('does not show model fallback warning when model request fails because auth expired', async () => {
+    mockGetActiveModels.mockRejectedValueOnce(new Error('未授权，请先登录'))
+
+    const { wrapper } = await mountChatPage()
+
+    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 GLM-5')
     expect(wrapper.find('.model-probe').text()).toBe('GLM-5')
   })
 
@@ -361,10 +476,16 @@ describe('ChatPage integration', () => {
       data: [
         {
           modelId: 'GLM-5',
+          inputPrice: 1.83,
+          outputPrice: 7.32,
+          creditCost: 100,
           provider: { name: 'Zaiwen' },
         },
         {
           modelId: 'MODEL-X',
+          inputPrice: 2.5,
+          outputPrice: 10,
+          creditCost: 200,
           provider: { name: 'Zaiwen' },
         },
       ],
@@ -379,23 +500,39 @@ describe('ChatPage integration', () => {
     await nextTick()
 
     expect(wrapper.find('.model-probe').text()).toBe('MODEL-X')
+    expect(wrapper.find('.model-input-price-probe').text()).toBe('2.5')
+    expect(wrapper.find('.model-output-price-probe').text()).toBe('10')
+    expect(wrapper.find('.model-reserve-credits-probe').text()).toBe('200')
+    expect(wrapper.find('.model-options-probe').text()).toContain('"label":"MODEL-X"')
     expect(localStorage.getItem('selectedChatModel')).toBe('"MODEL-X"')
+  })
+
+  it('blocks sending when current credits are lower than selected model cost', async () => {
+    const { wrapper } = await mountChatPage({
+      credits: {
+        total: 2000,
+        consumed: 1950,
+        remaining: 50,
+        reserved: 0,
+      },
+    })
+
+    expect(wrapper.find('.current-credits-probe').text()).toBe('50')
+    expect(wrapper.find('.has-credit-snapshot-probe').text()).toBe('true')
+
+    await wrapper.find('.send-text').trigger('click')
+    await flushPromises()
+
+    expect(mockCreateSession).not.toHaveBeenCalled()
+    expect(mockSendStreamMessage).not.toHaveBeenCalled()
+    expect(mockMessageWarning).toHaveBeenCalledWith('当前模型发送前至少需预留 100 积分，最终按实际 token 结算，剩余 50 积分')
   })
 
   it('removes streaming assistant message when stream returns error', async () => {
     let streamCallbacks:
       | {
-          onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (
-            fullMessage: string,
-            sessionId: string,
-            model: string,
-            usage?: {
-              promptTokens: number
-              completionTokens: number
-              totalTokens: number
-            }
-          ) => void
+          onChunk: (chunk: Record<string, unknown>) => void
+          onComplete: (chunk: Record<string, unknown>) => void
           onError: (error: string) => void
         }
       | undefined
@@ -412,7 +549,10 @@ describe('ChatPage integration', () => {
     await wrapper.find('.send-text').trigger('click')
     await flushPromises()
 
-    streamCallbacks?.onMessage('部分内容')
+    streamCallbacks?.onChunk({
+      type: 'answer_delta',
+      delta: '部分内容',
+    })
     await nextTick()
     await waitForRaf()
 
@@ -433,17 +573,8 @@ describe('ChatPage integration', () => {
     const close = vi.fn()
     let streamCallbacks:
       | {
-          onMessage: (delta: string, sessionId?: string) => void
-          onComplete: (
-            fullMessage: string,
-            sessionId: string,
-            model: string,
-            usage?: {
-              promptTokens: number
-              completionTokens: number
-              totalTokens: number
-            }
-          ) => void
+          onChunk: (chunk: Record<string, unknown>) => void
+          onComplete: (chunk: Record<string, unknown>) => void
           onError: (error: string) => void
         }
       | undefined
@@ -461,7 +592,10 @@ describe('ChatPage integration', () => {
     await wrapper.find('.send-text').trigger('click')
     await flushPromises()
 
-    streamCallbacks?.onMessage('处理中')
+    streamCallbacks?.onChunk({
+      type: 'answer_delta',
+      delta: '处理中',
+    })
     await nextTick()
     await waitForRaf()
 

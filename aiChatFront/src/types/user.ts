@@ -11,6 +11,7 @@ export interface UserInfo {
   phone?: string
   email?: string
   avatar?: string           // 头像 URL
+  credits?: UserCredits
   role?: 'admin' | 'user'
   isActive?: boolean
   createdAt?: string
@@ -34,6 +35,7 @@ export interface UserCredits {
   total: number         // 总积分
   consumed: number      // 已消耗
   remaining: number     // 剩余积分
+  reserved?: number     // 预占积分
 }
 
 /**
@@ -41,6 +43,27 @@ export interface UserCredits {
  */
 export interface UserAccount extends UserInfo {
   credits: UserCredits
+}
+
+export interface RecentCreditLedgerItem {
+  id: string
+  type: string
+  title: string
+  description?: string | null
+  amount: number
+  balanceAfter: number
+  createdAt: string
+}
+
+export interface UserAccountDetailResponse {
+  user: UserInfo
+  recentLedger: {
+    items: RecentCreditLedgerItem[]
+    total: number
+    page: number
+    pageSize: number
+    hasMore: boolean
+  }
 }
 
 /**

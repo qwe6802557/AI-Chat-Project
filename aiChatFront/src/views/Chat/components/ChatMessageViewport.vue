@@ -7,34 +7,25 @@
         </div>
 
         <div class="features-grid">
-          <div class="feature-column">
+          <div
+            v-for="column in featureColumns"
+            :key="column.title"
+            class="feature-column"
+          >
             <div class="feature-header">
-              <BulbOutlined class="feature-icon" />
-              <h3>示例</h3>
+              <component :is="column.icon" class="feature-icon" />
+              <h3>{{ column.title }}</h3>
             </div>
-            <div class="example-card">"用简单的话解释量子计算"</div>
-            <div class="example-card">"有没有给10岁孩子生日派对的创意点子？"</div>
-            <div class="example-card">"如何在JavaScript中发起HTTP请求？"</div>
-          </div>
-
-          <div class="feature-column">
-            <div class="feature-header">
-              <ThunderboltOutlined class="feature-icon" />
-              <h3>能力</h3>
-            </div>
-            <div class="example-card">记住用户在对话中早些时候说的话</div>
-            <div class="example-card">允许用户提供后续更正</div>
-            <div class="example-card">接受过拒绝不恰当请求的培训</div>
-          </div>
-
-          <div class="feature-column">
-            <div class="feature-header">
-              <WarningOutlined class="feature-icon" />
-              <h3>局限性</h3>
-            </div>
-            <div class="example-card">偶尔可能会产生不正确的信息</div>
-            <div class="example-card">偶尔可能会产生有害的指示或有偏见的内容</div>
-            <div class="example-card">对世界和事件的了解有限</div>
+            <button
+              v-for="item in column.items"
+              :key="item.value"
+              type="button"
+              class="example-card"
+              :disabled="loading"
+              @click="handlePromptClick(item.value)"
+            >
+              {{ item.label }}
+            </button>
           </div>
         </div>
       </div>
@@ -64,6 +55,11 @@
           </a-avatar>
         </div>
         <div class="message-content">
+          <ChatReasoningPanel
+            v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
+            :message-id="message.id"
+            :reasoning="message.reasoning"
+          />
           <MarkdownMessage
             v-if="message.role === 'assistant'"
             class="markdown-content"
@@ -85,14 +81,17 @@
             <span v-if="message.usage" class="meta-chip">
               总计 {{ message.usage.totalTokens }} tok
             </span>
+            <span v-else-if="message.model" class="meta-chip">
+              Token 待统计
+            </span>
             <span
               v-if="message.usage?.estimatedTotalCost !== undefined"
               class="meta-chip cost"
             >
-              估算 ¥{{ formatCost(message.usage.estimatedTotalCost) }}
+              估算 {{ formatCost(message.usage.estimatedTotalCost) }}
             </span>
           </div>
-          <div v-else class="user-message-content">
+          <div v-if="message.role === 'user'" class="user-message-content">
             <div v-if="message.attachments?.length" class="message-attachments">
               <a-image-preview-group>
                 <template v-for="(att, idx) in message.attachments" :key="idx">
@@ -169,6 +168,7 @@ import { useScrollManager } from '@/hooks/useScrollManager'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import MarkdownMessage from './MarkdownMessage.vue'
+import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import type { Message } from '@/interface/conversation'
 
 defineOptions({
@@ -185,9 +185,88 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const emit = defineEmits<{
+  'prompt-click': [prompt: string]
+}>()
+
+interface FeatureItem {
+  label: string
+  value: string
+}
+
+interface FeatureColumn {
+  title: string
+  icon: typeof BulbOutlined
+  items: FeatureItem[]
+}
+
+const featureColumns: FeatureColumn[] = [
+  {
+    title: '示例',
+    icon: BulbOutlined,
+    items: [
+      {
+        label: '"用简单的话解释量子计算"',
+        value: '用简单的话解释量子计算',
+      },
+      {
+        label: '"有没有给10岁孩子生日派对的创意点子？"',
+        value: '有没有给10岁孩子生日派对的创意点子？',
+      },
+      {
+        label: '"如何在JavaScript中发起HTTP请求？"',
+        value: '如何在JavaScript中发起HTTP请求？',
+      },
+    ],
+  },
+  {
+    title: '能力',
+    icon: ThunderboltOutlined,
+    items: [
+      {
+        label: '记住用户在对话中早些时候说的话',
+        value: '记住用户在对话中早些时候说的话',
+      },
+      {
+        label: '允许用户提供后续更正',
+        value: '允许用户提供后续更正',
+      },
+      {
+        label: '接受过拒绝不恰当请求的培训',
+        value: '接受过拒绝不恰当请求的培训',
+      },
+    ],
+  },
+  {
+    title: '局限性',
+    icon: WarningOutlined,
+    items: [
+      {
+        label: '偶尔可能会产生不正确的信息',
+        value: '偶尔可能会产生不正确的信息',
+      },
+      {
+        label: '偶尔可能会产生有害的指示或有偏见的内容',
+        value: '偶尔可能会产生有害的指示或有偏见的内容',
+      },
+      {
+        label: '对世界和事件的了解有限',
+        value: '对世界和事件的了解有限',
+      },
+    ],
+  },
+]
 
 const formatCost = (value: number): string => {
   return value.toFixed(value >= 1 ? 4 : 6)
+}
+
+const handlePromptClick = (prompt: string) => {
+  if (props.loading) {
+    return
+  }
+
+  emit('prompt-click', prompt)
 }
 
 const hasMoreMessagesComputed = computed(() => props.hasMoreMessages ?? true)
@@ -338,15 +417,24 @@ $avatar-size: 32px;
           background: $color-bg-message;
           padding: 12px $spacing-md;
           border-radius: $radius-sm;
+          border: none;
           color: $color-text-primary;
           font-size: $font-size-base;
           line-height: 1.5;
           transition: all 0.2s ease;
           cursor: pointer;
+          text-align: left;
+          width: 100%;
 
           &:hover {
             background: rgba(0, 0, 0, 0.06);
             transform: translateY(-1px);
+          }
+
+          &:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+            transform: none;
           }
         }
       }
@@ -360,7 +448,7 @@ $avatar-size: 32px;
   overflow-x: hidden;
   width: 100%;
   margin: 0 auto;
-  padding: 70px 40px 12px;
+  padding: 85px 40px 12px;
   scroll-behavior: smooth;
 
   @media (max-width: 768px) {

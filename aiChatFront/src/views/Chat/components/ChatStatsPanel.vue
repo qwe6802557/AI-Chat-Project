@@ -13,8 +13,8 @@
 
     <div class="hero-figure">
       <div class="hero-main">
-        <span class="hero-label">总成本估算</span>
-        <strong class="hero-value">¥{{ formatCost(summary.totalEstimatedCost) }}</strong>
+        <span class="hero-label">总消耗估算</span>
+        <strong class="hero-value">{{ formatCost(summary.totalEstimatedCost) }}</strong>
       </div>
       <div class="hero-side">
         <span class="hero-side-label">计费占比</span>

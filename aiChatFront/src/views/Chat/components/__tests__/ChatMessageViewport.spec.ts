@@ -51,6 +51,23 @@ describe('ChatMessageViewport', () => {
     expect(wrapper.text()).toContain('示例')
   })
 
+  it('emits prompt-click when welcome card is clicked', async () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [],
+        loading: false,
+      },
+      shallow: true,
+      global: {
+        stubs: ['a-avatar', 'a-image', 'a-image-preview-group'],
+      },
+    })
+
+    await wrapper.find('button.example-card').trigger('click')
+
+    expect(wrapper.emitted('prompt-click')?.[0]).toEqual(['用简单的话解释量子计算'])
+  })
+
   it('reacts to scroll signal by restoring auto-follow and scrolling to bottom', async () => {
     const wrapper = mount(ChatMessageViewport, {
       props: {
@@ -93,6 +110,14 @@ describe('ChatMessageViewport', () => {
               totalTokens: 15,
               estimatedTotalCost: 0.03,
             },
+            charge: {
+              id: 'charge-1',
+              clientRequestId: 'request-1',
+              modelId: 'GLM-5',
+              billingMode: 'flat_per_request',
+              credits: 100,
+              status: 'captured',
+            },
           },
         ],
         loading: false,
@@ -107,6 +132,30 @@ describe('ChatMessageViewport', () => {
     expect(wrapper.text()).toContain('输入 10 tok')
     expect(wrapper.text()).toContain('输出 5 tok')
     expect(wrapper.text()).toContain('总计 15 tok')
-    expect(wrapper.text()).toContain('估算 ¥0.030000')
+    expect(wrapper.text()).toContain('估算 0.030000')
+    expect(wrapper.text()).not.toContain('扣费 100 积分')
+  })
+
+  it('does not render duplicate plain-text block for streaming assistant message', () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [
+          {
+            id: 'assistant-streaming-1',
+            role: 'assistant',
+            content: '流式内容',
+            timestamp: Date.now(),
+            streaming: true,
+          },
+        ],
+        loading: false,
+      },
+      shallow: true,
+      global: {
+        stubs: ['a-avatar', 'a-image', 'a-image-preview-group', 'MarkdownMessage', 'ChatReasoningPanel'],
+      },
+    })
+
+    expect(wrapper.find('.user-message-content').exists()).toBe(false)
   })
 })

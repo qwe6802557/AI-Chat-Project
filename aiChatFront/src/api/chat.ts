@@ -48,13 +48,8 @@ export function sendMessage(data: SendMessageParams) {
 export function sendStreamMessage(
   data: SendMessageParams,
   callbacks: {
-    onMessage: (delta: string, sessionId?: string) => void
-    onComplete: (
-      fullMessage: string,
-      sessionId: string,
-      model: string,
-      usage?: StreamChunk['usage']
-    ) => void
+    onChunk: (chunk: StreamChunk) => void
+    onComplete: (chunk: StreamChunk) => void
     onError: (error: string) => void
   }
 ): StreamRequestController {
@@ -62,6 +57,61 @@ export function sendStreamMessage(
   const authStore = useAuthStore()
   const token = authStore.getToken()
   const abortController = new AbortController()
+
+  const extractStreamErrorMessage = (rawBody: string): string | null => {
+    const body = rawBody.trim()
+    if (!body) {
+      return null
+    }
+
+    const lines = body.split('\n')
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) {
+        continue
+      }
+
+      try {
+        const payload = JSON.parse(line.slice(6)) as { error?: string; message?: string }
+        if (payload.error || payload.message) {
+          return payload.error || payload.message || null
+        }
+      } catch {
+        continue
+      }
+    }
+
+    try {
+      const payload = JSON.parse(body) as { error?: string; message?: string }
+      return payload.error || payload.message || null
+    } catch {
+      return null
+    }
+  }
+
+  const normalizeStreamChunk = (chunk: StreamChunk): StreamChunk => {
+    if (chunk.type) {
+      return chunk
+    }
+
+    if (chunk.error) {
+      return {
+        ...chunk,
+        type: 'error',
+      }
+    }
+
+    if (chunk.message !== undefined) {
+      return {
+        ...chunk,
+        type: 'done',
+      }
+    }
+
+    return {
+      ...chunk,
+      type: 'answer_delta',
+    }
+  }
 
   // 使用fetch发送并接收SSE流
   const fetchStream = async () => {
@@ -77,7 +127,9 @@ export function sendStreamMessage(
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const rawErrorBody = await response.text()
+        const streamErrorMessage = extractStreamErrorMessage(rawErrorBody)
+        throw new Error(streamErrorMessage || `HTTP error! status: ${response.status}`)
       }
 
       const reader = response.body?.getReader()
@@ -91,6 +143,9 @@ export function sendStreamMessage(
       let buffer = ''
       let latestUsage: StreamChunk['usage'] | undefined
       let latestModel = data.model || 'GLM-5'
+      let latestCreditsSnapshot: StreamChunk['creditsSnapshot'] | undefined
+      let latestCharge: StreamChunk['charge'] | undefined
+      let latestReasoning: StreamChunk['reasoning'] | undefined
 
       while (true) {
         if (abortController.signal.aborted) {
@@ -112,11 +167,11 @@ export function sendStreamMessage(
             const dataStr = line.slice(6) // 去掉 "data: " 前缀
 
             try {
-              const chunk: StreamChunk = JSON.parse(dataStr)
+              const chunk = normalizeStreamChunk(JSON.parse(dataStr) as StreamChunk)
 
               // 检查是否有错误
-              if (chunk.error) {
-                callbacks.onError(chunk.error)
+              if (chunk.error || chunk.type === 'error') {
+                callbacks.onError(chunk.error || '流式请求失败')
                 return
               }
 
@@ -128,20 +183,35 @@ export function sendStreamMessage(
                 latestModel = chunk.model
               }
 
-              // 处理增量内容
-              if (chunk.delta) {
-                fullMessage += chunk.delta
-                callbacks.onMessage(chunk.delta, chunk.sessionId)
+              if (chunk.creditsSnapshot) {
+                latestCreditsSnapshot = chunk.creditsSnapshot
               }
 
+              if (chunk.charge) {
+                latestCharge = chunk.charge
+              }
+
+              if (chunk.reasoning) {
+                latestReasoning = chunk.reasoning
+              }
+
+              if (chunk.type === 'answer_delta' && chunk.delta) {
+                fullMessage += chunk.delta
+              }
+
+              callbacks.onChunk(chunk)
+
               // 只在收到最终汇总事件时结束，避免错过 finish_reason 之后的 usage chunk
-              if (chunk.message !== undefined) {
-                callbacks.onComplete(
-                  chunk.message || fullMessage,
-                  chunk.sessionId || '',
-                  latestModel,
-                  latestUsage
-                )
+              if (chunk.type === 'done') {
+                callbacks.onComplete({
+                  ...chunk,
+                  message: chunk.message || fullMessage,
+                  model: chunk.model || latestModel,
+                  usage: chunk.usage || latestUsage,
+                  charge: chunk.charge || latestCharge,
+                  creditsSnapshot: chunk.creditsSnapshot || latestCreditsSnapshot,
+                  reasoning: chunk.reasoning || latestReasoning,
+                })
                 return
               }
             } catch (e) {
@@ -152,12 +222,17 @@ export function sendStreamMessage(
       }
 
       if (fullMessage) {
-        callbacks.onComplete(
-          fullMessage,
-          data.sessionId || '',
-          latestModel,
-          latestUsage
-        )
+        callbacks.onComplete({
+          type: 'done',
+          sessionId: data.sessionId || '',
+          message: fullMessage,
+          model: latestModel,
+          usage: latestUsage,
+          creditsSnapshot: latestCreditsSnapshot,
+          charge: latestCharge,
+          reasoning: latestReasoning,
+          finish_reason: null,
+        })
       }
     } catch (error: unknown) {
       // 主动取消-不视为错误

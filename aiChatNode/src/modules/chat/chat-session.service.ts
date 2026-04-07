@@ -5,6 +5,7 @@ import { ChatSession } from './entities/chat-session.entity';
 import { ChatMessage } from './entities/chat.entity';
 import { CreateSessionDto, UpdateSessionDto } from './dto';
 import { UserService } from '../user/user.service';
+import { ChatCreditChargeStatus } from '../credits/types/credits.types';
 
 /**
  * 聊天会话服务
@@ -119,6 +120,17 @@ export class ChatSessionService {
       .addSelect(
         (subQuery) =>
           subQuery
+            .select(`COALESCE(SUM(COALESCE(charge."totalCredits", 0)), 0)`)
+            .from('chat_credit_charges', 'charge')
+            .where('charge."sessionId" = session.id')
+            .andWhere('charge."status" = :capturedStatus', {
+              capturedStatus: ChatCreditChargeStatus.CAPTURED,
+            }),
+        'session_totalChargedCredits',
+      )
+      .addSelect(
+        (subQuery) =>
+          subQuery
             .select('chat_message.model')
             .from(ChatMessage, 'chat_message')
             .where('chat_message."sessionId" = session.id')
@@ -133,6 +145,7 @@ export class ChatSessionService {
       session_totalCompletionTokens: string | number | null;
       session_totalTokens: string | number | null;
       session_totalEstimatedCost: string | number | null;
+      session_totalChargedCredits: string | number | null;
     }
 
     const { entities, raw } = await queryBuilder
@@ -150,6 +163,7 @@ export class ChatSessionService {
         ),
         totalTokens: Number(rawRow?.session_totalTokens || 0),
         totalEstimatedCost: Number(rawRow?.session_totalEstimatedCost || 0),
+        totalChargedCredits: Number(rawRow?.session_totalChargedCredits || 0),
       };
 
       return session;

@@ -1,6 +1,10 @@
 /**
  * AI 对话相关的类型定义
  */
+import type {
+  AssistantReasoningMode,
+  AssistantReasoningSource,
+} from '../utils/assistant-content.util';
 
 /**
  * 多模态内容部分 - 文本
@@ -67,16 +71,36 @@ export interface CompletionResponse {
   content: string;
   model: string;
   usage: CompletionUsageStats;
+  reasoning?: {
+    mode: AssistantReasoningMode;
+    source: AssistantReasoningSource;
+    title?: string;
+    content: string;
+  } | null;
 }
 
 /**
  * 流式补全块
  */
 export interface CompletionChunk {
+  type?:
+    | 'reasoning_start'
+    | 'reasoning_delta'
+    | 'reasoning_done'
+    | 'answer_delta'
+    | 'done'
+    | 'error';
   delta?: {
     content?: string;
     role?: string;
   };
+  reasoning?: {
+    mode?: AssistantReasoningMode;
+    source?: AssistantReasoningSource;
+    title?: string;
+    content?: string;
+  } | null;
   finish_reason?: string | null;
   usage?: CompletionUsageStats | null;
+  error?: string;
 }

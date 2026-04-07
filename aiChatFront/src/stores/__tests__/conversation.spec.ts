@@ -174,6 +174,7 @@ describe('useConversationStore', () => {
             totalCompletionTokens: 40,
             totalTokens: 140,
             totalEstimatedCost: 0.1234,
+            totalChargedCredits: 300,
           },
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
@@ -203,6 +204,7 @@ describe('useConversationStore', () => {
         totalCompletionTokens: 40,
         totalTokens: 140,
         totalEstimatedCost: 0.1234,
+        totalChargedCredits: 300,
       },
     })
   })

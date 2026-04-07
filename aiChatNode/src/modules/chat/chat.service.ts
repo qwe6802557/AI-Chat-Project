@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -16,9 +17,22 @@ import { ChatSessionService } from './chat-session.service';
 import {
   ChatMessage,
   CompletionUsageStats,
+  CompletionResponse,
   MultimodalContent,
 } from './types/completion.types';
 import { FilesService } from '../files/files.service';
+import { AiModelService } from '../ai-provider/ai-model.service';
+import { CreditsService } from '../credits/credits.service';
+import { ChatCreditCharge } from '../credits/entities/chat-credit-charge.entity';
+import type {
+  ChatCreditChargeSummary,
+  UserCreditsSnapshot,
+} from '../credits/types/credits.types';
+import { DEFAULT_MODEL_BILLING_MODE } from '../credits/types/credits.types';
+import {
+  extractAssistantContent,
+  type ExtractedAssistantReasoning,
+} from './utils/assistant-content.util';
 
 export interface SessionMessageAttachmentDto {
   id: string;
@@ -39,20 +53,42 @@ export type SessionMessageDto = Pick<
   | 'aiMessage'
   | 'model'
   | 'usage'
+  | 'reasoning'
   | 'createdAt'
   | 'updatedAt'
 > & {
   attachments: SessionMessageAttachmentDto[];
+  charge?: ChatCreditChargeSummary | null;
 };
 
 interface PersistedChatMessageResult {
   savedMessage: ChatRecord;
   sessionId: string;
+  charge: ChatCreditChargeSummary;
+  creditsSnapshot: UserCreditsSnapshot;
+}
+
+interface FinalizedAssistantPayload {
+  content: string;
+  reasoning: ExtractedAssistantReasoning | null;
+}
+
+interface ResolvedChatModelConfig {
+  modelId: string;
+  billingMode: string;
+  reserveCredits: number;
+  inputPrice: number;
+  outputPrice: number;
+  maxOutput: number;
+  providerName?: string | null;
 }
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+  // 预占阶段只能做启发式估算；图片输入额外留出保守的 token 预算，避免低估。
+  private readonly IMAGE_INPUT_TOKEN_BUDGET = 1500;
+  private readonly DEFAULT_OUTPUT_TOKEN_BUDGET = 4096;
 
   /**
    * 支持的图片 MIME 类型
@@ -73,19 +109,168 @@ export class ChatService {
     private readonly chatSessionService: ChatSessionService,
     private readonly configService: ConfigService,
     private readonly filesService: FilesService,
+    private readonly aiModelService: AiModelService,
+    private readonly creditsService: CreditsService,
   ) {}
 
   private buildMessagePreview(message: string): string {
     return message.length > 50 ? `${message.substring(0, 50)}...` : message;
   }
 
+  private createClientRequestId(clientRequestId?: string): string {
+    return clientRequestId?.trim() || randomUUID();
+  }
+
+  private async resolveChatModelConfig(
+    requestedModel?: string,
+  ): Promise<ResolvedChatModelConfig> {
+    const modelId = requestedModel || this.getDefaultChatModel();
+    const model = await this.aiModelService.findByModelId(modelId, true);
+
+    return {
+      modelId: model.modelId,
+      billingMode:
+        model.billingMode === 'flat_per_request'
+          ? DEFAULT_MODEL_BILLING_MODE
+          : model.billingMode,
+      reserveCredits: model.creditCost,
+      inputPrice: Number(model.inputPrice || 0),
+      outputPrice: Number(model.outputPrice || 0),
+      maxOutput: Number(model.maxOutput || 0),
+      providerName: model.provider?.name || null,
+    };
+  }
+
+  private estimateTextTokens(text: string): number {
+    const normalizedText = text.trim();
+    if (!normalizedText) {
+      return 0;
+    }
+
+    let asciiChars = 0;
+    let nonAsciiChars = 0;
+    for (const char of normalizedText) {
+      if ((char.codePointAt(0) || 0) <= 0x7f) {
+        asciiChars += 1;
+      } else {
+        nonAsciiChars += 1;
+      }
+    }
+
+    return Math.max(1, Math.ceil(asciiChars / 4) + nonAsciiChars);
+  }
+
+  private estimateContentTokens(content: ChatMessage['content']): number {
+    if (typeof content === 'string') {
+      return this.estimateTextTokens(content);
+    }
+
+    return content.reduce((sum, part) => {
+      if (part.type === 'text') {
+        return sum + this.estimateTextTokens(part.text);
+      }
+
+      if (part.type === 'image_url') {
+        return sum + this.IMAGE_INPUT_TOKEN_BUDGET;
+      }
+
+      return sum;
+    }, 0);
+  }
+
+  private estimatePromptTokens(messages: ChatMessage[]): number {
+    const contentTokens = messages.reduce((sum, message) => {
+      return sum + this.estimateContentTokens(message.content);
+    }, 0);
+
+    return contentTokens + Math.max(8, messages.length * 6);
+  }
+
+  private estimateReserveCredits(params: {
+    messages: ChatMessage[];
+    model: ResolvedChatModelConfig;
+    maxTokens?: number;
+  }): number {
+    const promptTokens = this.estimatePromptTokens(params.messages);
+    const outputTokenBudget =
+      params.maxTokens ||
+      params.model.maxOutput ||
+      this.DEFAULT_OUTPUT_TOKEN_BUDGET;
+    const estimatedPromptCost =
+      (promptTokens / 1000) * Number(params.model.inputPrice || 0);
+    const estimatedOutputCost =
+      (outputTokenBudget / 1000) * Number(params.model.outputPrice || 0);
+    const estimatedCredits = Math.ceil(
+      estimatedPromptCost + estimatedOutputCost,
+    );
+
+    return Math.max(params.model.reserveCredits, estimatedCredits);
+  }
+
+  private estimateActualChargeCredits(
+    usage: CompletionUsageStats | null | undefined,
+    model: Pick<ResolvedChatModelConfig, 'inputPrice' | 'outputPrice'>,
+  ): number | undefined {
+    if (!usage) {
+      return undefined;
+    }
+
+    const promptTokens = Number(usage.promptTokens || 0);
+    const completionTokens = Number(usage.completionTokens || 0);
+    if (promptTokens <= 0 && completionTokens <= 0) {
+      return 0;
+    }
+
+    const estimatedTotalCost =
+      usage.estimatedTotalCost ??
+      (promptTokens / 1000) * Number(model.inputPrice || 0) +
+        (completionTokens / 1000) * Number(model.outputPrice || 0);
+
+    if (estimatedTotalCost <= 0) {
+      return 0;
+    }
+
+    return Math.max(1, Math.ceil(estimatedTotalCost));
+  }
+
+  private async reserveChatCharge(params: {
+    userId: string;
+    clientRequestId: string;
+    sessionId?: string;
+    model: ResolvedChatModelConfig;
+    reserveCredits: number;
+  }): Promise<{
+    charge: ChatCreditChargeSummary;
+    creditsSnapshot: UserCreditsSnapshot;
+  }> {
+    return this.creditsService.reserveChatCharge({
+      userId: params.userId,
+      clientRequestId: params.clientRequestId,
+      sessionId: params.sessionId,
+      modelId: params.model.modelId,
+      billingMode: params.model.billingMode,
+      creditCost: params.reserveCredits,
+      ruleSnapshot: {
+        modelId: params.model.modelId,
+        billingMode: params.model.billingMode,
+        reserveCredits: params.reserveCredits,
+        inputPrice: params.model.inputPrice,
+        outputPrice: params.model.outputPrice,
+        providerName: params.model.providerName || null,
+      },
+    });
+  }
+
   private async persistChatMessage(params: {
     userId: string;
     sessionId?: string;
+    clientRequestId: string;
     userMessage: string;
     aiMessage: string;
+    reasoning?: ExtractedAssistantReasoning | null;
     model: string;
-    usage: CompletionUsageStats;
+    usage?: CompletionUsageStats | null;
+    actualCredits?: number;
     attachmentIds: string[];
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
@@ -107,8 +292,9 @@ export class ChatService {
         sessionId: targetSessionId,
         userMessage: params.userMessage,
         aiMessage: params.aiMessage,
+        reasoning: params.reasoning || null,
         model: params.model,
-        usage: params.usage,
+        usage: params.usage || null,
       });
 
       const savedMessage = await chatMessageRepository.save(chatMessage);
@@ -130,9 +316,22 @@ export class ChatService {
         lastMessagePreview: this.buildMessagePreview(params.userMessage),
       });
 
+      const captureResult = await this.creditsService.captureChatCharge(
+        {
+          userId: params.userId,
+          clientRequestId: params.clientRequestId,
+          sessionId: targetSessionId,
+          messageId: savedMessage.id,
+          totalCredits: params.actualCredits,
+        },
+        manager,
+      );
+
       return {
         savedMessage,
         sessionId: targetSessionId,
+        charge: captureResult.charge,
+        creditsSnapshot: captureResult.creditsSnapshot,
       };
     });
   }
@@ -227,6 +426,50 @@ export class ChatService {
     );
   }
 
+  async releaseReservedChatCharge(params: {
+    userId: string;
+    clientRequestId: string;
+    sessionId?: string;
+    failureReason?: string;
+  }) {
+    return this.creditsService.releaseChatCharge({
+      userId: params.userId,
+      clientRequestId: params.clientRequestId,
+      sessionId: params.sessionId,
+      failureReason: params.failureReason,
+    });
+  }
+
+  async releaseReservedChatChargeSafely(params: {
+    userId: string;
+    clientRequestId: string;
+    sessionId?: string;
+    failureReason?: string;
+  }): Promise<void> {
+    try {
+      await this.releaseReservedChatCharge(params);
+    } catch (releaseError) {
+      this.logger.error('释放预占积分失败:', releaseError);
+    }
+  }
+
+  private finalizeAssistantPayload(
+    completion: Pick<CompletionResponse, 'content' | 'reasoning'>,
+  ): FinalizedAssistantPayload {
+    if (completion.reasoning) {
+      return {
+        content: completion.content,
+        reasoning: completion.reasoning,
+      };
+    }
+
+    const extracted = extractAssistantContent(completion.content);
+    return {
+      content: extracted.answer,
+      reasoning: extracted.reasoning,
+    };
+  }
+
   /**
    * 创建聊天对话
    * @param createChatDto 聊天请求参数
@@ -253,6 +496,10 @@ export class ChatService {
       await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
+    const clientRequestId = this.createClientRequestId(
+      createChatDto.clientRequestId,
+    );
+
     // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
@@ -274,9 +521,12 @@ export class ChatService {
         10,
       );
       historyMessages.forEach((msg) => {
+        const assistantAnswer = msg.reasoning
+          ? msg.aiMessage
+          : extractAssistantContent(msg.aiMessage || '').answer;
         messages.push(
           { role: 'user', content: msg.userMessage },
-          { role: 'assistant', content: msg.aiMessage },
+          { role: 'assistant', content: assistantAnswer },
         );
       });
     } else if (createChatDto.history?.length) {
@@ -302,45 +552,89 @@ export class ChatService {
       );
     }
 
-    // 获取默认模型
-    const modelId = createChatDto.model || this.getDefaultChatModel();
-
-    // 调用 AI 客户端服务
-    const completion = await this.aiClientService.createChatCompletion(
-      modelId,
+    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
+    const reserveCredits = this.estimateReserveCredits({
       messages,
-      {
-        temperature: createChatDto.temperature,
-        maxTokens: createChatDto.maxTokens,
-      },
-    );
+      model: chargeModel,
+      maxTokens: createChatDto.maxTokens,
+    });
+    let reservedSessionId = sessionId;
+    let reservedCharge: ChatCreditChargeSummary | null = null;
 
-    // 提取回复内容
-    const assistantMessage = completion.content;
+    try {
+      const reserveResult = await this.reserveChatCharge({
+        userId,
+        clientRequestId,
+        sessionId,
+        model: chargeModel,
+        reserveCredits,
+      });
+      reservedCharge = reserveResult.charge;
 
-    this.logger.log(`AI 回复: ${assistantMessage.substring(0, 50)}...`);
+      const completion = await this.aiClientService.createChatCompletion(
+        chargeModel.modelId,
+        messages,
+        {
+          temperature: createChatDto.temperature,
+          maxTokens: createChatDto.maxTokens,
+        },
+      );
 
-    const { savedMessage, sessionId: persistedSessionId } =
-      await this.persistChatMessage({
+      const finalizedAssistant = this.finalizeAssistantPayload(completion);
+      const assistantMessage = finalizedAssistant.content;
+      const actualCredits = this.estimateActualChargeCredits(
+        completion.usage,
+        chargeModel,
+      );
+
+      this.logger.log(`AI 回复: ${assistantMessage.substring(0, 50)}...`);
+
+      const {
+        savedMessage,
+        sessionId: persistedSessionId,
+        charge,
+        creditsSnapshot,
+      } = await this.persistChatMessage({
         userId,
         sessionId,
+        clientRequestId,
         userMessage: createChatDto.message,
         aiMessage: assistantMessage,
+        reasoning: finalizedAssistant.reasoning,
         model: completion.model,
         usage: completion.usage,
+        actualCredits,
         attachmentIds,
       });
 
-    this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
+      reservedSessionId = persistedSessionId;
+      this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
 
-    return {
-      id: savedMessage.id,
-      sessionId: persistedSessionId,
-      message: assistantMessage,
-      model: completion.model,
-      usage: completion.usage,
-      createdAt: savedMessage.createdAt,
-    };
+      return {
+        id: savedMessage.id,
+        sessionId: persistedSessionId,
+        message: assistantMessage,
+        reasoning: finalizedAssistant.reasoning,
+        model: completion.model,
+        usage: completion.usage,
+        charge,
+        creditsSnapshot,
+        createdAt: savedMessage.createdAt,
+      };
+    } catch (error) {
+      if (reservedCharge) {
+        await this.releaseReservedChatChargeSafely({
+          userId,
+          clientRequestId,
+          sessionId: reservedSessionId,
+          failureReason:
+            error instanceof Error
+              ? error.message
+              : '聊天请求失败，释放预占积分',
+        });
+      }
+      throw error;
+    }
   }
 
   /**
@@ -410,9 +704,53 @@ export class ChatService {
     // 如果是倒序查询-反转数组使消息按时间正序显示
     const orderedMessages = order === 'desc' ? messages.reverse() : messages;
 
+    const messageIds = orderedMessages.map((message) => message.id);
+    const chargeMap = new Map<string, ChatCreditChargeSummary>();
+
+    if (messageIds.length > 0) {
+      const charges = await this.dataSource
+        .getRepository(ChatCreditCharge)
+        .createQueryBuilder('charge')
+        .where('charge.userId = :userId', { userId })
+        .andWhere('charge.messageId IN (:...messageIds)', { messageIds })
+        .andWhere('charge.status = :status', { status: 'captured' })
+        .getMany();
+
+      charges.forEach((charge) => {
+        if (!charge.messageId) {
+          return;
+        }
+
+        chargeMap.set(charge.messageId, {
+          id: charge.id,
+          clientRequestId: charge.clientRequestId,
+          modelId: charge.modelId,
+          billingMode: charge.billingMode,
+          credits: charge.totalCredits,
+          status: charge.status,
+        });
+      });
+    }
+
     // 转换附件格式
     const messagesWithAttachments = orderedMessages.map((msg) => ({
-      ...msg,
+      ...(() => {
+        if (msg.reasoning) {
+          return msg;
+        }
+
+        const extracted = extractAssistantContent(msg.aiMessage || '');
+        if (!extracted.reasoning) {
+          return msg;
+        }
+
+        return {
+          ...msg,
+          aiMessage: extracted.answer,
+          reasoning: extracted.reasoning,
+        };
+      })(),
+      charge: chargeMap.get(msg.id) || null,
       attachments: (msg.attachments || []).map((att) => ({
         id: att.id,
         url: this.filesService.buildSignedFileUrl(att.id),
@@ -470,6 +808,10 @@ export class ChatService {
       await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
+    const clientRequestId = this.createClientRequestId(
+      createChatDto.clientRequestId,
+    );
+
     // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
@@ -488,9 +830,12 @@ export class ChatService {
         10,
       );
       historyMessages.forEach((msg) => {
+        const assistantAnswer = msg.reasoning
+          ? msg.aiMessage
+          : extractAssistantContent(msg.aiMessage || '').answer;
         messages.push(
           { role: 'user', content: msg.userMessage },
-          { role: 'assistant', content: msg.aiMessage },
+          { role: 'assistant', content: assistantAnswer },
         );
       });
     } else if (createChatDto.history?.length) {
@@ -516,29 +861,57 @@ export class ChatService {
       );
     }
 
-    // 获取默认模型
-    const modelId = createChatDto.model || this.getDefaultChatModel();
-
-    // 调用 AI 客户端服务-流式
-    const stream = await this.aiClientService.createStreamChatCompletion(
-      modelId,
+    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
+    const reserveCredits = this.estimateReserveCredits({
       messages,
-      {
-        temperature: createChatDto.temperature,
-        maxTokens: createChatDto.maxTokens,
-        abortSignal: options?.abortSignal,
-      },
-    );
+      model: chargeModel,
+      maxTokens: createChatDto.maxTokens,
+    });
+    let hasReservedCharge = false;
 
-    // 返回流和必要的上下文信息
-    return {
-      stream,
-      sessionId,
-      userId,
-      userMessage: createChatDto.message,
-      modelId,
-      attachmentIds,
-    };
+    try {
+      await this.reserveChatCharge({
+        userId,
+        clientRequestId,
+        sessionId,
+        model: chargeModel,
+        reserveCredits,
+      });
+      hasReservedCharge = true;
+
+      const stream = await this.aiClientService.createStreamChatCompletion(
+        chargeModel.modelId,
+        messages,
+        {
+          temperature: createChatDto.temperature,
+          maxTokens: createChatDto.maxTokens,
+          abortSignal: options?.abortSignal,
+        },
+      );
+
+      return {
+        stream,
+        sessionId,
+        userId,
+        userMessage: createChatDto.message,
+        modelId: chargeModel.modelId,
+        clientRequestId,
+        attachmentIds,
+      };
+    } catch (error) {
+      if (hasReservedCharge) {
+        await this.releaseReservedChatChargeSafely({
+          userId,
+          clientRequestId,
+          sessionId,
+          failureReason:
+            error instanceof Error
+              ? error.message
+              : '流式聊天初始化失败，释放预占积分',
+        });
+      }
+      throw error;
+    }
   }
 
   /**
@@ -548,28 +921,35 @@ export class ChatService {
   async saveStreamMessage(
     userId: string,
     sessionId: string,
+    clientRequestId: string,
     userMessage: string,
     aiMessage: string,
+    reasoning: ExtractedAssistantReasoning | null,
     model: string,
     usage?: CompletionUsageStats,
     attachmentIds?: string[],
   ) {
-    const { savedMessage } = await this.persistChatMessage({
+    const chargeModel = await this.resolveChatModelConfig(model);
+    const actualCredits = this.estimateActualChargeCredits(usage, chargeModel);
+    const { savedMessage, charge, creditsSnapshot } = await this.persistChatMessage({
       userId,
       sessionId,
+      clientRequestId,
       userMessage,
       aiMessage,
+      reasoning,
       model,
-      usage: usage || {
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-      },
+      usage: usage || null,
+      actualCredits,
       attachmentIds: attachmentIds || [],
     });
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);
 
-    return savedMessage;
+    return {
+      savedMessage,
+      charge,
+      creditsSnapshot,
+    };
   }
 }

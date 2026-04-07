@@ -19,6 +19,13 @@
       :selected-model="selectedModel"
       :model-options="modelOptions"
       :models-loading="modelsLoading"
+      :selected-model-input-price="selectedModelInputPrice"
+      :selected-model-output-price="selectedModelOutputPrice"
+      :selected-model-reserve-credits="selectedModelReserveCredits"
+      :selected-model-reasoning-capability="selectedModelReasoningCapability"
+      :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
+      :current-credits-remaining="currentCreditsRemaining"
+      :has-credit-snapshot="hasCreditSnapshot"
       @update:selected-model="handleModelChange"
     />
 
@@ -29,6 +36,7 @@
       :has-more-messages="hasMoreMessages"
       :load-more-messages="loadMoreMessages"
       :scroll-signal="scrollSignal"
+      @prompt-click="handlePromptClick"
     />
 
     <div class="input-area-container">
@@ -86,6 +94,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { message } from 'ant-design-vue'
 import {
   CloudUploadOutlined,
   PictureOutlined,
@@ -106,14 +115,37 @@ interface Props {
   messages: Message[]
   loading: boolean
   selectedModel: string
-  modelOptions: Array<{ label: string; value: string }>
+  modelOptions: Array<{
+    label: string
+    value: string
+    inputPrice?: number
+    outputPrice?: number
+    reserveCredits?: number
+    reasoningCapability?: 'none' | 'summary' | 'raw'
+    reasoningBadgeLabel?: string
+  }>
   modelsLoading?: boolean
   currentSessionId?: string
   hasMoreMessages?: boolean
   loadMoreMessages?: (sessionId: string, page: number) => Promise<void>
+  selectedModelInputPrice?: number
+  selectedModelOutputPrice?: number
+  selectedModelReserveCredits?: number
+  selectedModelReasoningCapability?: 'none' | 'summary' | 'raw'
+  selectedModelReasoningBadgeLabel?: string
+  currentCreditsRemaining?: number
+  hasCreditSnapshot?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  selectedModelInputPrice: 0,
+  selectedModelOutputPrice: 0,
+  selectedModelReserveCredits: 0,
+  selectedModelReasoningCapability: 'none',
+  selectedModelReasoningBadgeLabel: '',
+  currentCreditsRemaining: 0,
+  hasCreditSnapshot: false,
+})
 
 const emit = defineEmits<{
   'update:selected-model': [modelId: string]
@@ -145,14 +177,26 @@ const {
   canSendFiles,
 } = useFileUpload()
 
+const hasEnoughCredits = computed(() => {
+  if (!props.hasCreditSnapshot) {
+    return true
+  }
+
+  return props.currentCreditsRemaining >= props.selectedModelReserveCredits
+})
+
 const canSend = computed(() => {
   const hasContent = !!inputMessage.value.trim()
   const canSendWithFiles = hasFiles.value && canSendFiles.value
-  return (hasContent || canSendWithFiles) && !props.loading
+  return (hasContent || canSendWithFiles) && !props.loading && hasEnoughCredits.value
 })
 
 const handleModelChange = (value: string) => {
   emit('update:selected-model', value)
+}
+
+const handlePromptClick = (prompt: string) => {
+  emit('send-message', prompt)
 }
 
 const handleSend = () => {
@@ -163,6 +207,13 @@ const handleSend = () => {
   }
 
   if (props.loading || isProcessing.value) {
+    return
+  }
+
+  if (!hasEnoughCredits.value) {
+    message.warning(
+      `当前模型发送前至少需预留 ${props.selectedModelReserveCredits} 积分，最终按实际 token 结算，剩余 ${props.currentCreditsRemaining} 积分`,
+    )
     return
   }
 

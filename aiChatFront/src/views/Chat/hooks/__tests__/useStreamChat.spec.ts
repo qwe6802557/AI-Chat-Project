@@ -44,20 +44,16 @@ describe('useStreamChat', () => {
 
     const close = vi.fn()
     let callbacks: {
-      onMessage: (delta: string) => void
-      onComplete: (
-        fullMessage: string,
-        sessionId: string,
-        model: string,
-        usage?: {
-          promptTokens: number
-          completionTokens: number
-          totalTokens: number
-          estimatedInputCost?: number
-          estimatedOutputCost?: number
-          estimatedTotalCost?: number
-        }
-      ) => void
+      onChunk: (chunk: {
+        type?: string
+        delta?: string
+        message?: string
+      }) => void
+      onComplete: (chunk: {
+        type?: string
+        message?: string
+        model?: string
+      }) => void
       onError: (error: string) => void
     } | undefined
 
@@ -98,7 +94,10 @@ describe('useStreamChat', () => {
     })
     expect(payload.files).toBeUndefined()
 
-    callbacks?.onMessage('hello')
+    callbacks?.onChunk({
+      type: 'answer_delta',
+      delta: 'hello',
+    })
     await nextTick()
 
     store.currentConversationId = 'session-2'

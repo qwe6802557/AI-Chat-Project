@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ClaudeAdapter } from '../adapters/claude.adapter';
 import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
@@ -12,6 +13,15 @@ import {
   CompletionChunk,
   CompletionUsageStats,
 } from '../types/completion.types';
+import {
+  extractAssistantContent,
+  type ExtractedAssistantReasoning,
+} from '../utils/assistant-content.util';
+import {
+  resolveModelReasoningProfile,
+  resolveReasoningPanelTitle,
+  type ModelReasoningProfile,
+} from '../utils/reasoning-profile.util';
 
 export interface ProviderHealthStatus {
   providerId: string;
@@ -36,6 +46,7 @@ export interface ProviderHealthStatus {
 @Injectable()
 export class AIClientService {
   private readonly logger = new Logger(AIClientService.name);
+  private readonly THINK_TAG_PATTERN = /<think\b|<\/think>/i;
 
   constructor(
     private readonly claudeAdapter: ClaudeAdapter,
@@ -43,6 +54,7 @@ export class AIClientService {
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
+    private readonly configService: ConfigService,
   ) {}
 
   private readonly DEFAULT_PROVIDER_HEALTH_CACHE_TTL_SECONDS = 60;
@@ -111,17 +123,194 @@ export class AIClientService {
       outputPrice: number;
     },
   ): CompletionUsageStats {
+    const promptTokens = Number(usage.promptTokens || 0);
+    const completionTokens = Number(usage.completionTokens || 0);
+    const totalTokens =
+      Number(usage.totalTokens || 0) || promptTokens + completionTokens;
     const estimatedInputCost =
-      (usage.promptTokens / 1000) * Number(pricing.inputPrice || 0);
+      (promptTokens / 1000) * Number(pricing.inputPrice || 0);
     const estimatedOutputCost =
-      (usage.completionTokens / 1000) * Number(pricing.outputPrice || 0);
+      (completionTokens / 1000) * Number(pricing.outputPrice || 0);
 
     return {
-      ...usage,
+      promptTokens,
+      completionTokens,
+      totalTokens,
       estimatedInputCost,
       estimatedOutputCost,
       estimatedTotalCost: estimatedInputCost + estimatedOutputCost,
     };
+  }
+
+  private isReasoningDebugEnabled(): boolean {
+    return this.configService.get<string>('REASONING_DEBUG_ENABLED') === 'true';
+  }
+
+  private getReasoningDebugSnippetLength(): number {
+    const configuredValue = Number(
+      this.configService.get<string>('REASONING_DEBUG_SNIPPET_LENGTH') || '200',
+    );
+
+    if (!Number.isFinite(configuredValue) || configuredValue <= 0) {
+      return 200;
+    }
+
+    return Math.min(Math.floor(configuredValue), 2000);
+  }
+
+  private buildReasoningDebugSnippet(content: string): string {
+    const normalizedContent = content.replace(/\s+/g, ' ').trim();
+    return normalizedContent.slice(0, this.getReasoningDebugSnippetLength());
+  }
+
+  private logReasoningDebug(
+    event: 'non-stream' | 'stream',
+    profile: ModelReasoningProfile,
+    content: string,
+  ): void {
+    if (!this.isReasoningDebugEnabled()) {
+      return;
+    }
+
+    if (!this.THINK_TAG_PATTERN.test(content)) {
+      return;
+    }
+
+    this.logger.log(
+      `[reasoning-debug][${event}] model=${profile.modelId} capability=${profile.capability} integration=${profile.integration} containsThink=true snippet=${this.buildReasoningDebugSnippet(content)}`,
+    );
+  }
+
+  private normalizeCompletionResponse(
+    completion: CompletionResponse,
+    profile: ModelReasoningProfile,
+  ): CompletionResponse {
+    this.logReasoningDebug('non-stream', profile, completion.content);
+    const extracted = extractAssistantContent(completion.content);
+    const normalizedReasoning = this.normalizeReasoningForProfile(
+      extracted.reasoning,
+      profile,
+    );
+
+    return {
+      ...completion,
+      content: extracted.answer,
+      reasoning: normalizedReasoning,
+    };
+  }
+
+  private normalizeReasoningForProfile(
+    reasoning: ExtractedAssistantReasoning | null,
+    profile: ModelReasoningProfile,
+  ): CompletionResponse['reasoning'] {
+    if (!reasoning || !reasoning.content) {
+      return null;
+    }
+
+    if (profile.capability === 'none') {
+      return null;
+    }
+
+    if (profile.capability === 'summary') {
+      if (reasoning.mode !== 'summary') {
+        return null;
+      }
+    }
+
+    return {
+      ...reasoning,
+      title: resolveReasoningPanelTitle(reasoning.mode, profile.strategy),
+    };
+  }
+
+  private async *normalizeStreamWithReasoning(
+    stream: AsyncIterable<CompletionChunk>,
+    profile: ModelReasoningProfile,
+  ): AsyncIterable<CompletionChunk> {
+    let rawContent = '';
+    let emittedAnswer = '';
+    let emittedReasoning = '';
+    let reasoningStarted = false;
+    let reasoningCompleted = false;
+    let latestReasoningMeta: ExtractedAssistantReasoning | null = null;
+    let hasLoggedThink = false;
+
+    for await (const chunk of stream) {
+      if (chunk.type && chunk.type !== 'answer_delta') {
+        yield chunk;
+        continue;
+      }
+
+      const rawDelta = chunk.delta?.content || '';
+
+      if (!rawDelta) {
+        yield chunk;
+        continue;
+      }
+
+      rawContent += rawDelta;
+      if (!hasLoggedThink && this.THINK_TAG_PATTERN.test(rawContent)) {
+        hasLoggedThink = true;
+        this.logReasoningDebug('stream', profile, rawContent);
+      }
+      const extracted = extractAssistantContent(rawContent);
+      latestReasoningMeta = this.normalizeReasoningForProfile(
+        extracted.reasoning,
+        profile,
+      ) as ExtractedAssistantReasoning | null;
+      const reasoningContent = extracted.reasoning?.content || '';
+      const answerContent = extracted.answer;
+
+      if (latestReasoningMeta && reasoningContent && !reasoningStarted) {
+        reasoningStarted = true;
+        yield {
+          type: 'reasoning_start',
+          reasoning: {
+            mode: latestReasoningMeta.mode,
+            source: latestReasoningMeta.source,
+            title: latestReasoningMeta.title,
+          },
+        };
+      }
+
+      const visibleReasoningContent = latestReasoningMeta?.content || '';
+      const reasoningDelta = visibleReasoningContent.slice(emittedReasoning.length);
+      if (reasoningDelta) {
+        emittedReasoning = visibleReasoningContent;
+        yield {
+          type: 'reasoning_delta',
+          delta: {
+            content: reasoningDelta,
+          },
+          reasoning: {
+            mode: latestReasoningMeta?.mode,
+            source: latestReasoningMeta?.source,
+            title: latestReasoningMeta?.title,
+          },
+        };
+      }
+
+      if (reasoningStarted && !reasoningCompleted && !extracted.reasoningOpen) {
+        reasoningCompleted = true;
+        yield {
+          type: 'reasoning_done',
+          reasoning: latestReasoningMeta,
+        };
+      }
+
+      const answerDelta = answerContent.slice(emittedAnswer.length);
+      if (answerDelta) {
+        emittedAnswer = answerContent;
+        yield {
+          ...chunk,
+          type: 'answer_delta',
+          delta: {
+            ...chunk.delta,
+            content: answerDelta,
+          },
+        };
+      }
+    }
   }
 
   /**
@@ -175,6 +364,10 @@ export class AIClientService {
     );
 
     const adapter = this.resolveAdapter(model.provider.name);
+    const reasoningProfile = resolveModelReasoningProfile({
+      providerName: model.provider.name,
+      modelId,
+    });
 
     // 调用适配器
     const completion = await adapter.createChatCompletion(
@@ -188,7 +381,7 @@ export class AIClientService {
 
     // 返回结果
     return {
-      ...completion,
+      ...this.normalizeCompletionResponse(completion, reasoningProfile),
       usage: this.buildUsageWithEstimatedCost(completion.usage, {
         inputPrice: Number(model.inputPrice || 0),
         outputPrice: Number(model.outputPrice || 0),
@@ -224,6 +417,10 @@ export class AIClientService {
     );
 
     const adapter = this.resolveAdapter(model.provider.name);
+    const reasoningProfile = resolveModelReasoningProfile({
+      providerName: model.provider.name,
+      modelId,
+    });
 
     // 更新供应商访问量统计
     await this.aiProviderService.incrementAccessCount(model.provider.id);
@@ -235,10 +432,13 @@ export class AIClientService {
       options,
     );
 
-    return this.decorateStreamWithEstimatedCost(stream, {
-      inputPrice: Number(model.inputPrice || 0),
-      outputPrice: Number(model.outputPrice || 0),
-    });
+    return this.decorateStreamWithEstimatedCost(
+      this.normalizeStreamWithReasoning(stream, reasoningProfile),
+      {
+        inputPrice: Number(model.inputPrice || 0),
+        outputPrice: Number(model.outputPrice || 0),
+      },
+    );
   }
 
   private async *decorateStreamWithEstimatedCost(

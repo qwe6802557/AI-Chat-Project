@@ -46,6 +46,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/account',
+      name: 'account',
+      component: () => import('../views/Account/index.vue'),
+      meta: {
+        title: 'My Account',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/home',
       name: 'home',
       component: HomeView,
@@ -81,6 +90,8 @@ router.beforeEach((to, from, next) => {
   // 首次访问时从 localStorage 初始化状态
   if (!authStore.token) {
     authStore.initFromStorage()
+  } else {
+    authStore.purgeExpiredSession()
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {

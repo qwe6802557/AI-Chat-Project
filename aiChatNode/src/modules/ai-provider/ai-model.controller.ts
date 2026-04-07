@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../user/entities/user.entity';
+import type { AiModel } from './entities/ai-model.entity';
+import { resolveModelReasoningProfile } from '../chat/utils/reasoning-profile.util';
 
 @ApiTags('AI模型管理')
 @ApiBearerAuth() // Swagger中显示需要Bearer Token
@@ -20,6 +22,21 @@ import { UserRole } from '../user/entities/user.entity';
 @UseGuards(JwtAuthGuard) // 接口需要登录验证
 export class AiModelController {
   constructor(private readonly modelService: AiModelService) {}
+
+  private serializeModel(model: AiModel) {
+    const reasoningProfile = resolveModelReasoningProfile({
+      providerName: model.provider?.name,
+      modelId: model.modelId,
+    });
+
+    return {
+      ...model,
+      reasoningCapability: reasoningProfile.capability,
+      reasoningStrategy: reasoningProfile.strategy,
+      reasoningIntegration: reasoningProfile.integration,
+      reasoningBadgeLabel: reasoningProfile.badgeLabel,
+    };
+  }
 
   /**
    * 创建模型
@@ -102,7 +119,8 @@ export class AiModelController {
   })
   @ApiResponse({ status: 401, description: '未授权，请先登录' })
   async findAll(@Query('includeProvider') includeProvider?: string) {
-    return this.modelService.findAll(includeProvider === 'true');
+    const models = await this.modelService.findAll(includeProvider === 'true');
+    return models.map((model) => this.serializeModel(model));
   }
 
   /**
@@ -120,7 +138,8 @@ export class AiModelController {
     @Query('id') id: string,
     @Query('includeProvider') includeProvider?: string,
   ) {
-    return this.modelService.findOne(id, includeProvider === 'true');
+    const model = await this.modelService.findOne(id, includeProvider === 'true');
+    return this.serializeModel(model);
   }
 
   /**
@@ -138,7 +157,11 @@ export class AiModelController {
     @Query('modelId') modelId: string,
     @Query('includeProvider') includeProvider?: string,
   ) {
-    return this.modelService.findByModelId(modelId, includeProvider === 'true');
+    const model = await this.modelService.findByModelId(
+      modelId,
+      includeProvider === 'true',
+    );
+    return this.serializeModel(model);
   }
 
   /**
@@ -152,7 +175,8 @@ export class AiModelController {
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 401, description: '未授权，请先登录' })
   async findByProviderId(@Query('providerId') providerId: string) {
-    return this.modelService.findByProviderId(providerId);
+    const models = await this.modelService.findByProviderId(providerId);
+    return models.map((model) => this.serializeModel(model));
   }
 
   /**
@@ -166,7 +190,10 @@ export class AiModelController {
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 401, description: '未授权，请先登录' })
   async findActiveModels(@Query('includeProvider') includeProvider?: string) {
-    return this.modelService.findActiveModels(includeProvider === 'true');
+    const models = await this.modelService.findActiveModels(
+      includeProvider === 'true',
+    );
+    return models.map((model) => this.serializeModel(model));
   }
 
   /**
@@ -188,7 +215,8 @@ export class AiModelController {
     @Query('id') id: string,
     @Body() updateModelDto: UpdateModelDto,
   ) {
-    return this.modelService.update(id, updateModelDto);
+    const model = await this.modelService.update(id, updateModelDto);
+    return this.serializeModel(model);
   }
 
   /**

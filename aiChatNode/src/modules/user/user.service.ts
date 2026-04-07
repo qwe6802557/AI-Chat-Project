@@ -1,6 +1,6 @@
 import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { User, UserRole } from './entities/user.entity';
@@ -19,9 +19,16 @@ export class UserService {
   /**
    * 创建用户
    */
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(
+    createUserDto: CreateUserDto,
+    manager?: EntityManager,
+  ): Promise<User> {
+    const userRepository = manager
+      ? manager.getRepository(User)
+      : this.userRepository;
+
     // 检查用户名是否已存在
-    const existingUser = await this.userRepository.findOne({
+    const existingUser = await userRepository.findOne({
       where: { username: createUserDto.username },
     });
 
@@ -30,7 +37,7 @@ export class UserService {
     }
 
     // 检查邮箱是否已存在
-    const existingEmail = await this.userRepository.findOne({
+    const existingEmail = await userRepository.findOne({
       where: { email: createUserDto.email },
     });
 
@@ -50,8 +57,8 @@ export class UserService {
     // }
 
     // 创建用户
-    const user = this.userRepository.create(createUserDto);
-    const savedUser = await this.userRepository.save(user);
+    const user = userRepository.create(createUserDto);
+    const savedUser = await userRepository.save(user);
 
     this.logger.log(`用户创建成功: ${savedUser.username} (${savedUser.id})`);
 

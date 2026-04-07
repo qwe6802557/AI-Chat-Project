@@ -8,6 +8,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { AiProvider } from './ai-provider.entity';
+import { DEFAULT_MODEL_BILLING_MODE } from '../../credits/types/credits.types';
 
 /**
  * AI模型实体
@@ -79,6 +80,23 @@ export class AiModel {
    */
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  /**
+   * 计费模式
+   * - 当前使用“预占后按实际 token 结算”的模式
+   */
+  @Column({
+    type: 'varchar',
+    length: 50,
+    default: DEFAULT_MODEL_BILLING_MODE,
+  })
+  billingMode: string;
+
+  /**
+   * 单次请求预占积分上限
+   */
+  @Column({ type: 'int', default: 100 })
+  creditCost: number;
 
   /**
    * 关联的供应商ID

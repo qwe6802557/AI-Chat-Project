@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { AiModelService } from '../../ai-provider/ai-model.service';
 import type { AiProviderService } from '../../ai-provider/ai-provider.service';
 import type { RedisService } from '../../../common/redis/redis.service';
+import type { ConfigService } from '@nestjs/config';
 import type { ClaudeAdapter } from '../adapters/claude.adapter';
 import type { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import type { CompletionChunk } from '../types/completion.types';
@@ -75,17 +76,23 @@ describe('AIClientService', () => {
     get: redisGetMock,
     set: redisSetMock,
   };
+  const configGetMock = jest.fn<ConfigService['get']>();
+  const configService: Pick<ConfigService, 'get'> = {
+    get: configGetMock,
+  };
 
   let service: AIClientService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    configGetMock.mockReturnValue(undefined);
     service = new AIClientService(
       claudeAdapter as ClaudeAdapter,
       zaiwenAdapter as ZaiwenAdapter,
       aiModelService as AiModelService,
       aiProviderService as AiProviderService,
       redisService as RedisService,
+      configService as ConfigService,
     );
   });
 
@@ -117,6 +124,62 @@ describe('AIClientService', () => {
       estimatedOutputCost: 0.1,
       estimatedTotalCost: 0.15000000000000002,
     });
+  });
+
+  it('strips leading think block from non-stream content', async () => {
+    findByModelIdMock.mockResolvedValue({
+      isActive: true,
+      inputPrice: 0.5,
+      outputPrice: 2,
+      provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
+      modelName: 'GLM-5',
+    });
+    zaiwenCreateChatCompletionMock.mockResolvedValue({
+      content: '<think>\n内部推理\n</think>\n最终答案',
+      model: 'GLM-5',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 10,
+        totalTokens: 20,
+      },
+    });
+
+    const result = await service.createChatCompletion('GLM-5', []);
+
+    expect(result.content).toBe('最终答案');
+  });
+
+  it('prints reasoning debug snippet when enabled and think tag is detected', async () => {
+    configGetMock.mockImplementation((key: string) => {
+      if (key === 'REASONING_DEBUG_ENABLED') return 'true';
+      if (key === 'REASONING_DEBUG_SNIPPET_LENGTH') return '20';
+      return undefined;
+    });
+    const logSpy = jest
+      .spyOn((service as unknown as { logger: { log: jest.Mock } }).logger, 'log')
+      .mockImplementation(jest.fn());
+    findByModelIdMock.mockResolvedValue({
+      isActive: true,
+      inputPrice: 0.5,
+      outputPrice: 2,
+      provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
+      modelName: 'GLM-5',
+    });
+    zaiwenCreateChatCompletionMock.mockResolvedValue({
+      content: '<think>\n内部推理\n</think>\n最终答案',
+      model: 'GLM-5',
+      usage: {
+        promptTokens: 10,
+        completionTokens: 10,
+        totalTokens: 20,
+      },
+    });
+
+    await service.createChatCompletion('GLM-5', []);
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[reasoning-debug][non-stream]'),
+    );
   });
 
   it('decorates stream usage with estimated cost', async () => {
@@ -161,6 +224,55 @@ describe('AIClientService', () => {
       estimatedOutputCost: 0.1,
       estimatedTotalCost: 0.15000000000000002,
     });
+  });
+
+  it('filters leading think content from stream chunks', async () => {
+    findByModelIdMock.mockResolvedValue({
+      isActive: true,
+      inputPrice: 0.5,
+      outputPrice: 2,
+      provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
+      modelName: 'GLM-5',
+    });
+    zaiwenCreateStreamChatCompletionMock.mockResolvedValue(
+      createAsyncChunks([
+        {
+          delta: { content: '<think>\n内部' },
+          finish_reason: null,
+        },
+        {
+          delta: { content: '推理\n</think>\n最' },
+          finish_reason: null,
+        },
+        {
+          delta: { content: '终答案' },
+          finish_reason: 'stop',
+        },
+      ]),
+    );
+
+    const chunks: CompletionChunk[] = [];
+    for await (const chunk of await service.createStreamChatCompletion(
+      'GLM-5',
+      [],
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.map((chunk) => chunk.type)).toEqual([
+      'reasoning_start',
+      'reasoning_delta',
+      'reasoning_delta',
+      'reasoning_done',
+      'answer_delta',
+      'answer_delta',
+    ]);
+    expect(
+      chunks
+        .filter((chunk) => chunk.type === 'answer_delta')
+        .map((chunk) => chunk.delta?.content || '')
+        .join(''),
+    ).toBe('最终答案');
   });
 
   it('throws when provider is disabled', async () => {

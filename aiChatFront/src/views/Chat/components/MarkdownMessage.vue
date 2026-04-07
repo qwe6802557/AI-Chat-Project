@@ -12,6 +12,7 @@
 import { shallowRef, ref, computed, watch, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import { renderMarkdown, renderStreamingMarkdown } from '@/utils/markdown'
+import { sanitizeVisibleAssistantContent } from '../utils/assistantContent'
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -62,6 +63,9 @@ interface Props {
 
 const props = defineProps<Props>()
 const streaming = computed(() => !!props.streaming)
+const getRenderableContent = (): string => {
+  return sanitizeVisibleAssistantContent(props.content || '')
+}
 
 type CacheEntry = {
   content: string
@@ -120,7 +124,7 @@ const scheduleStreamingRender = () => {
 
 const renderFinalHtml = () => {
   const messageId = props.messageId
-  const content = props.content || ''
+  const content = getRenderableContent()
 
   const cached = markdownCache.get(messageId)
 
@@ -155,17 +159,18 @@ const pumpStreamingText = () => {
   }
 
   const target = props.content || ''
+  const visibleTarget = getRenderableContent()
   const current = streamingText.value || ''
 
   // 如果内容回退-直接同步
-  if (target.length <= current.length) {
-    streamingText.value = target
+  if (visibleTarget.length <= current.length) {
+    streamingText.value = visibleTarget
     scheduleStreamingRender()
     isPumping = false
     return
   }
 
-  const remaining = target.length - current.length
+  const remaining = visibleTarget.length - current.length
   let chunkSize: number
 
   // 目标体验-尽量逐字增长，同时在 backlog 很大时自动加速追赶，避免UI落后太多
@@ -183,11 +188,12 @@ const pumpStreamingText = () => {
     chunkSize = 1
   }
 
-  streamingText.value = current + target.slice(current.length, current.length + chunkSize)
+  streamingText.value =
+    current + visibleTarget.slice(current.length, current.length + chunkSize)
   scheduleStreamingRender()
 
   isPumping = false
-  if (streamingText.value.length < target.length) {
+  if (streamingText.value.length < visibleTarget.length) {
     rafId = requestAnimationFrame(pumpStreamingText)
   }
 }
@@ -208,7 +214,7 @@ watch(
     }
 
     // 流式结束：确保文本追上，再渲染 Markdown
-    streamingText.value = props.content || ''
+    streamingText.value = getRenderableContent()
     renderFinalHtml()
   },
   { immediate: true }

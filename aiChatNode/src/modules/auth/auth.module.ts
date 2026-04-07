@@ -10,6 +10,7 @@ import { EmailService } from './services/email.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RedisModule } from '../../common/redis/redis.module';
 import { UserModule } from '../user/user.module';
+import { CreditsModule } from '../credits/credits.module';
 
 /**
  * 认证模块
@@ -20,6 +21,7 @@ import { UserModule } from '../user/user.module';
     ConfigModule,
     // 导入 UserModule 以使用 UserService
     UserModule,
+    CreditsModule,
     RedisModule,
     // 配置 Passport
     PassportModule.register({ defaultStrategy: 'jwt' }),

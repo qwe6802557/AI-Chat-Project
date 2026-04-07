@@ -4,6 +4,11 @@ import { AiProviderService } from '../../modules/ai-provider/ai-provider.service
 import { AiModelService } from '../../modules/ai-provider/ai-model.service';
 import type { AiProvider } from '../../modules/ai-provider/entities/ai-provider.entity';
 import { ZAIWEN_CHAT_MODEL_SEEDS } from '../../modules/ai-provider/constants/zaiwen-models';
+import {
+  DEFAULT_MODEL_BILLING_MODE,
+  DEFAULT_MODEL_CREDIT_COST,
+  ZAIWEN_CLAUDE_MODEL_CREDIT_COST,
+} from '../../modules/credits/types/credits.types';
 
 interface SeedSummary {
   createdProviders: number;
@@ -11,6 +16,12 @@ interface SeedSummary {
   createdModels: number;
   skippedModels: number;
 }
+
+const resolveZaiwenModelCreditCost = (modelId: string): number => {
+  return modelId.toLowerCase().includes('claude')
+    ? ZAIWEN_CLAUDE_MODEL_CREDIT_COST
+    : DEFAULT_MODEL_CREDIT_COST;
+};
 
 /**
  * 数据库初始化服务
@@ -87,6 +98,8 @@ export class DatabaseSeederService implements OnModuleInit {
       availability: 99.9,
       tps: 100,
       description: 'Anthropic 的兼容接入模型',
+      billingMode: DEFAULT_MODEL_BILLING_MODE,
+      creditCost: DEFAULT_MODEL_CREDIT_COST,
     });
     summary[
       claudeModelResult === 'created' ? 'createdModels' : 'skippedModels'
@@ -113,6 +126,8 @@ export class DatabaseSeederService implements OnModuleInit {
         availability: 99.9,
         tps: 0,
         description: `在问官方支持模型，输入倍率 ${model.inputMultiplier}，输出倍率 ${model.outputMultiplier}`,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: resolveZaiwenModelCreditCost(model.modelId),
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
@@ -164,6 +179,8 @@ export class DatabaseSeederService implements OnModuleInit {
     availability: number;
     tps: number;
     description: string;
+    billingMode: string;
+    creditCost: number;
   }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,
@@ -186,6 +203,8 @@ export class DatabaseSeederService implements OnModuleInit {
       tps: payload.tps,
       description: payload.description,
       isActive: true,
+      billingMode: payload.billingMode,
+      creditCost: payload.creditCost,
     });
 
     this.logger.log(`模型创建成功: ${payload.modelId}`);

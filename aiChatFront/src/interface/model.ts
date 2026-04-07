@@ -18,6 +18,12 @@ export interface BackendAiModel {
   tps: number
   description?: string
   isActive: boolean
+  billingMode?: string
+  creditCost?: number
+  reasoningCapability?: 'none' | 'summary' | 'raw'
+  reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
+  reasoningIntegration?: 'responses_summary' | 'anthropic_blocks' | 'inline_tag' | 'none'
+  reasoningBadgeLabel?: string
   providerId: string
   provider?: BackendAiProvider
 }

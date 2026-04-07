@@ -36,7 +36,9 @@
         />
 
         <!-- 正常模式 -->
-        <span v-else class="conversation-title">{{ conversation.title }}</span>
+        <div v-else class="conversation-content">
+          <span class="conversation-title">{{ conversation.title }}</span>
+        </div>
 
         <!-- 操作按钮 -->
         <a-dropdown
@@ -83,7 +85,7 @@
 <!--        <BulbOutlined class="menu-icon" />-->
 <!--        <span>浅色模式</span>-->
 <!--      </div>-->
-      <div class="menu-item" @click="showAccountModal = true">
+      <div class="menu-item" @click="handleOpenAccount">
         <UserOutlined class="menu-icon" />
         <span>我的账户</span>
       </div>
@@ -100,13 +102,12 @@
     <!-- 更新与帮助弹窗 -->
     <AboutModal v-model:open="showAboutModal" />
 
-    <!-- 我的账户弹窗 -->
-    <AccountModal v-model:open="showAccountModal" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
   PlusOutlined,
@@ -119,7 +120,6 @@ import {
   EditOutlined
 } from '@ant-design/icons-vue'
 import AboutModal from './AboutModal.vue'
-import AccountModal from './AccountModal.vue'
 import type { Conversation } from '@/interface/conversation'
 
 defineOptions({
@@ -135,6 +135,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   isClearing: false
 })
+const router = useRouter()
+const route = useRoute()
 
 const emit = defineEmits<{
   'new-chat': []
@@ -147,9 +149,6 @@ const emit = defineEmits<{
 
 // 更新与帮助弹窗
 const showAboutModal = ref(false)
-
-// 我的账户弹窗
-const showAccountModal = ref(false)
 
 // 编辑状态
 const editingId = ref<string | null>(null)
@@ -254,6 +253,15 @@ const handleClearConversations = () => {
   })
 }
 
+const handleOpenAccount = async () => {
+  await router.push({
+    name: 'account',
+    query: {
+      from: route.fullPath,
+    },
+  })
+}
+
 const handleLogout = () => {
   Modal.confirm({
     title: '退出登录',
@@ -310,30 +318,23 @@ const handleLogout = () => {
   .conversations-list {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 8px 12px;
     gap: 4px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 
     &::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-
-      &:hover {
-        background: rgba(0, 0, 0, 0.3);
-      }
+      display: none;
+      width: 0;
+      height: 0;
     }
 
     .conversation-item {
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
       padding: 12px;
       margin-bottom: 4px;
       border-radius: 6px;
@@ -365,8 +366,14 @@ const handleLogout = () => {
         flex-shrink: 0;
       }
 
-      .conversation-title {
+      .conversation-content {
         flex: 1;
+        min-width: 0;
+      }
+
+      .conversation-title {
+        display: block;
+        width: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

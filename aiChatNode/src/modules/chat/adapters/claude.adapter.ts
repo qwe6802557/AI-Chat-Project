@@ -228,14 +228,19 @@ export class ClaudeAdapter implements IProviderAdapter {
   private transformResponse(completion: unknown): CompletionResponse {
     const normalizedCompletion = asProviderCompletionLike(completion);
     const firstChoice = normalizedCompletion.choices?.[0];
+    const promptTokens = normalizedCompletion.usage?.prompt_tokens || 0;
+    const completionTokens = normalizedCompletion.usage?.completion_tokens || 0;
+    const totalTokens =
+      normalizedCompletion.usage?.total_tokens ||
+      promptTokens + completionTokens;
 
     return {
       content: readString(firstChoice?.message?.content),
       model: normalizedCompletion.model || '',
       usage: {
-        promptTokens: normalizedCompletion.usage?.prompt_tokens || 0,
-        completionTokens: normalizedCompletion.usage?.completion_tokens || 0,
-        totalTokens: normalizedCompletion.usage?.total_tokens || 0,
+        promptTokens,
+        completionTokens,
+        totalTokens,
       },
     };
   }
@@ -251,6 +256,11 @@ export class ClaudeAdapter implements IProviderAdapter {
       const firstChoice = normalizedChunk.choices?.[0];
       const delta = firstChoice?.delta;
       const finishReason = firstChoice?.finish_reason;
+      const promptTokens = normalizedChunk.usage?.prompt_tokens || 0;
+      const completionTokens = normalizedChunk.usage?.completion_tokens || 0;
+      const totalTokens =
+        normalizedChunk.usage?.total_tokens ||
+        promptTokens + completionTokens;
 
       yield {
         delta: {
@@ -260,9 +270,9 @@ export class ClaudeAdapter implements IProviderAdapter {
         finish_reason: finishReason,
         usage: normalizedChunk.usage
           ? {
-              promptTokens: normalizedChunk.usage.prompt_tokens || 0,
-              completionTokens: normalizedChunk.usage.completion_tokens || 0,
-              totalTokens: normalizedChunk.usage.total_tokens || 0,
+              promptTokens,
+              completionTokens,
+              totalTokens,
             }
           : null,
       };

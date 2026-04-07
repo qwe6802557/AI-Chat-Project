@@ -9,12 +9,30 @@ export interface MessageUsageStats {
   estimatedTotalCost?: number
 }
 
+export interface MessageChargeSummary {
+  id: string
+  clientRequestId: string
+  modelId: string
+  billingMode: string
+  credits: number
+  status: string
+}
+
+export interface MessageReasoning {
+  mode: 'summary' | 'raw' | 'omitted'
+  source: 'provider_summary' | 'provider_block' | 'extracted_tag' | 'none'
+  title?: string
+  content: string
+  status?: 'streaming' | 'done'
+}
+
 export interface ConversationUsageSummary {
   lastModel?: string | null
   totalPromptTokens: number
   totalCompletionTokens: number
   totalTokens: number
   totalEstimatedCost: number
+  totalChargedCredits: number
 }
 
 export type ConversationSortMode = 'recent' | 'tokens_desc' | 'cost_desc'
@@ -52,6 +70,8 @@ export interface Message {
   streaming?: boolean
   model?: string
   usage?: MessageUsageStats
+  charge?: MessageChargeSummary
+  reasoning?: MessageReasoning
   attachments?: MessageAttachment[]
 }
 

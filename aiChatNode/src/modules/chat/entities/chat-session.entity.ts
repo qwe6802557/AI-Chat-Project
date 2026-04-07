@@ -18,6 +18,7 @@ export interface ChatSessionUsageSummary {
   totalCompletionTokens: number;
   totalTokens: number;
   totalEstimatedCost: number;
+  totalChargedCredits: number;
 }
 
 /**

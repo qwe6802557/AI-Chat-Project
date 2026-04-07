@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import type { User } from '../user/entities/user.entity';
+import type { UserCreditsSnapshot } from '../credits/types/credits.types';
 
 export interface AuthenticatedUser {
   id: User['id'];
@@ -11,6 +12,7 @@ export interface AuthenticatedUser {
   isActive: User['isActive'];
   createdAt: User['createdAt'];
   updatedAt: User['updatedAt'];
+  credits?: UserCreditsSnapshot;
 }
 
 export type AuthenticatedRequest = Request & {

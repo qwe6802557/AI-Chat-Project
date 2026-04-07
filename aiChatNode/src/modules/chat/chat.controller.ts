@@ -6,6 +6,7 @@ import {
   Query,
   Res,
   HttpStatus,
+  HttpException,
   UseGuards,
   ForbiddenException,
 } from '@nestjs/common';
@@ -22,7 +23,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { CreateChatDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import type { CompletionUsageStats } from './types/completion.types';
+import type {
+  CompletionChunk,
+  CompletionUsageStats,
+} from './types/completion.types';
 
 @ApiTags('聊天消息')
 @UseGuards(JwtAuthGuard)
@@ -153,23 +157,65 @@ export class ChatController {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // 禁用 Nginx 缓冲
 
+    let sessionId = createChatDto.sessionId || '';
+    let userId = createChatDto.userId || '';
+    let userMessage = createChatDto.message;
+    let modelId = createChatDto.model || '';
+    let clientRequestId = createChatDto.clientRequestId || '';
+    let attachmentIds: string[] = [];
+    let chargeFinalized = false;
+    let hasActiveCharge = false;
+
     try {
       // 获取流和上下文信息
-      const { stream, sessionId, userId, userMessage, modelId, attachmentIds } =
-        await this.chatService.createStream(createChatDto, {
-          abortSignal: abortController.signal,
-        });
+      const streamContext = await this.chatService.createStream(createChatDto, {
+        abortSignal: abortController.signal,
+      });
+      const { stream } = streamContext;
+      sessionId = streamContext.sessionId;
+      userId = streamContext.userId;
+      userMessage = streamContext.userMessage;
+      modelId = streamContext.modelId;
+      clientRequestId = streamContext.clientRequestId;
+      attachmentIds = streamContext.attachmentIds;
+      hasActiveCharge = true;
 
       let fullMessage = '';
       let finalFinishReason: string | null = null;
       let finalUsage: CompletionUsageStats | undefined;
+      let finalReasoning:
+        | {
+            mode: 'summary' | 'raw' | 'omitted';
+            source: 'provider_summary' | 'provider_block' | 'extracted_tag' | 'none';
+            title?: string;
+            content: string;
+          }
+        | null
+        | undefined;
+      let reasoningBuffer = '';
+      let finalCharge:
+        | {
+            id: string;
+            clientRequestId: string;
+            modelId: string;
+            billingMode: string;
+            credits: number;
+            status: string;
+          }
+        | undefined;
+      let finalCreditsSnapshot:
+        | {
+            total: number;
+            consumed: number;
+            remaining: number;
+            reserved: number;
+          }
+        | undefined;
 
       // 遍历流式响应
       for await (const chunk of stream) {
         if (clientClosed) break;
 
-        const delta = chunk.delta?.content || '';
-        fullMessage += delta;
         if (chunk.finish_reason) {
           finalFinishReason = chunk.finish_reason;
         }
@@ -177,43 +223,109 @@ export class ChatController {
           finalUsage = chunk.usage;
         }
 
-        // 发送 SSE 事件
-        const sseData = JSON.stringify({
-          delta,
-          finish_reason: chunk.finish_reason,
-          sessionId,
-          usage: chunk.usage,
-        });
+        let sseData: Record<string, unknown> | null = null;
 
-        if (!res.writableEnded) {
-          res.write(`data: ${sseData}\n\n`);
+        switch ((chunk as CompletionChunk).type) {
+          case 'reasoning_start':
+            finalReasoning = {
+              mode: chunk.reasoning?.mode || 'raw',
+              source: chunk.reasoning?.source || 'extracted_tag',
+              title: chunk.reasoning?.title,
+              content: '',
+            };
+            sseData = {
+              type: 'reasoning_start',
+              sessionId,
+              reasoning: {
+                mode: finalReasoning.mode,
+                source: finalReasoning.source,
+                title: finalReasoning.title,
+              },
+            };
+            break;
+          case 'reasoning_delta': {
+            const delta = chunk.delta?.content || '';
+            reasoningBuffer += delta;
+            if (finalReasoning) {
+              finalReasoning.content = reasoningBuffer;
+            }
+            sseData = {
+              type: 'reasoning_delta',
+              sessionId,
+              delta,
+            };
+            break;
+          }
+          case 'reasoning_done':
+            if (finalReasoning) {
+              finalReasoning.content = reasoningBuffer;
+            }
+            sseData = {
+              type: 'reasoning_done',
+              sessionId,
+            };
+            break;
+          case 'answer_delta':
+          default: {
+            const delta = chunk.delta?.content || '';
+            fullMessage += delta;
+            sseData = {
+              type: 'answer_delta',
+              delta,
+              finish_reason: chunk.finish_reason,
+              sessionId,
+              usage: chunk.usage,
+            };
+            break;
+          }
+        }
+
+        if (!res.writableEnded && sseData) {
+          res.write(`data: ${JSON.stringify(sseData)}\n\n`);
         }
       }
 
       if (clientClosed) {
+        if (hasActiveCharge && clientRequestId && !chargeFinalized) {
+          await this.chatService.releaseReservedChatChargeSafely({
+            userId,
+            clientRequestId,
+            sessionId,
+            failureReason: '客户端中断流式响应，释放预占积分',
+          });
+        }
         return;
       }
 
       if (finalFinishReason || fullMessage) {
-        await this.chatService.saveStreamMessage(
+        const finalizeResult = await this.chatService.saveStreamMessage(
           userId,
           sessionId,
+          clientRequestId,
           userMessage,
           fullMessage,
+          finalReasoning || null,
           modelId,
           finalUsage,
           attachmentIds,
         );
+        chargeFinalized = true;
+        finalCharge = finalizeResult.charge;
+        finalCreditsSnapshot = finalizeResult.creditsSnapshot;
       }
 
       if (!res.writableEnded && (finalFinishReason || finalUsage)) {
         const finalData = JSON.stringify({
+          type: 'done',
           delta: '',
           finish_reason: finalFinishReason,
           sessionId,
           message: fullMessage,
+          reasoning: finalReasoning || null,
           model: modelId,
           usage: finalUsage,
+          charge: finalCharge,
+          creditsSnapshot: finalCreditsSnapshot,
         });
         res.write(`data: ${finalData}\n\n`);
       }
@@ -227,6 +339,16 @@ export class ChatController {
         return;
       }
 
+      if (hasActiveCharge && userId && clientRequestId && !chargeFinalized) {
+        await this.chatService.releaseReservedChatChargeSafely({
+          userId,
+          clientRequestId,
+          sessionId,
+          failureReason:
+            error instanceof Error ? error.message : '流式请求失败，释放预占积分',
+        });
+      }
+
       // 发送错误事件
       const errorData = JSON.stringify({
         error: error instanceof Error ? error.message : '流式请求失败',
@@ -234,7 +356,11 @@ export class ChatController {
 
       if (!res.writableEnded) {
         res.write(`data: ${errorData}\n\n`);
-        res.status(HttpStatus.INTERNAL_SERVER_ERROR).end();
+        const status =
+          error instanceof HttpException
+            ? error.getStatus()
+            : HttpStatus.INTERNAL_SERVER_ERROR;
+        res.status(status).end();
       }
     }
   }

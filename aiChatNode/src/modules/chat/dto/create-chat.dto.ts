@@ -82,6 +82,20 @@ export class CreateChatDto {
   message: string;
 
   /**
+   * 客户端请求ID
+   * - 用于防止重复扣费
+   */
+  @ApiProperty({
+    description: '客户端请求ID（用于幂等控制）',
+    example: '9e03cb8b-0dd0-4f68-b0af-fce4c8821f0d',
+    required: false,
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: '客户端请求ID格式不正确' })
+  clientRequestId?: string;
+
+  /**
    * 对话历史（可选）
    */
   @ApiProperty({

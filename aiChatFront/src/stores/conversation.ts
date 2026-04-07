@@ -16,7 +16,15 @@ import {
   clearAllSessions
 } from '@/api/chat'
 import type { BackendChatSession, BackendChatMessage } from '@/interface/chat'
-import type { Conversation, Message, MessageAttachment, MessageUsageStats } from '@/interface/conversation'
+import type {
+  Conversation,
+  Message,
+  MessageAttachment,
+  MessageChargeSummary,
+  MessageReasoning,
+  MessageUsageStats,
+} from '@/interface/conversation'
+import { extractVisibleAssistantContent } from '@/views/Chat/utils/assistantContent'
 
 // 常量
 
@@ -36,16 +44,45 @@ const mapMimeToAttachmentType = (mimeType: string): MessageAttachment['type'] =>
 }
 
 const mapUsage = (
-  usage: BackendChatMessage['usage'] | undefined
+  usage: BackendChatMessage['usage'] | undefined | null
 ): MessageUsageStats | undefined => {
   if (!usage) return undefined
+  const promptTokens = Number(usage.promptTokens || 0)
+  const completionTokens = Number(usage.completionTokens || 0)
   return {
-    promptTokens: usage.promptTokens,
-    completionTokens: usage.completionTokens,
-    totalTokens: usage.totalTokens,
+    promptTokens,
+    completionTokens,
+    totalTokens: Number(usage.totalTokens || 0) || promptTokens + completionTokens,
     estimatedInputCost: usage.estimatedInputCost,
     estimatedOutputCost: usage.estimatedOutputCost,
     estimatedTotalCost: usage.estimatedTotalCost,
+  }
+}
+
+const mapCharge = (
+  charge: BackendChatMessage['charge'] | undefined | null,
+): MessageChargeSummary | undefined => {
+  if (!charge) return undefined
+  return {
+    id: charge.id,
+    clientRequestId: charge.clientRequestId,
+    modelId: charge.modelId,
+    billingMode: charge.billingMode,
+    credits: charge.credits,
+    status: charge.status,
+  }
+}
+
+const mapReasoning = (
+  reasoning: BackendChatMessage['reasoning'] | undefined | null,
+): MessageReasoning | undefined => {
+  if (!reasoning) return undefined
+  return {
+    mode: reasoning.mode,
+    source: reasoning.source,
+    title: reasoning.title,
+    content: reasoning.content,
+    status: 'done',
   }
 }
 
@@ -89,13 +126,17 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
     }
 
     if (msg.aiMessage) {
+      const extracted = extractVisibleAssistantContent(msg.aiMessage)
+      const reasoning = mapReasoning(msg.reasoning) || extracted.reasoning
       messages.push({
         id: `${msg.id}-assistant`,
         role: 'assistant',
-        content: msg.aiMessage,
+        content: reasoning ? extracted.answer : msg.aiMessage,
         timestamp: timestamp + 1,
         model: msg.model,
-        usage: mapUsage(msg.usage)
+        usage: mapUsage(msg.usage),
+        charge: mapCharge(msg.charge),
+        reasoning,
       })
     }
   })
@@ -118,6 +159,7 @@ const transformBackendSession = (session: BackendChatSession): Conversation => {
           totalCompletionTokens: session.usageSummary.totalCompletionTokens,
           totalTokens: session.usageSummary.totalTokens,
           totalEstimatedCost: session.usageSummary.totalEstimatedCost,
+          totalChargedCredits: session.usageSummary.totalChargedCredits,
         }
       : undefined,
     createdAt: new Date(session.createdAt).getTime(),
@@ -163,6 +205,8 @@ export const useConversationStore = defineStore('conversation', () => {
               timestamp: m.timestamp,
               model: m.model,
               usage: m.usage,
+              charge: m.charge,
+              reasoning: m.reasoning,
               attachments: m.attachments?.map((att) => ({
                 type: att.type,
                 name: att.name,
@@ -603,6 +647,52 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   /**
+   * 设置消息的思考过程
+   */
+  const setMessageReasoningById = (
+    conversationId: string,
+    messageId: string,
+    reasoning?: MessageReasoning,
+  ): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const msg = conversation.messages.find(m => m.id === messageId)
+    if (!msg) return
+
+    msg.reasoning = reasoning
+    conversation.updatedAt = Date.now()
+  }
+
+  /**
+   * 追加消息的思考过程内容
+   */
+  const appendMessageReasoningById = (
+    conversationId: string,
+    messageId: string,
+    delta: string,
+    patch?: Partial<MessageReasoning>,
+  ): void => {
+    const conversation = getConversationById(conversationId)
+    if (!conversation) return
+
+    const msg = conversation.messages.find(m => m.id === messageId)
+    if (!msg) return
+
+    const nextReasoning: MessageReasoning = {
+      mode: msg.reasoning?.mode || 'raw',
+      source: msg.reasoning?.source || 'none',
+      title: msg.reasoning?.title,
+      content: `${msg.reasoning?.content || ''}${delta}`,
+      status: msg.reasoning?.status,
+      ...patch,
+    }
+
+    msg.reasoning = nextReasoning
+    conversation.updatedAt = Date.now()
+  }
+
+  /**
    * 清理消息附件 base64
    */
   const clearMessageAttachmentBase64 = (conversationId: string, messageId: string): void => {
@@ -666,6 +756,8 @@ export const useConversationStore = defineStore('conversation', () => {
     addMessageToConversation,
     updateMessageContentById,
     patchMessageById,
+    setMessageReasoningById,
+    appendMessageReasoningById,
     clearMessageAttachmentBase64,
     deleteMessageById,
     resetLocalState,

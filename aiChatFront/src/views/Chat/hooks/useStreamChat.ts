@@ -3,8 +3,15 @@ import { message } from 'ant-design-vue'
 import { sendStreamMessage } from '@/api/chat'
 import type { StreamChunk, StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import logger from '@/utils/logger'
-import type { Message, MessageAttachment, MessageUsageStats } from '@/interface/conversation'
+import type {
+  Message,
+  MessageAttachment,
+  MessageChargeSummary,
+  MessageReasoning,
+  MessageUsageStats,
+} from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
 
 /**
@@ -24,7 +31,7 @@ const convertServerFilesToAttachments = (serverFiles: ServerFileInfo[]): Message
     type: mapFileTypeToAttachmentType(file.type),
     name: file.name,
     url: file.url,
-    preview: file.url
+    preview: file.url,
   }))
 }
 
@@ -33,6 +40,7 @@ const convertServerFilesToAttachments = (serverFiles: ServerFileInfo[]): Message
  */
 export function useStreamChat() {
   const conversationStore = useConversationStore()
+  const authStore = useAuthStore()
 
   const loading = ref(false)
   const activeRequestId = ref<string | null>(null)
@@ -50,16 +58,57 @@ export function useStreamChat() {
   }
 
   const mapUsage = (
-    usage: StreamChunk['usage']
+    usage: StreamChunk['usage'],
   ): MessageUsageStats | undefined => {
     if (!usage) return undefined
+    const promptTokens = Number(usage.promptTokens || 0)
+    const completionTokens = Number(usage.completionTokens || 0)
     return {
-      promptTokens: usage.promptTokens,
-      completionTokens: usage.completionTokens,
-      totalTokens: usage.totalTokens,
+      promptTokens,
+      completionTokens,
+      totalTokens: Number(usage.totalTokens || 0) || promptTokens + completionTokens,
       estimatedInputCost: usage.estimatedInputCost,
       estimatedOutputCost: usage.estimatedOutputCost,
       estimatedTotalCost: usage.estimatedTotalCost,
+    }
+  }
+
+  const mapCharge = (
+    charge: StreamChunk['charge'],
+  ): MessageChargeSummary | undefined => {
+    if (!charge) return undefined
+    return {
+      id: charge.id,
+      clientRequestId: charge.clientRequestId,
+      modelId: charge.modelId,
+      billingMode: charge.billingMode,
+      credits: charge.credits,
+      status: charge.status,
+    }
+  }
+
+  const mapReasoning = (
+    reasoning: StreamChunk['reasoning'],
+    status: MessageReasoning['status'],
+  ): MessageReasoning | undefined => {
+    if (!reasoning) return undefined
+    return {
+      mode: reasoning.mode || 'raw',
+      source: reasoning.source || 'none',
+      title: reasoning.title,
+      content: reasoning.content || '',
+      status,
+    }
+  }
+
+  const withReasoningDefaults = (
+    reasoning: StreamChunk['reasoning'],
+  ): NonNullable<StreamChunk['reasoning']> => {
+    return {
+      mode: reasoning?.mode || 'raw',
+      source: reasoning?.source || 'none',
+      title: reasoning?.title,
+      content: reasoning?.content || '',
     }
   }
 
@@ -75,10 +124,11 @@ export function useStreamChat() {
       conversationStore.patchMessageById(
         activeStreamContext.value.conversationId,
         activeStreamContext.value.assistantMessageId,
-        { streaming: false }
+        { streaming: false },
       )
       conversationStore.saveConversations({ immediate: true })
     }
+
     activeStreamContext.value = null
     loading.value = false
   }
@@ -86,6 +136,7 @@ export function useStreamChat() {
   onBeforeUnmount(() => {
     cancelCurrentStream()
   })
+
   // 会话切换时兜底取消旧流
   watch(
     () => conversationStore.currentConversationId,
@@ -94,7 +145,7 @@ export function useStreamChat() {
       if (!activeConversationId) return
       if (nextConversationId === activeConversationId) return
       cancelCurrentStream()
-    }
+    },
   )
 
   /**
@@ -107,14 +158,14 @@ export function useStreamChat() {
       fileIds?: string[]
       serverFiles?: ServerFileInfo[]
       model?: string
-    }
+    },
   ) => {
     cancelCurrentStream()
 
     const {
       fileIds,
       serverFiles,
-      model = 'GLM-5'
+      model: selectedModelId = 'GLM-5',
     } = options || {}
 
     if (!userId) {
@@ -148,14 +199,13 @@ export function useStreamChat() {
     }
 
     const userMessageId = createId()
-    const userMessage: Message = {
+    conversationStore.addMessageToConversation(sessionId, {
       id: userMessageId,
       role: 'user',
       content: content || '',
       timestamp: Date.now(),
-      attachments
-    }
-    conversationStore.addMessageToConversation(sessionId, userMessage)
+      attachments,
+    })
 
     loading.value = true
     const requestId = createId()
@@ -163,24 +213,72 @@ export function useStreamChat() {
     activeStreamContext.value = { conversationId: sessionId, assistantMessageId: null }
 
     let assistantMessageId: string | null = null
-    let pendingDelta = ''
+    let pendingAnswerDelta = ''
+    let pendingReasoningDelta = ''
     let flushRafId: number | null = null
+    let latestReasoning: MessageReasoning | undefined
+
+    const ensureAssistantMessage = (): string => {
+      if (assistantMessageId) {
+        return assistantMessageId
+      }
+
+      assistantMessageId = createId()
+      if (activeStreamContext.value?.conversationId === sessionId) {
+        activeStreamContext.value.assistantMessageId = assistantMessageId
+      }
+
+      conversationStore.addMessageToConversation(sessionId, {
+        id: assistantMessageId,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+        streaming: true,
+      })
+
+      return assistantMessageId
+    }
 
     const scheduleFlushDelta = () => {
       if (flushRafId !== null) return
+
       flushRafId = requestAnimationFrame(() => {
         flushRafId = null
 
         if (activeRequestId.value !== requestId) {
-          pendingDelta = ''
+          pendingAnswerDelta = ''
+          pendingReasoningDelta = ''
           return
         }
-        if (!assistantMessageId) return
-        if (!pendingDelta) return
 
-        const chunk = pendingDelta
-        pendingDelta = ''
-        conversationStore.updateMessageContentById(sessionId, assistantMessageId, chunk, true)
+        if (!assistantMessageId) return
+
+        if (pendingReasoningDelta) {
+          const reasoningDelta = pendingReasoningDelta
+          pendingReasoningDelta = ''
+          conversationStore.appendMessageReasoningById(
+            sessionId,
+            assistantMessageId,
+            reasoningDelta,
+            latestReasoning ? {
+              mode: latestReasoning.mode,
+              source: latestReasoning.source,
+              title: latestReasoning.title,
+              status: latestReasoning.status,
+            } : undefined,
+          )
+        }
+
+        if (!pendingAnswerDelta) return
+
+        const answerDelta = pendingAnswerDelta
+        pendingAnswerDelta = ''
+        conversationStore.updateMessageContentById(
+          sessionId,
+          assistantMessageId,
+          answerDelta,
+          true,
+        )
       })
     }
 
@@ -189,74 +287,134 @@ export function useStreamChat() {
         {
           userId,
           sessionId,
+          clientRequestId: requestId,
           message: content || '请分析这些文件',
-          model,
+          model: selectedModelId,
           fileIds: hasFileIds ? fileIds : undefined,
         },
         {
-          onMessage: (delta: string) => {
+          onChunk: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
-            if (!assistantMessageId) {
-              assistantMessageId = createId()
-              if (activeStreamContext.value?.conversationId === sessionId) {
-                activeStreamContext.value.assistantMessageId = assistantMessageId
+            switch (chunk.type) {
+              case 'reasoning_start': {
+                const messageId = ensureAssistantMessage()
+                latestReasoning = mapReasoning(
+                  withReasoningDefaults(chunk.reasoning),
+                  'streaming',
+                )
+                conversationStore.setMessageReasoningById(
+                  sessionId,
+                  messageId,
+                  latestReasoning,
+                )
+                return
               }
-              const assistantMessage: Message = {
-                id: assistantMessageId,
-                role: 'assistant',
-                content: '',
-                timestamp: Date.now(),
-                streaming: true
+              case 'reasoning_delta': {
+                ensureAssistantMessage()
+                const mappedReasoning = mapReasoning(
+                  withReasoningDefaults(chunk.reasoning),
+                  'streaming',
+                )
+                latestReasoning = {
+                  ...(latestReasoning || mappedReasoning || {
+                    mode: 'raw',
+                    source: 'none',
+                    content: '',
+                  }),
+                  ...(mappedReasoning || {}),
+                  content: latestReasoning?.content || '',
+                  status: 'streaming',
+                }
+                pendingReasoningDelta += chunk.delta || ''
+                scheduleFlushDelta()
+                return
               }
-              conversationStore.addMessageToConversation(sessionId, assistantMessage)
+              case 'reasoning_done':
+                if (!assistantMessageId || !latestReasoning) return
+                latestReasoning = {
+                  ...latestReasoning,
+                  status: 'done',
+                }
+                conversationStore.setMessageReasoningById(
+                  sessionId,
+                  assistantMessageId,
+                  latestReasoning,
+                )
+                return
+              case 'answer_delta':
+              default:
+                ensureAssistantMessage()
+                pendingAnswerDelta += chunk.delta || ''
+                scheduleFlushDelta()
             }
-
-            pendingDelta += delta
-            scheduleFlushDelta()
           },
 
-          onComplete: (
-            fullMessage: string,
-            _sessionId: string,
-            model: string,
-            usage?: StreamChunk['usage']
-          ) => {
+          onComplete: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
             if (flushRafId !== null) {
               cancelAnimationFrame(flushRafId)
               flushRafId = null
-              pendingDelta = ''
+              pendingAnswerDelta = ''
+              pendingReasoningDelta = ''
             }
+
+            const fullMessage = chunk.message || ''
+            const finalModel = chunk.model || selectedModelId
+            const usage = chunk.usage
+            const creditsSnapshot = chunk.creditsSnapshot
+            const charge = chunk.charge
+            const reasoning =
+              mapReasoning(chunk.reasoning, 'done') ||
+              (latestReasoning
+                ? {
+                    ...latestReasoning,
+                    status: 'done',
+                  }
+                : undefined)
 
             if (!assistantMessageId) {
               assistantMessageId = createId()
               if (activeStreamContext.value?.conversationId === sessionId) {
                 activeStreamContext.value.assistantMessageId = assistantMessageId
               }
+
               conversationStore.addMessageToConversation(sessionId, {
                 id: assistantMessageId,
                 role: 'assistant',
                 content: fullMessage,
                 timestamp: Date.now(),
                 streaming: false,
-                model,
+                model: finalModel,
                 usage: mapUsage(usage),
+                charge: mapCharge(charge),
+                reasoning,
               })
             } else {
-              conversationStore.updateMessageContentById(sessionId, assistantMessageId, fullMessage, false)
+              conversationStore.updateMessageContentById(
+                sessionId,
+                assistantMessageId,
+                fullMessage,
+                false,
+              )
               conversationStore.patchMessageById(sessionId, assistantMessageId, {
                 streaming: false,
-                model,
+                model: finalModel,
                 usage: mapUsage(usage),
+                charge: mapCharge(charge),
+                reasoning,
               })
+            }
+
+            if (creditsSnapshot) {
+              authStore.setUserCredits(creditsSnapshot)
             }
 
             conversationStore.clearMessageAttachmentBase64(sessionId, userMessageId)
             conversationStore.saveConversations({ immediate: true })
             loading.value = false
-            logger.debug('AI 回复完成，模型:', model)
+            logger.debug('AI 回复完成，模型:', finalModel)
 
             activeController.value = null
             activeRequestId.value = null
@@ -269,7 +427,8 @@ export function useStreamChat() {
             if (flushRafId !== null) {
               cancelAnimationFrame(flushRafId)
               flushRafId = null
-              pendingDelta = ''
+              pendingAnswerDelta = ''
+              pendingReasoningDelta = ''
             }
 
             message.error(`${error}`)
@@ -282,8 +441,8 @@ export function useStreamChat() {
             activeController.value = null
             activeRequestId.value = null
             activeStreamContext.value = null
-          }
-        }
+          },
+        },
       )
 
       activeController.value = controller
@@ -305,6 +464,6 @@ export function useStreamChat() {
   return {
     loading,
     sendMessage,
-    cancelCurrentStream
+    cancelCurrentStream,
   }
 }

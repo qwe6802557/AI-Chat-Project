@@ -8,7 +8,9 @@ import {
   Max,
   IsBoolean,
   MaxLength,
+  IsIn,
 } from 'class-validator';
+import { DEFAULT_MODEL_BILLING_MODE } from '../../credits/types/credits.types';
 
 /**
  * 更新AI模型 DTO
@@ -44,8 +46,8 @@ export class UpdateModelDto {
    * 输入价格
    */
   @ApiProperty({
-    description: '输入价格（每千个token的价格，单位：元）',
-    example: 0.01,
+    description: '输入消耗倍率（按每千个 token 计）',
+    example: 1.83,
     required: false,
   })
   @IsOptional()
@@ -57,8 +59,8 @@ export class UpdateModelDto {
    * 输出价格
    */
   @ApiProperty({
-    description: '输出价格（每千个token的价格，单位：元）',
-    example: 0.03,
+    description: '输出消耗倍率（按每千个 token 计）',
+    example: 7.32,
     required: false,
   })
   @IsOptional()
@@ -142,6 +144,34 @@ export class UpdateModelDto {
   @IsOptional()
   @IsBoolean({ message: '启用状态必须是布尔值' })
   isActive?: boolean;
+
+  /**
+   * 计费模式
+   */
+  @ApiProperty({
+    description: '计费模式',
+    example: DEFAULT_MODEL_BILLING_MODE,
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: '计费模式必须是字符串' })
+  @IsIn([DEFAULT_MODEL_BILLING_MODE], {
+    message: `当前仅支持 ${DEFAULT_MODEL_BILLING_MODE} 计费模式`,
+  })
+  billingMode?: string;
+
+  /**
+   * 单次请求预占积分上限
+   */
+  @ApiProperty({
+    description: '单次请求预占积分上限，最终按实际 token 消耗结算',
+    example: 100,
+    required: false,
+  })
+  @IsOptional()
+  @Min(0, { message: '积分消耗不能为负数' })
+  @IsNumber({}, { message: '积分消耗必须是数字' })
+  creditCost?: number;
 
   /**
    * 供应商ID

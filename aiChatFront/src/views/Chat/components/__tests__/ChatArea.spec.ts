@@ -41,7 +41,7 @@ const globalStubs = {
     template: '<div class="chat-model-switcher-stub" @click="$emit(\'update:selected-model\', \'GLM-5\')" />',
   },
   ChatMessageViewport: {
-    template: '<div class="chat-message-viewport-stub" />',
+    template: '<div class="chat-message-viewport-stub" @click="$emit(\'prompt-click\', \'用简单的话解释量子计算\')" />',
   },
   FilePreview: {
     template: '<div class="file-preview-stub" />',
@@ -82,7 +82,7 @@ describe('ChatArea', () => {
         messages: [],
         loading: false,
         selectedModel: 'GLM-5',
-        modelOptions: [{ label: 'GLM-5', value: 'GLM-5' }],
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
       },
       global: {
         stubs: globalStubs,
@@ -115,7 +115,7 @@ describe('ChatArea', () => {
         messages: [],
         loading: false,
         selectedModel: 'GLM-5',
-        modelOptions: [{ label: 'GLM-5', value: 'GLM-5' }],
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
       },
       global: {
         stubs: globalStubs,
@@ -138,5 +138,46 @@ describe('ChatArea', () => {
       ],
     })
     expect((sendEvent?.[0]?.[1] as Record<string, unknown>).files).toBeUndefined()
+  })
+
+  it('re-emits prompt-click as send-message event', async () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: false,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    await wrapper.find('.chat-message-viewport-stub').trigger('click')
+
+    expect(wrapper.emitted('send-message')?.[0]).toEqual(['用简单的话解释量子计算'])
+  })
+
+  it('disables send button when credits are insufficient', async () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: false,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+        selectedModelInputPrice: 1.83,
+        selectedModelOutputPrice: 7.32,
+        selectedModelReserveCredits: 100,
+        currentCreditsRemaining: 50,
+        hasCreditSnapshot: true,
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    await wrapper.find('textarea').setValue('你好')
+
+    expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined()
   })
 })
