@@ -84,12 +84,6 @@
             <span v-else-if="message.model" class="meta-chip">
               Token 待统计
             </span>
-            <span
-              v-if="message.usage?.estimatedTotalCost !== undefined"
-              class="meta-chip cost"
-            >
-              估算 {{ formatCost(message.usage.estimatedTotalCost) }}
-            </span>
           </div>
           <div v-if="message.role === 'user'" class="user-message-content">
             <div v-if="message.attachments?.length" class="message-attachments">
@@ -256,10 +250,6 @@ const featureColumns: FeatureColumn[] = [
     ],
   },
 ]
-
-const formatCost = (value: number): string => {
-  return value.toFixed(value >= 1 ? 4 : 6)
-}
 
 const handlePromptClick = (prompt: string) => {
   if (props.loading) {
@@ -841,11 +831,6 @@ $avatar-size: 32px;
           color: $color-text-secondary;
           font-size: 12px;
           line-height: 1.4;
-
-          &.cost {
-            color: #0b7a5c;
-            background: rgba(16, 163, 127, 0.12);
-          }
         }
       }
 

@@ -3,11 +3,9 @@ import { UserService } from '../../modules/user/user.service';
 import { AiProviderService } from '../../modules/ai-provider/ai-provider.service';
 import { AiModelService } from '../../modules/ai-provider/ai-model.service';
 import type { AiProvider } from '../../modules/ai-provider/entities/ai-provider.entity';
-import { ZAIWEN_CHAT_MODEL_SEEDS } from '../../modules/ai-provider/constants/zaiwen-models';
 import {
   DEFAULT_MODEL_BILLING_MODE,
   DEFAULT_MODEL_CREDIT_COST,
-  ZAIWEN_CLAUDE_MODEL_CREDIT_COST,
 } from '../../modules/credits/types/credits.types';
 
 interface SeedSummary {
@@ -16,13 +14,6 @@ interface SeedSummary {
   createdModels: number;
   skippedModels: number;
 }
-
-const resolveZaiwenModelCreditCost = (modelId: string): number => {
-  return modelId.toLowerCase().includes('claude')
-    ? ZAIWEN_CLAUDE_MODEL_CREDIT_COST
-    : DEFAULT_MODEL_CREDIT_COST;
-};
-
 /**
  * 数据库初始化服务
  * 应用启动时自动执行数据初始化
@@ -67,6 +58,8 @@ export class DatabaseSeederService implements OnModuleInit {
 
   /**
    * 初始化 AI 供应商和模型种子数据
+   * 当前阶段：仅注册 Grok2API 供应商及 grok-4.5 / grok-build-0.1 两个模型
+   * 在问与 Claude 相关 seed 已暂时注释，数据库历史记录需通过 isActive=false 脚本同步禁用
    */
   private async seedAiProviders(): Promise<SeedSummary> {
     this.logger.log('开始校验 AI 供应商和模型...');
@@ -78,59 +71,107 @@ export class DatabaseSeederService implements OnModuleInit {
       skippedModels: 0,
     };
 
-    const claudeProviderResult = await this.ensureProvider({
-      name: 'Claude',
-      description: 'Anthropic Claude AI - 第三方代理服务',
-      website: 'https://anthropic.com',
+    // ===== Claude 供应商及其模型（暂时注释，后续如需恢复请取消注释）=====
+    // const claudeProviderResult = await this.ensureProvider({
+    //   name: 'Claude',
+    //   description: 'Anthropic Claude AI - 第三方代理服务',
+    //   website: 'https://anthropic.com',
+    // });
+    // summary[
+    //   claudeProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    // ] += 1;
+    //
+    // const claudeModelResult = await this.ensureModel({
+    //   providerId: claudeProviderResult.provider.id,
+    //   modelName: 'Claude Opus 4.5',
+    //   modelId: 'claude-opus-4-5-20251101',
+    //   inputPrice: 0.003,
+    //   outputPrice: 0.015,
+    //   contextLength: 200000,
+    //   maxOutput: 8192,
+    //   availability: 99.9,
+    //   tps: 100,
+    //   description: 'Anthropic 的兼容接入模型',
+    //   billingMode: DEFAULT_MODEL_BILLING_MODE,
+    //   creditCost: DEFAULT_MODEL_CREDIT_COST,
+    // });
+    // summary[
+    //   claudeModelResult === 'created' ? 'createdModels' : 'skippedModels'
+    // ] += 1;
+
+    // ===== Zaiwen 供应商及其模型种子（暂时注释，ZAIWEN_CHAT_MODEL_SEEDS 已置空数组）=====
+    // const zaiwenProviderResult = await this.ensureProvider({
+    //   name: 'Zaiwen',
+    //   description: '在问 OpenAI 兼容接口供应商',
+    //   website: 'https://www.zaiwenai.com',
+    // });
+    // summary[
+    //   zaiwenProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    // ] += 1;
+    //
+    // for (const model of ZAIWEN_CHAT_MODEL_SEEDS) {
+    //   const result = await this.ensureModel({
+    //     providerId: zaiwenProviderResult.provider.id,
+    //     modelName: model.modelId,
+    //     modelId: model.modelId,
+    //     inputPrice: model.inputMultiplier,
+    //     outputPrice: model.outputMultiplier,
+    //     contextLength: 0,
+    //     maxOutput: 0,
+    //     availability: 99.9,
+    //     tps: 0,
+    //     description: `在问官方支持模型，输入倍率 ${model.inputMultiplier}，输出倍率 ${model.outputMultiplier}`,
+    //     billingMode: DEFAULT_MODEL_BILLING_MODE,
+    //     creditCost: resolveZaiwenModelCreditCost(model.modelId),
+    //   });
+    //   summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    // }
+
+    // ===== Grok2API 供应商及 grok-4.5 / grok-build-0.1（保留）=====
+    const grok2apiProviderResult = await this.ensureProvider({
+      name: 'Grok2API',
+      description: '本机 Grok2API OpenAI 兼容服务',
+      website: 'http://127.0.0.1:18000',
     });
     summary[
-      claudeProviderResult.created ? 'createdProviders' : 'skippedProviders'
+      grok2apiProviderResult.created ? 'createdProviders' : 'skippedProviders'
     ] += 1;
 
-    const claudeModelResult = await this.ensureModel({
-      providerId: claudeProviderResult.provider.id,
-      modelName: 'Claude Opus 4.5',
-      modelId: 'claude-opus-4-5-20251101',
-      inputPrice: 0.003,
-      outputPrice: 0.015,
-      contextLength: 200000,
-      maxOutput: 8192,
+    const grok2apiModelResult = await this.ensureModel({
+      providerId: grok2apiProviderResult.provider.id,
+      modelName: 'Grok 4.5',
+      modelId: 'grok-4.5',
+      inputPrice: 0,
+      outputPrice: 0,
+      contextLength: 0,
+      maxOutput: 0,
       availability: 99.9,
-      tps: 100,
-      description: 'Anthropic 的兼容接入模型',
+      tps: 0,
+      description: '本机 Grok2API 已验证可用的聊天模型',
       billingMode: DEFAULT_MODEL_BILLING_MODE,
       creditCost: DEFAULT_MODEL_CREDIT_COST,
     });
     summary[
-      claudeModelResult === 'created' ? 'createdModels' : 'skippedModels'
+      grok2apiModelResult === 'created' ? 'createdModels' : 'skippedModels'
     ] += 1;
 
-    const zaiwenProviderResult = await this.ensureProvider({
-      name: 'Zaiwen',
-      description: '在问 OpenAI 兼容接口供应商',
-      website: 'https://www.zaiwenai.com',
+    const grokBuildModelResult = await this.ensureModel({
+      providerId: grok2apiProviderResult.provider.id,
+      modelName: 'Grok Build 0.1',
+      modelId: 'grok-build-0.1',
+      inputPrice: 0,
+      outputPrice: 0,
+      contextLength: 0,
+      maxOutput: 0,
+      availability: 99.9,
+      tps: 0,
+      description: '本机 Grok2API 已验证可发现的 Build 模型',
+      billingMode: DEFAULT_MODEL_BILLING_MODE,
+      creditCost: DEFAULT_MODEL_CREDIT_COST,
     });
     summary[
-      zaiwenProviderResult.created ? 'createdProviders' : 'skippedProviders'
+      grokBuildModelResult === 'created' ? 'createdModels' : 'skippedModels'
     ] += 1;
-
-    for (const model of ZAIWEN_CHAT_MODEL_SEEDS) {
-      const result = await this.ensureModel({
-        providerId: zaiwenProviderResult.provider.id,
-        modelName: model.modelId,
-        modelId: model.modelId,
-        inputPrice: model.inputMultiplier,
-        outputPrice: model.outputMultiplier,
-        contextLength: 0,
-        maxOutput: 0,
-        availability: 99.9,
-        tps: 0,
-        description: `在问官方支持模型，输入倍率 ${model.inputMultiplier}，输出倍率 ${model.outputMultiplier}`,
-        billingMode: DEFAULT_MODEL_BILLING_MODE,
-        creditCost: resolveZaiwenModelCreditCost(model.modelId),
-      });
-      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
-    }
 
     return summary;
   }

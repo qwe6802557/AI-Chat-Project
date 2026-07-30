@@ -23,6 +23,7 @@ const RAW_REASONING_MODEL_PATTERNS = [
   /^glm-5$/i,
   /reasoner/i,
   /thinking/i,
+  /grok-build/i,
 ];
 
 const SUMMARY_REASONING_MODEL_PATTERNS = [/^gpt-5/i, /^o3/i, /^o4/i];
@@ -54,6 +55,27 @@ export const resolveModelReasoningProfile = (params: {
       modelId,
       providerName,
       badgeLabel: '支持思考摘要',
+    };
+  }
+
+  if (normalizedProviderName.includes('grok2api') || normalizedProviderName.includes('grok')) {
+    if (matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS)) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'inline_tag',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
     };
   }
 

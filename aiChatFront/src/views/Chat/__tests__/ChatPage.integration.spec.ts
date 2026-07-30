@@ -405,8 +405,8 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 GLM-5')
-    expect(wrapper.find('.model-probe').text()).toBe('GLM-5')
+    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-4.5')
+    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
   })
 
   it('does not show model fallback warning when model request fails because auth expired', async () => {
@@ -414,8 +414,8 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 GLM-5')
-    expect(wrapper.find('.model-probe').text()).toBe('GLM-5')
+    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-4.5')
+    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
   })
 
   it('creates a local temporary conversation when session initialization fails', async () => {

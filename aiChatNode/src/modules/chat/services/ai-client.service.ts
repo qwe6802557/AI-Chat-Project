@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClaudeAdapter } from '../adapters/claude.adapter';
 import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
+import { Grok2APIAdapter } from '../adapters/grok2api.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModelService } from '../../ai-provider/ai-model.service';
 import { AiProviderService } from '../../ai-provider/ai-provider.service';
@@ -51,6 +52,7 @@ export class AIClientService {
   constructor(
     private readonly claudeAdapter: ClaudeAdapter,
     private readonly zaiwenAdapter: ZaiwenAdapter,
+    private readonly grok2apiAdapter: Grok2APIAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
@@ -331,6 +333,13 @@ export class AIClientService {
       normalizedProviderName.includes('anthropic')
     ) {
       return this.claudeAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('grok2api') ||
+      normalizedProviderName.includes('grok')
+    ) {
+      return this.grok2apiAdapter;
     }
 
     throw new BadRequestException(`暂不支持供应商 ${providerName}`);

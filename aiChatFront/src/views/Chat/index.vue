@@ -82,10 +82,10 @@ const { loading, sendMessage, cancelCurrentStream } = useStreamChat()
 // 模型选择
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
   'selectedChatModel',
-  'GLM-5'
+  'grok-4.5'
 )
 const modelOptions = ref<ChatModelOption[]>([
-  { label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }
+  { label: 'grok-4.5', value: 'grok-4.5', inputPrice: 0, outputPrice: 0, reserveCredits: 100 }
 ])
 const modelsLoading = ref(false)
 const hasCreditSnapshot = computed(() => !!authStore.userProfile?.credits)
@@ -164,13 +164,13 @@ const handleLoadMoreMessages = async (sessionId: string, page: number) => {
 
 /**
  * 加载可用模型列表
+ * 展示后端所有已启用模型，不再按供应商白名单过滤
  */
 const loadModelOptions = async () => {
   modelsLoading.value = true
   try {
     const response = await getActiveModels({ includeProvider: true })
-    const zaiwenModels = response.data
-      .filter((model) => model.provider?.name === 'Zaiwen')
+    const activeModels = response.data
       .sort((a, b) => a.modelId.localeCompare(b.modelId, 'en'))
       .map((model) => ({
         label: model.modelId,
@@ -183,12 +183,12 @@ const loadModelOptions = async () => {
         reasoningBadgeLabel: model.reasoningBadgeLabel,
       }))
 
-    if (zaiwenModels.length > 0) {
-      modelOptions.value = zaiwenModels
+    if (activeModels.length > 0) {
+      modelOptions.value = activeModels
     }
 
     if (!modelOptions.value.some((model) => model.value === selectedModel.value)) {
-      selectedModel.value = modelOptions.value.find((model) => model.value === 'GLM-5')?.value || modelOptions.value[0]?.value || 'GLM-5'
+      selectedModel.value = modelOptions.value.find((model) => model.value === 'grok-4.5')?.value || modelOptions.value[0]?.value || 'grok-4.5'
       saveSelectedModel()
     }
   } catch (error) {
@@ -196,8 +196,8 @@ const loadModelOptions = async () => {
     if (isAuthFailureError(error)) {
       return
     }
-    message.warning('模型列表加载失败，已使用默认模型 GLM-5')
-    selectedModel.value = 'GLM-5'
+    message.warning('模型列表加载失败，已使用默认模型 grok-4.5')
+    selectedModel.value = 'grok-4.5'
     saveSelectedModel()
   } finally {
     modelsLoading.value = false

@@ -165,7 +165,7 @@ export function useStreamChat() {
     const {
       fileIds,
       serverFiles,
-      model: selectedModelId = 'GLM-5',
+      model: selectedModelId = 'grok-4.5',
     } = options || {}
 
     if (!userId) {

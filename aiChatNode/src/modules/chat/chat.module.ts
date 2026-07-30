@@ -7,6 +7,7 @@ import { ChatSessionService } from './chat-session.service';
 import { AIClientService } from './services/ai-client.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
+import { Grok2APIAdapter } from './adapters/grok2api.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -32,6 +33,7 @@ import { FilesModule } from '../files/files.module';
     AIClientService, // AI 客户端服务
     ClaudeAdapter, // Claude 适配器
     ZaiwenAdapter, // 在问适配器
+    Grok2APIAdapter, // Grok2API 本地池适配器（OpenAI 兼容）
   ],
   exports: [ChatService, ChatSessionService, AIClientService],
 })

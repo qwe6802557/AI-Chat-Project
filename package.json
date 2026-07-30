@@ -9,6 +9,6 @@
     "dev:electron": "concurrently -k -n backend,electron -c blue,magenta \"npm --prefix aiChatNode run start:dev\" \"npm --prefix aiChatFront run dev:electron\""
   },
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.4"
   }
 }
