@@ -207,7 +207,10 @@ export class AiModelService {
   async findActiveModels(includeProvider = false): Promise<AiModel[]> {
     const query = this.modelRepository.createQueryBuilder('model');
 
-    query.where('model.isActive = :isActive', { isActive: true });
+    query
+      .where('model.isActive = :isActive', { isActive: true })
+      .orderBy('model.sortOrder', 'ASC')
+      .addOrderBy('model.createdAt', 'ASC');
 
     if (includeProvider) {
       query.leftJoinAndSelect('model.provider', 'provider');

@@ -6,7 +6,9 @@ import type { AiProvider } from '../../modules/ai-provider/entities/ai-provider.
 import {
   DEFAULT_MODEL_BILLING_MODE,
   DEFAULT_MODEL_CREDIT_COST,
+  CreditBusinessType,
 } from '../../modules/credits/types/credits.types';
+import { CreditsService } from '../../modules/credits/credits.service';
 
 interface SeedSummary {
   createdProviders: number;
@@ -27,6 +29,7 @@ export class DatabaseSeederService implements OnModuleInit {
     private readonly userService: UserService,
     private readonly aiProviderService: AiProviderService,
     private readonly aiModelService: AiModelService,
+    private readonly creditsService: CreditsService,
   ) {}
 
   /**
@@ -38,6 +41,21 @@ export class DatabaseSeederService implements OnModuleInit {
     try {
       await this.userService.initSuperAdmin();
       this.logger.log('超级管理员初始化完成');
+
+      // 为超级管理员配置足额测试积分（无限积分）
+      const admin = await this.userService.findByUsername('admin');
+      if (admin) {
+        const snapshot = await this.creditsService.getSnapshotForUser(admin.id);
+        if (snapshot.remaining < 10000000) {
+          await this.creditsService.grantCredits({
+            userId: admin.id,
+            amount: 999999999,
+            businessType: CreditBusinessType.SYSTEM,
+            remark: '管理员默认测试无限积分',
+          });
+          this.logger.log('已为超级管理员注入默认测试积分: 999999999');
+        }
+      }
 
       const summary = await this.seedAiProviders();
       this.logger.log(
@@ -127,7 +145,7 @@ export class DatabaseSeederService implements OnModuleInit {
     //   summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     // }
 
-    // ===== Grok2API 供应商及 grok-4.5 / grok-build-0.1（保留）=====
+    // ===== Grok2API 供应商及模型种子 =====
     const grok2apiProviderResult = await this.ensureProvider({
       name: 'Grok2API',
       description: '本机 Grok2API OpenAI 兼容服务',
@@ -137,41 +155,70 @@ export class DatabaseSeederService implements OnModuleInit {
       grok2apiProviderResult.created ? 'createdProviders' : 'skippedProviders'
     ] += 1;
 
-    const grok2apiModelResult = await this.ensureModel({
-      providerId: grok2apiProviderResult.provider.id,
-      modelName: 'Grok 4.5',
-      modelId: 'grok-4.5',
-      inputPrice: 0,
-      outputPrice: 0,
-      contextLength: 0,
-      maxOutput: 0,
-      availability: 99.9,
-      tps: 0,
-      description: '本机 Grok2API 已验证可用的聊天模型',
-      billingMode: DEFAULT_MODEL_BILLING_MODE,
-      creditCost: DEFAULT_MODEL_CREDIT_COST,
-    });
-    summary[
-      grok2apiModelResult === 'created' ? 'createdModels' : 'skippedModels'
-    ] += 1;
+    const GROK2API_CHAT_MODELS = [
+      {
+        modelId: 'grok-chat-fast',
+        modelName: 'Grok Chat Fast',
+        description: '本机 Grok2API 快速聊天模型',
+        sortOrder: 1,
+        isActive: true,
+      },
+      {
+        modelId: 'grok-4.3',
+        modelName: 'Grok 4.3',
+        description: '本机 Grok2API 4.3 聊天模型',
+        sortOrder: 2,
+        isActive: true,
+      },
+      {
+        modelId: 'grok-4.5',
+        modelName: 'Grok 4.5',
+        description: '本机 Grok2API 4.5 聊天模型',
+        sortOrder: 3,
+        isActive: true,
+      },
+      {
+        modelId: 'grok-4.6',
+        modelName: 'Grok 4.6',
+        description: '本机 Grok2API 4.6 聊天模型',
+        sortOrder: 4,
+        isActive: true,
+      },
+      {
+        modelId: 'grok-build-0.1',
+        modelName: 'Grok Build 0.1',
+        description: '本机 Grok2API Build 模型',
+        sortOrder: 5,
+        isActive: true,
+      },
+      {
+        modelId: 'grok-composer-2.5-fast',
+        modelName: 'Grok Composer 2.5 Fast',
+        description: '本机 Grok2API 代码与创作快速模型',
+        sortOrder: 6,
+        isActive: true,
+      },
+    ];
 
-    const grokBuildModelResult = await this.ensureModel({
-      providerId: grok2apiProviderResult.provider.id,
-      modelName: 'Grok Build 0.1',
-      modelId: 'grok-build-0.1',
-      inputPrice: 0,
-      outputPrice: 0,
-      contextLength: 0,
-      maxOutput: 0,
-      availability: 99.9,
-      tps: 0,
-      description: '本机 Grok2API 已验证可发现的 Build 模型',
-      billingMode: DEFAULT_MODEL_BILLING_MODE,
-      creditCost: DEFAULT_MODEL_CREDIT_COST,
-    });
-    summary[
-      grokBuildModelResult === 'created' ? 'createdModels' : 'skippedModels'
-    ] += 1;
+    for (const model of GROK2API_CHAT_MODELS) {
+      const result = await this.ensureModel({
+        providerId: grok2apiProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 0,
+        maxOutput: 0,
+        availability: 99.9,
+        tps: 0,
+        description: model.description,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: DEFAULT_MODEL_CREDIT_COST,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
 
     return summary;
   }
@@ -220,15 +267,32 @@ export class DatabaseSeederService implements OnModuleInit {
     availability: number;
     tps: number;
     description: string;
-    billingMode: string;
-    creditCost: number;
+    billingMode?: string;
+    creditCost?: number;
+    sortOrder?: number;
+    isActive?: boolean;
   }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,
     );
 
     if (existingModel) {
-      this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
+      const needsSortUpdate =
+        payload.sortOrder !== undefined &&
+        existingModel.sortOrder !== payload.sortOrder;
+      const needsActiveUpdate =
+        payload.isActive !== undefined &&
+        existingModel.isActive !== payload.isActive;
+
+      if (needsSortUpdate || needsActiveUpdate) {
+        await this.aiModelService.update(existingModel.id, {
+          sortOrder: payload.sortOrder ?? existingModel.sortOrder,
+          isActive: payload.isActive ?? existingModel.isActive,
+        });
+        this.logger.log(`模型已更新排序/状态: ${payload.modelId}`);
+      } else {
+        this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
+      }
       return 'skipped';
     }
 
@@ -243,9 +307,10 @@ export class DatabaseSeederService implements OnModuleInit {
       availability: payload.availability,
       tps: payload.tps,
       description: payload.description,
-      isActive: true,
-      billingMode: payload.billingMode,
-      creditCost: payload.creditCost,
+      isActive: payload.isActive ?? true,
+      billingMode: payload.billingMode || DEFAULT_MODEL_BILLING_MODE,
+      creditCost: payload.creditCost ?? DEFAULT_MODEL_CREDIT_COST,
+      sortOrder: payload.sortOrder ?? 0,
     });
 
     this.logger.log(`模型创建成功: ${payload.modelId}`);

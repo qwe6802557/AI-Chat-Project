@@ -19,7 +19,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     // 配置模块
     ConfigModule.forRoot({
       isGlobal: true, // ConfigModule 全局可用
-      envFilePath: '.env', // 指定 .env 文件路径
+      envFilePath: ['.env', 'aiChatNode/.env', '../.env'], // 指定 .env 文件路径
       load: [databaseConfig], // 加载数据库配置
     }),
     // TypeORM 模块

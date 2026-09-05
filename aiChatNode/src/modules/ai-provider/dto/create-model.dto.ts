@@ -178,6 +178,19 @@ export class CreateModelDto {
   creditCost?: number;
 
   /**
+   * 排序权重（数值越小越靠前）
+   */
+  @ApiProperty({
+    description: '排序权重（数值越小越靠前）',
+    example: 1,
+    default: 0,
+    required: false,
+  })
+  @IsOptional()
+  @IsNumber({}, { message: '排序权重必须是数字' })
+  sortOrder?: number;
+
+  /**
    * 供应商ID
    */
   @ApiProperty({

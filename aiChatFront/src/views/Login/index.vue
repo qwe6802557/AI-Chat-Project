@@ -225,6 +225,7 @@ const rules = {
 
 // 登录处理
 const handleLogin = async () => {
+  if (loading.value) return
   loading.value = true
   try {
     // 登录参数

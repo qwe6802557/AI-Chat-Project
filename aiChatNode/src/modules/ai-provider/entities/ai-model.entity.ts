@@ -99,6 +99,12 @@ export class AiModel {
   creditCost: number;
 
   /**
+   * 排序权重（数值越小越靠前）
+   */
+  @Column({ type: 'int', default: 0 })
+  sortOrder: number;
+
+  /**
    * 关联的供应商ID
    */
   @Column({ type: 'uuid' })

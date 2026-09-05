@@ -68,3 +68,7 @@ coverage/
 out/
 release/
 
+# ===== 本地按需环境控制脚本 =====
+start-env.bat
+stop-env.bat
+scripts/

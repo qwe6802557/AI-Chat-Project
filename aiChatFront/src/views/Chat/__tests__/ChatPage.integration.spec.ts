@@ -15,6 +15,7 @@ const {
   mockSendStreamMessage,
   mockMessageWarning,
   mockMessageError,
+  mockGetCurrentUserAccount,
 } = vi.hoisted(() => ({
   routerPush: vi.fn(),
   mockGetActiveModels: vi.fn(),
@@ -27,6 +28,7 @@ const {
   mockSendStreamMessage: vi.fn(),
   mockMessageWarning: vi.fn(),
   mockMessageError: vi.fn(),
+  mockGetCurrentUserAccount: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -44,6 +46,10 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/api/model', () => ({
   getActiveModels: mockGetActiveModels,
+}))
+
+vi.mock('@/api/user', () => ({
+  getCurrentUserAccount: mockGetCurrentUserAccount,
 }))
 
 vi.mock('@/api/chat', async () => {
@@ -210,6 +216,14 @@ describe('ChatPage integration', () => {
     vi.clearAllMocks()
     localStorage.clear()
 
+    mockGetCurrentUserAccount.mockResolvedValue({
+      code: 0,
+      data: {
+        user: null,
+        recentLedger: null,
+      },
+      message: 'ok',
+    })
     mockGetSessionList.mockResolvedValue({
       code: 0,
       data: [],

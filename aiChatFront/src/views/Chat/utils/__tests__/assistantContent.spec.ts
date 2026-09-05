@@ -25,7 +25,7 @@ describe('sanitizeVisibleAssistantContent', () => {
       reasoning: {
         mode: 'raw',
         source: 'extracted_tag',
-        title: 'Think',
+        title: '思考过程',
         content: '推理',
       },
       reasoningOpen: false,

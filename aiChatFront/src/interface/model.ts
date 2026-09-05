@@ -20,6 +20,7 @@ export interface BackendAiModel {
   isActive: boolean
   billingMode?: string
   creditCost?: number
+  sortOrder?: number
   reasoningCapability?: 'none' | 'summary' | 'raw'
   reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
   reasoningIntegration?: 'responses_summary' | 'anthropic_blocks' | 'inline_tag' | 'none'

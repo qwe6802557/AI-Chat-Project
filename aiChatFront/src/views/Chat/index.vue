@@ -46,6 +46,7 @@ import { useStreamChat } from './hooks/useStreamChat'
 import { useAuthStore, useConversationStore } from '@/stores'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { getActiveModels } from '@/api/model'
+import { getCurrentUserAccount } from '@/api/user'
 import { isAuthFailureError } from '@/utils/request'
 
 interface ChatModelOption {
@@ -57,6 +58,26 @@ interface ChatModelOption {
   reasoningCapability?: 'none' | 'summary' | 'raw'
   reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
   reasoningBadgeLabel?: string
+}
+
+const PREFERRED_MODEL_ORDER: string[] = [
+  'grok-chat-fast',
+  'grok-4.3',
+  'grok-4.5',
+  'grok-4.6',
+  'grok-build-0.1',
+  'grok-composer-2.5-fast',
+]
+
+const getModelOrderRank = (model: { modelId: string; sortOrder?: number }): number => {
+  const preferredIndex = PREFERRED_MODEL_ORDER.indexOf(model.modelId)
+  if (preferredIndex !== -1) {
+    return preferredIndex
+  }
+  if (typeof model.sortOrder === 'number' && model.sortOrder > 0) {
+    return PREFERRED_MODEL_ORDER.length + model.sortOrder
+  }
+  return 999
 }
 
 // 定义组件名称
@@ -134,7 +155,8 @@ const handleSendMessage = async (
     return
   }
 
-  if (hasCreditSnapshot.value && currentCreditsRemaining.value < selectedModelReserveCredits.value) {
+  const isAdmin = authStore.userProfile?.role === 'admin'
+  if (!isAdmin && hasCreditSnapshot.value && currentCreditsRemaining.value < selectedModelReserveCredits.value) {
     message.warning(
       `当前模型发送前至少需预留 ${selectedModelReserveCredits.value} 积分，最终按实际 token 结算，剩余 ${currentCreditsRemaining.value} 积分`,
     )
@@ -171,7 +193,14 @@ const loadModelOptions = async () => {
   try {
     const response = await getActiveModels({ includeProvider: true })
     const activeModels = response.data
-      .sort((a, b) => a.modelId.localeCompare(b.modelId, 'en'))
+      .sort((a, b) => {
+        const rankA = getModelOrderRank(a)
+        const rankB = getModelOrderRank(b)
+        if (rankA !== rankB) {
+          return rankA - rankB
+        }
+        return a.modelId.localeCompare(b.modelId, 'en')
+      })
       .map((model) => ({
         label: model.modelId,
         value: model.modelId,
@@ -188,7 +217,7 @@ const loadModelOptions = async () => {
     }
 
     if (!modelOptions.value.some((model) => model.value === selectedModel.value)) {
-      selectedModel.value = modelOptions.value.find((model) => model.value === 'grok-4.5')?.value || modelOptions.value[0]?.value || 'grok-4.5'
+      selectedModel.value = modelOptions.value[0]?.value || 'grok-chat-fast'
       saveSelectedModel()
     }
   } catch (error) {
@@ -319,7 +348,16 @@ onMounted(async () => {
   if (userId) {
     const [paginationInfo] = await Promise.all([
       conversationStore.initializeFromServer(userId),
-      loadModelOptions()
+      loadModelOptions(),
+      getCurrentUserAccount()
+        .then((res) => {
+          if (res?.data?.user?.credits) {
+            authStore.setUserCredits(res.data.user.credits)
+          }
+        })
+        .catch((error) => {
+          logger.warn('获取最新用户积分失败:', error)
+        }),
     ])
 
     // 初始化 hasMoreMessages 状态
