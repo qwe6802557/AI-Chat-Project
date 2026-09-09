@@ -200,6 +200,18 @@ export class DatabaseSeederService implements OnModuleInit {
       },
     ];
 
+    const GROK2API_IMAGE_MODELS = [
+      {
+        modelId: 'grok-imagine-image-2.0',
+        modelName: 'Grok Imagine Image 2.0',
+        description: 'Grok Web 图片生成模型，支持 n、宽高比、1k/2k',
+        sortOrder: 1,
+        isActive: true,
+        category: 'image' as const,
+        creditCost: 100,
+      },
+    ];
+
     for (const model of GROK2API_CHAT_MODELS) {
       const result = await this.ensureModel({
         providerId: grok2apiProviderResult.provider.id,
@@ -216,6 +228,28 @@ export class DatabaseSeederService implements OnModuleInit {
         creditCost: DEFAULT_MODEL_CREDIT_COST,
         sortOrder: model.sortOrder,
         isActive: model.isActive,
+        category: 'chat',
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
+    for (const model of GROK2API_IMAGE_MODELS) {
+      const result = await this.ensureModel({
+        providerId: grok2apiProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 0,
+        maxOutput: 0,
+        availability: 100,
+        tps: 0,
+        description: model.description,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: model.creditCost,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: model.category,
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
@@ -271,6 +305,7 @@ export class DatabaseSeederService implements OnModuleInit {
     creditCost?: number;
     sortOrder?: number;
     isActive?: boolean;
+    category?: 'chat' | 'image';
   }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,
@@ -283,13 +318,17 @@ export class DatabaseSeederService implements OnModuleInit {
       const needsActiveUpdate =
         payload.isActive !== undefined &&
         existingModel.isActive !== payload.isActive;
+      const needsCategoryUpdate =
+        payload.category !== undefined &&
+        existingModel.category !== payload.category;
 
-      if (needsSortUpdate || needsActiveUpdate) {
+      if (needsSortUpdate || needsActiveUpdate || needsCategoryUpdate) {
         await this.aiModelService.update(existingModel.id, {
           sortOrder: payload.sortOrder ?? existingModel.sortOrder,
           isActive: payload.isActive ?? existingModel.isActive,
+          category: payload.category ?? existingModel.category,
         });
-        this.logger.log(`模型已更新排序/状态: ${payload.modelId}`);
+        this.logger.log(`模型已更新排序/状态/分类: ${payload.modelId}`);
       } else {
         this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
       }
@@ -311,6 +350,7 @@ export class DatabaseSeederService implements OnModuleInit {
       billingMode: payload.billingMode || DEFAULT_MODEL_BILLING_MODE,
       creditCost: payload.creditCost ?? DEFAULT_MODEL_CREDIT_COST,
       sortOrder: payload.sortOrder ?? 0,
+      category: payload.category ?? 'chat',
     });
 
     this.logger.log(`模型创建成功: ${payload.modelId}`);

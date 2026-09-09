@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
 import { FilesModule } from './modules/files/files.module';
 import { CreditsModule } from './modules/credits/credits.module';
+import { ImagesModule } from './modules/images/images.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import databaseConfig from './config/database.config';
@@ -46,6 +47,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     ChatModule,
     FilesModule,
     AiProviderModule,
+    ImagesModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

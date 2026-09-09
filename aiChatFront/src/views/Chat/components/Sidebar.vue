@@ -71,55 +71,19 @@
         <span class="empty-description">新建对话后会显示在这里</span>
       </div>
     </div>
-
-    <!-- 底部 -->
-    <div class="sidebar-footer">
-      <div
-        :class="['menu-item', { disabled: props.isClearing }]"
-        @click="!props.isClearing && handleClearConversations()"
-      >
-        <DeleteOutlined class="menu-icon" />
-        <span>{{ props.isClearing ? '清空中...' : '清空对话' }}</span>
-      </div>
-<!--      <div class="menu-item">-->
-<!--        <BulbOutlined class="menu-icon" />-->
-<!--        <span>浅色模式</span>-->
-<!--      </div>-->
-      <div class="menu-item" @click="handleOpenAccount">
-        <UserOutlined class="menu-icon" />
-        <span>我的账户</span>
-      </div>
-      <div class="menu-item" @click="showAboutModal = true">
-        <QuestionCircleOutlined class="menu-icon" />
-        <span>更新与帮助</span>
-      </div>
-      <div class="menu-item" @click="handleLogout">
-        <LogoutOutlined class="menu-icon" />
-        <span>退出登录</span>
-      </div>
-    </div>
-
-    <!-- 更新与帮助弹窗 -->
-    <AboutModal v-model:open="showAboutModal" />
-
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Modal, message } from 'ant-design-vue'
+import { Modal } from 'ant-design-vue'
 import {
   PlusOutlined,
   MessageOutlined,
   DeleteOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  QuestionCircleOutlined,
   MoreOutlined,
   EditOutlined
 } from '@ant-design/icons-vue'
-import AboutModal from './AboutModal.vue'
 import type { Conversation } from '@/interface/conversation'
 
 defineOptions({
@@ -135,25 +99,18 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   isClearing: false
 })
-const router = useRouter()
-const route = useRoute()
 
 const emit = defineEmits<{
   'new-chat': []
   'select-conversation': [conversationId: string]
   'rename-conversation': [conversationId: string, title: string]
   'delete-conversation': [conversationId: string]
-  'clear-conversations': []
-  'logout': []
 }>()
-
-// 更新与帮助弹窗
-const showAboutModal = ref(false)
 
 // 编辑状态
 const editingId = ref<string | null>(null)
 const editingTitle = ref('')
-const originalTitle = ref('')  // 保存原标题用于恢复
+const originalTitle = ref('')
 const editInputRef = ref<HTMLInputElement | null>(null)
 
 // 新建对话
@@ -164,7 +121,6 @@ const handleNewChat = () => {
 
 // 点击会话项
 const handleConversationClick = (id: string) => {
-  // 如果正在编辑，不触发选择
   if (editingId.value) return
   emit('select-conversation', id)
 }
@@ -182,7 +138,7 @@ const handleMenuClick = (e: { key: string }, conversation: Conversation) => {
 const startEditing = (conversation: Conversation) => {
   editingId.value = conversation.id
   editingTitle.value = conversation.title
-  originalTitle.value = conversation.title  // 保存原标题
+  originalTitle.value = conversation.title
   nextTick(() => {
     editInputRef.value?.focus()
     editInputRef.value?.select()
@@ -197,7 +153,6 @@ const handleEditConfirm = () => {
   const currentEditingId = editingId.value
   const savedOriginalTitle = originalTitle.value
 
-  // 标题没有变化或为空则取消编辑
   if (!newTitle || newTitle === savedOriginalTitle) {
     editingId.value = null
     editingTitle.value = ''
@@ -205,7 +160,6 @@ const handleEditConfirm = () => {
     return
   }
 
-  // 清除编辑状态
   editingId.value = null
   editingTitle.value = ''
   originalTitle.value = ''
@@ -230,47 +184,6 @@ const handleDeleteConversation = (conversation: Conversation) => {
     cancelText: '取消',
     onOk() {
       emit('delete-conversation', conversation.id)
-    }
-  })
-}
-
-const handleClearConversations = () => {
-  const count = props.conversations.length
-  if (count === 0) {
-    message.info('暂无对话可清空')
-    return
-  }
-
-  Modal.confirm({
-    title: '清空对话',
-    content: `确定要清空所有对话吗？这将删除全部 ${count} 个会话（包括已归档的会话）。此操作不可恢复。`,
-    okText: '清空全部',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk() {
-      emit('clear-conversations')
-    }
-  })
-}
-
-const handleOpenAccount = async () => {
-  await router.push({
-    name: 'account',
-    query: {
-      from: route.fullPath,
-    },
-  })
-}
-
-const handleLogout = () => {
-  Modal.confirm({
-    title: '退出登录',
-    content: '确定要退出登录吗？',
-    okText: '退出',
-    okType: 'danger',
-    cancelText: '取消',
-    onOk() {
-      emit('logout')
     }
   })
 }
@@ -439,40 +352,6 @@ const handleLogout = () => {
       .empty-description {
         font-size: 12px;
         line-height: 1.5;
-      }
-    }
-  }
-
-  .sidebar-footer {
-    padding: 20px;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    .menu-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-      color: #000000;
-      font-size: 14px;
-
-      &:hover:not(.disabled) {
-        background: rgba(0, 0, 0, 0.05);
-      }
-
-      &.disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .menu-icon {
-        font-size: 24px;
-        color: rgba(0, 0, 0, 0.6);
       }
     }
   }

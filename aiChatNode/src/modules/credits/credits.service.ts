@@ -109,6 +109,13 @@ export class CreditsService {
         }
         return createItem('积分发放', ledger.deltaAvailable);
       case CreditLedgerType.CAPTURE:
+        if (ledger.businessType === CreditBusinessType.IMAGE_GENERATION) {
+          return createItem(
+            'AI 生图扣费',
+            ledger.deltaAvailable,
+            ledger.modelId ? `模型：${ledger.modelId}` : 'AI 生图扣费',
+          );
+        }
         if (ledger.businessType === CreditBusinessType.CHAT_MESSAGE) {
           const settledAmount = ledger.deltaAvailable + ledger.deltaReserved;
           return createItem(
@@ -131,6 +138,13 @@ export class CreditsService {
         }
         return createItem('释放预占积分', ledger.deltaAvailable);
       case CreditLedgerType.REFUND:
+        if (ledger.businessType === CreditBusinessType.IMAGE_GENERATION) {
+          return createItem(
+            '生图失败退款',
+            ledger.deltaAvailable,
+            ledger.remark || '生图失败退还积分',
+          );
+        }
         return createItem('积分退款', ledger.deltaAvailable);
       case CreditLedgerType.ADJUST:
         return createItem('积分调整', ledger.deltaAvailable);
@@ -601,6 +615,105 @@ export class CreditsService {
         charge: this.toChargeSummary(savedCharge),
         creditsSnapshot: this.toSnapshot(savedAccount),
       };
+    });
+  }
+
+  /**
+   * 直接扣减积分（如图片生成等一次性扣费业务）
+   */
+  async deductDirectCredits(
+    params: {
+      userId: string;
+      amount: number;
+      businessType: CreditBusinessType | string;
+      businessId?: string;
+      modelId?: string;
+      remark?: string;
+    },
+    manager?: EntityManager,
+  ): Promise<UserCreditsSnapshot> {
+    const amount = Math.max(0, Math.trunc(params.amount));
+    return this.runInTransaction(manager, async (transactionManager) => {
+      const accountRepository = this.getAccountRepository(transactionManager);
+      const ledgerRepository = this.getLedgerRepository(transactionManager);
+      const account = await this.lockAccountByUserId(params.userId, transactionManager);
+
+      if (amount > 0 && account.availableCredits < amount) {
+        throw new BadRequestException(
+          `积分不足，本次需要 ${amount} 积分，剩余 ${account.availableCredits} 积分`,
+        );
+      }
+
+      account.availableCredits -= amount;
+      account.consumedCredits += amount;
+      const savedAccount = await accountRepository.save(account);
+
+      if (amount > 0) {
+        await ledgerRepository.save(
+          ledgerRepository.create({
+            userId: params.userId,
+            accountId: savedAccount.id,
+            type: CreditLedgerType.CAPTURE,
+            deltaAvailable: -amount,
+            deltaReserved: 0,
+            availableAfter: savedAccount.availableCredits,
+            reservedAfter: savedAccount.reservedCredits,
+            businessType: params.businessType,
+            businessId: params.businessId || null,
+            modelId: params.modelId || null,
+            remark: params.remark || null,
+          }),
+        );
+      }
+
+      return this.toSnapshot(savedAccount);
+    });
+  }
+
+  /**
+   * 直接退还积分（如生图失败回滚）
+   */
+  async refundDirectCredits(
+    params: {
+      userId: string;
+      amount: number;
+      businessType: CreditBusinessType | string;
+      businessId?: string;
+      modelId?: string;
+      remark?: string;
+    },
+    manager?: EntityManager,
+  ): Promise<UserCreditsSnapshot> {
+    const amount = Math.max(0, Math.trunc(params.amount));
+    if (amount === 0) {
+      return this.getSnapshotForUser(params.userId, manager);
+    }
+    return this.runInTransaction(manager, async (transactionManager) => {
+      const accountRepository = this.getAccountRepository(transactionManager);
+      const ledgerRepository = this.getLedgerRepository(transactionManager);
+      const account = await this.lockAccountByUserId(params.userId, transactionManager);
+
+      account.availableCredits += amount;
+      account.consumedCredits = Math.max(0, account.consumedCredits - amount);
+      const savedAccount = await accountRepository.save(account);
+
+      await ledgerRepository.save(
+        ledgerRepository.create({
+          userId: params.userId,
+          accountId: savedAccount.id,
+          type: CreditLedgerType.REFUND,
+          deltaAvailable: amount,
+          deltaReserved: 0,
+          availableAfter: savedAccount.availableCredits,
+          reservedAfter: savedAccount.reservedCredits,
+          businessType: params.businessType,
+          businessId: params.businessId || null,
+          modelId: params.modelId || null,
+          remark: params.remark || null,
+        }),
+      );
+
+      return this.toSnapshot(savedAccount);
     });
   }
 

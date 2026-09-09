@@ -1,36 +1,38 @@
 <template>
-  <div class="chat-container">
-    <!-- 侧边栏 -->
-    <Sidebar
-      :conversations="conversations"
-      :current-conversation-id="currentConversationId"
-      :is-clearing="isClearing"
-      @new-chat="handleNewConversation"
-      @select-conversation="handleSelectConversation"
-      @rename-conversation="handleRenameConversation"
-      @delete-conversation="handleDeleteConversation"
-      @clear-conversations="handleClearConversations"
-      @logout="handleLogout"
-    />
-    <ChatArea
-      :messages="currentMessages"
-      :loading="loading"
-      :selected-model="selectedModel"
-      :model-options="modelOptions"
-      :models-loading="modelsLoading"
-      :current-session-id="currentConversationId"
-      :has-more-messages="hasMoreMessages"
-      :load-more-messages="handleLoadMoreMessages"
-      :selected-model-input-price="selectedModelInputPrice"
-      :selected-model-output-price="selectedModelOutputPrice"
-      :selected-model-reserve-credits="selectedModelReserveCredits"
-      :selected-model-reasoning-capability="selectedModelReasoningCapability"
-      :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
-      :current-credits-remaining="currentCreditsRemaining"
-      :has-credit-snapshot="hasCreditSnapshot"
-      @update:selected-model="handleModelChange"
-      @send-message="handleSendMessage"
-    />
+  <div class="chat-page-layout">
+    <AppHeaderNav active-mode="chat" />
+    <div class="chat-main-container">
+      <Sidebar
+        :conversations="conversations"
+        :current-conversation-id="currentConversationId"
+        :is-clearing="isClearing"
+        @new-chat="handleNewConversation"
+        @select-conversation="handleSelectConversation"
+        @rename-conversation="handleRenameConversation"
+        @delete-conversation="handleDeleteConversation"
+        @clear-conversations="handleClearConversations"
+        @logout="handleLogout"
+      />
+      <ChatArea
+        :messages="currentMessages"
+        :loading="loading"
+        :selected-model="selectedModel"
+        :model-options="modelOptions"
+        :models-loading="modelsLoading"
+        :current-session-id="currentConversationId"
+        :has-more-messages="hasMoreMessages"
+        :load-more-messages="handleLoadMoreMessages"
+        :selected-model-input-price="selectedModelInputPrice"
+        :selected-model-output-price="selectedModelOutputPrice"
+        :selected-model-reserve-credits="selectedModelReserveCredits"
+        :selected-model-reasoning-capability="selectedModelReasoningCapability"
+        :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
+        :current-credits-remaining="currentCreditsRemaining"
+        :has-credit-snapshot="hasCreditSnapshot"
+        @update:selected-model="handleModelChange"
+        @send-message="handleSendMessage"
+      />
+    </div>
   </div>
 </template>
 
@@ -39,6 +41,7 @@ import { computed, ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
+import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
 import logger from '@/utils/logger'
@@ -371,11 +374,20 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.chat-container {
+.chat-page-layout {
   display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
-  background: #FFFFFF;
+  background: #f8fafc;
   overflow: hidden;
+}
+
+.chat-main-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8fafc;
 }
 </style>

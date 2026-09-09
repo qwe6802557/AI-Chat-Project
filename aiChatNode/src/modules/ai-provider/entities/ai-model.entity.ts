@@ -82,6 +82,12 @@ export class AiModel {
   isActive: boolean;
 
   /**
+   * 模型分类：文本对话 (chat) 或 图像生成 (image)
+   */
+  @Column({ type: 'varchar', length: 32, default: 'chat' })
+  category: 'chat' | 'image';
+
+  /**
    * 计费模式
    * - 当前使用“预占后按实际 token 结算”的模式
    */

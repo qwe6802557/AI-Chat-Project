@@ -186,6 +186,19 @@ export class UpdateModelDto {
   sortOrder?: number;
 
   /**
+   * 模型类型
+   */
+  @ApiProperty({
+    description: '模型类型：chat (对话) 或 image (生图)',
+    example: 'chat',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: '模型类型必须是字符串' })
+  @IsIn(['chat', 'image'], { message: '模型类型仅支持 chat 或 image' })
+  category?: 'chat' | 'image';
+
+  /**
    * 供应商ID
    */
   @ApiProperty({

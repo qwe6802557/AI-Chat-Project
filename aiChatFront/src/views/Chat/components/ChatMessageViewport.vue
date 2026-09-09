@@ -42,14 +42,16 @@
           <a-avatar
             v-if="message.role === 'user'"
             :size="32"
-            style="background: #5B5BD6; flex-shrink: 0;"
+            class="user-avatar"
+            style="background: #475467; flex-shrink: 0;"
           >
             <template #icon><UserOutlined /></template>
           </a-avatar>
           <a-avatar
             v-else
             :size="32"
-            style="background: #10A37F; flex-shrink: 0;"
+            class="assistant-avatar"
+            style="background: #0f172a; flex-shrink: 0;"
           >
             <template #icon><RobotOutlined /></template>
           </a-avatar>
@@ -119,7 +121,8 @@
         <div class="message-avatar">
           <a-avatar
             :size="32"
-            style="background: #10A37F; flex-shrink: 0;"
+            class="assistant-avatar"
+            style="background: #0f172a; flex-shrink: 0;"
           >
             <template #icon><RobotOutlined /></template>
           </a-avatar>
@@ -281,7 +284,7 @@ useMessageListWatcher(
 )
 
 const { isLoading: isLoadingMore } = useInfiniteScroll(messagesListRef, {
-  threshold: 300,
+  threshold: 80,
   throttleDelay: 150,
   disabled: toRef(props, 'loading'),
   hasMore: hasMoreMessagesComputed,
@@ -346,7 +349,7 @@ $avatar-size: 32px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding: 160px 0 0;
+  padding: 40px 0 20px;
   overflow-y: auto;
 
   .welcome-content {
@@ -404,10 +407,10 @@ $avatar-size: 32px;
         }
 
         .example-card {
-          background: $color-bg-message;
+          background: #ffffff;
           padding: 12px $spacing-md;
           border-radius: $radius-sm;
-          border: none;
+          border: 1px solid #e2e8f0;
           color: $color-text-primary;
           font-size: $font-size-base;
           line-height: 1.5;
@@ -415,10 +418,13 @@ $avatar-size: 32px;
           cursor: pointer;
           text-align: left;
           width: 100%;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 
           &:hover {
-            background: rgba(0, 0, 0, 0.06);
+            background: #f8fafc;
+            border-color: #cbd5e1;
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
           }
 
           &:disabled {
@@ -438,11 +444,11 @@ $avatar-size: 32px;
   overflow-x: hidden;
   width: 100%;
   margin: 0 auto;
-  padding: 85px 40px 12px;
+  padding: 24px 20px 24px;
   scroll-behavior: smooth;
 
   @media (max-width: 768px) {
-    padding: 84px $spacing-md 120px;
+    padding: 16px $spacing-md 100px;
   }
 
   .loading-more-indicator {
@@ -450,15 +456,13 @@ $avatar-size: 32px;
     align-items: center;
     justify-content: center;
     gap: $spacing-sm;
-    padding: $spacing-md 0;
-    margin-bottom: $spacing-md;
-    background: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0));
-    position: sticky;
-    top: 64px;
-    z-index: 5;
+    padding: $spacing-sm 0;
+    margin-bottom: $spacing-sm;
+    position: relative;
+    z-index: 1;
 
     .loading-icon {
-      font-size: 16px;
+      font-size: 14px;
       color: $color-text-secondary;
     }
 
@@ -472,6 +476,10 @@ $avatar-size: 32px;
     display: flex;
     gap: $spacing-md;
     margin-bottom: $spacing-lg;
+    max-width: 840px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
     animation: fadeIn 0.3s ease;
 
     @keyframes fadeIn {
@@ -573,13 +581,15 @@ $avatar-size: 32px;
 
       .markdown-content {
         width: 100%;
-        color: $color-text-primary;
+        color: #0f172a;
         font-size: $font-size-base;
         line-height: 1.7;
         word-wrap: break-word;
-        padding: 12px $spacing-md;
-        border-radius: $radius-md;
-        background: $color-bg-message;
+        padding: 14px 18px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.06);
+        box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.03);
 
         :deep(p) {
           margin: 8px 0;
@@ -826,24 +836,31 @@ $avatar-size: 32px;
           display: inline-flex;
           align-items: center;
           padding: 2px 8px;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.05);
-          color: $color-text-secondary;
-          font-size: 12px;
+          border-radius: 6px;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          color: #475467;
+          font-size: 11px;
           line-height: 1.4;
+          font-variant-numeric: tabular-nums;
         }
       }
 
       .typing-indicator {
         display: flex;
         gap: 6px;
-        padding: $spacing-sm 0;
+        padding: 12px 16px;
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.06);
+        border-radius: 14px;
+        box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.03);
+        width: fit-content;
 
         span {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: $color-text-secondary;
+          background: #94a3b8;
           animation: typing 1.4s infinite ease-in-out;
 
           &:nth-child(2) {
@@ -865,7 +882,9 @@ $avatar-size: 32px;
         justify-content: flex-start;
 
         .message-text {
-          background: $color-bg-message;
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.06);
+          box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.03);
         }
       }
     }
@@ -876,11 +895,15 @@ $avatar-size: 32px;
 
       .message-content {
         justify-content: flex-end;
+        align-items: flex-end;
         max-width: 32rem;
 
         .message-text {
-          background: $color-bg-user-message;
+          background: #ffffff;
           color: $color-text-primary;
+          border: 1px solid #e2e8f0;
+          border-radius: 14px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
         }
       }
     }

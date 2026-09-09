@@ -46,6 +46,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/image',
+      name: 'image',
+      component: () => import('../views/Image/index.vue'),
+      meta: {
+        title: 'AI 创作控制台',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/account',
       name: 'account',
       component: () => import('../views/Account/index.vue'),

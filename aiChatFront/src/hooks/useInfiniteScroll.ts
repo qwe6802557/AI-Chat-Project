@@ -46,9 +46,12 @@ export function useInfiniteScroll(
       return
     }
 
-    const { scrollTop } = scrollElement.value
+    const { scrollTop, scrollHeight, clientHeight } = scrollElement.value
 
-    // 检查是否接近顶部
+    if (scrollHeight <= clientHeight + 20) {
+      return
+    }
+
     if (scrollTop <= threshold) {
       // 记录当前滚动位置和内容高度-用于恢复滚动位置
       const oldScrollHeight = scrollElement.value.scrollHeight

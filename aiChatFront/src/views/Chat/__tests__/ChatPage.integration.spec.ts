@@ -42,6 +42,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: routerPush,
   }),
+  useRoute: () => ({
+    path: '/chat',
+    fullPath: '/chat',
+  }),
 }))
 
 vi.mock('@/api/model', () => ({
@@ -200,6 +204,7 @@ const mountChatPage = async (userOverrides?: Partial<{
     global: {
       plugins: [pinia],
       stubs: {
+        AppHeaderNav: true,
         Sidebar: SidebarStub,
         ChatArea: ChatAreaStub,
       },

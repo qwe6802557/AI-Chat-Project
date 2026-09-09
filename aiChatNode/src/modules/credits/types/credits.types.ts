@@ -20,6 +20,7 @@ export enum CreditLedgerType {
 export enum CreditBusinessType {
   REGISTER_BONUS = 'register_bonus',
   CHAT_MESSAGE = 'chat_message',
+  IMAGE_GENERATION = 'image_generation',
   MANUAL = 'manual',
   SYSTEM = 'system',
 }

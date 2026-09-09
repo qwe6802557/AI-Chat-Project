@@ -19,6 +19,12 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
+    proxy: {
+      '/images/media': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
   // 构建配置
   build: {

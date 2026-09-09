@@ -15,20 +15,6 @@
       </div>
     </transition>
 
-    <ChatModelSwitcher
-      :selected-model="selectedModel"
-      :model-options="modelOptions"
-      :models-loading="modelsLoading"
-      :selected-model-input-price="selectedModelInputPrice"
-      :selected-model-output-price="selectedModelOutputPrice"
-      :selected-model-reserve-credits="selectedModelReserveCredits"
-      :selected-model-reasoning-capability="selectedModelReasoningCapability"
-      :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
-      :current-credits-remaining="currentCreditsRemaining"
-      :has-credit-snapshot="hasCreditSnapshot"
-      @update:selected-model="handleModelChange"
-    />
-
     <ChatMessageViewport
       :messages="messages"
       :loading="loading"
@@ -40,24 +26,14 @@
     />
 
     <div class="input-area-container">
-      <div class="input-area">
+      <div class="control-bar-card">
         <FilePreview
           v-if="uploadedFiles.length > 0"
           :files="uploadedFiles"
           @remove="handleRemoveFile"
         />
 
-        <div class="input-wrapper">
-          <a-button
-            type="text"
-            class="input-icon-btn"
-            title="上传图片"
-            :disabled="loading"
-            @click="triggerFileInput"
-          >
-            <PictureOutlined />
-          </a-button>
-
+        <div class="input-row">
           <input
             ref="fileInputRef"
             type="file"
@@ -69,23 +45,78 @@
 
           <a-textarea
             v-model:value="inputMessage"
+            class="message-input prompt-textarea"
             placeholder="发送消息，或拖拽/粘贴图片..."
-            :auto-size="{ minRows: 1, maxRows: 5 }"
+            :auto-size="{ minRows: 2, maxRows: 6 }"
+            :disabled="loading"
             @keydown.enter.exact.prevent="handleSend"
             @paste="handlePaste"
-            class="message-input"
           />
-          <a-button type="text" class="input-icon-btn">
-            <AudioOutlined />
-          </a-button>
-          <a-button
-            type="primary"
-            class="send-btn"
-            :disabled="!canSend"
+
+          <button
+            type="button"
+            :class="['submit-btn', { active: canSend, loading: loading }]"
+            :disabled="!canSend || loading"
+            :title="canSend ? '发送 (Enter)' : '请输入内容'"
             @click="handleSend"
           >
-            <SendOutlined />
-          </a-button>
+            <LoadingOutlined v-if="loading" class="btn-icon" />
+            <ArrowUpOutlined v-else class="btn-icon" />
+          </button>
+        </div>
+
+        <div class="params-row">
+          <div class="params-left">
+            <div class="model-select-wrapper">
+              <ThunderboltOutlined class="model-select-icon" />
+              <a-select
+                :value="selectedModel"
+                :options="modelOptions"
+                :loading="modelsLoading"
+                size="small"
+                class="param-select model-select"
+                :bordered="false"
+                :dropdown-match-select-width="260"
+                @change="handleModelChange"
+              />
+            </div>
+
+            <div
+              class="upload-trigger-btn"
+              role="button"
+              tabindex="0"
+              :class="{ disabled: loading }"
+              title="上传图片"
+              @click="triggerFileInput"
+              @keydown.enter="triggerFileInput"
+            >
+              <PictureOutlined class="upload-icon" />
+              <span>上传图片</span>
+            </div>
+
+            <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
+              {{ selectedModelReasoningBadgeLabel }}
+            </span>
+          </div>
+
+          <div class="params-right">
+            <span class="cost-estimate">
+              <ThunderboltFilled class="cost-icon" />
+              预留 {{ selectedModelReserveCredits }} 积分上限
+            </span>
+            <span
+              v-if="selectedModelInputPrice || selectedModelOutputPrice"
+              class="rate-hint"
+            >
+              ({{ formatRate(selectedModelInputPrice) }}/{{ formatRate(selectedModelOutputPrice) }} tok)
+            </span>
+            <span
+              v-if="hasCreditSnapshot && !hasEnoughCredits"
+              class="credit-warning"
+            >
+              当前余额不足
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -98,12 +129,13 @@ import { message } from 'ant-design-vue'
 import {
   CloudUploadOutlined,
   PictureOutlined,
-  AudioOutlined,
-  SendOutlined,
+  ArrowUpOutlined,
+  LoadingOutlined,
+  ThunderboltOutlined,
+  ThunderboltFilled,
 } from '@ant-design/icons-vue'
 import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
 import FilePreview from './FilePreview.vue'
-import ChatModelSwitcher from './ChatModelSwitcher.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import type { Message } from '@/interface/conversation'
 
@@ -190,6 +222,14 @@ const canSend = computed(() => {
   const canSendWithFiles = hasFiles.value && canSendFiles.value
   return (hasContent || canSendWithFiles) && !props.loading && hasEnoughCredits.value
 })
+
+const formatRate = (value: number) => {
+  if (!Number.isFinite(value)) {
+    return '0'
+  }
+  const normalized = value.toFixed(2)
+  return normalized.replace(/\.?0+$/, '')
+}
 
 const handleModelChange = (value: string) => {
   emit('update:selected-model', value)
@@ -307,7 +347,7 @@ const handlePaste = (event: ClipboardEvent) => {
 </script>
 
 <style scoped lang="scss">
-$color-bg-primary: #FFFFFF;
+$color-bg-primary: #f8fafc;
 $color-bg-message: rgba(0, 0, 0, 0.04);
 $color-bg-input: rgba(255, 255, 255, 0.8);
 $color-text-primary: #000000;
@@ -378,130 +418,252 @@ $font-size-lg: 16px;
 }
 
 .input-area-container {
-  min-height: 80px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  margin-bottom: 24px;
+  width: 100%;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(248, 250, 252, 0) 0%,
+    rgba(248, 250, 252, 0.9) 30%,
+    #f8fafc 100%
+  );
+  padding: 0 16px 20px;
+  pointer-events: none;
+  z-index: 10;
 }
 
-.input-area {
-  width: calc(100% - 40px);
-  max-width: 760px;
+.control-bar-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 840px;
   margin: 0 auto;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
-  @media (max-width: 768px) {
-    width: calc(100% - 32px);
-    padding: 0 $spacing-md;
+  &:focus-within {
+    border-color: #1890ff;
+    box-shadow: 0 8px 28px rgba(24, 144, 255, 0.12);
+  }
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.prompt-textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1f2329;
+  font-family: inherit;
+  background: transparent;
+  padding: 0;
+
+  &::placeholder {
+    color: #8c929a;
   }
 
-  .input-wrapper {
-    background: $color-bg-input;
-    backdrop-filter: blur(40px);
-    border: 1px solid $color-border-light;
-    border-radius: $radius-lg;
-    padding: 12px $spacing-md;
-    display: flex;
-    align-items: center;
-    gap: $spacing-sm;
-    box-shadow: 0 2px 8px $color-shadow;
-    transition: all 0.2s ease;
+  &:focus {
+    box-shadow: none;
+    outline: none;
+  }
+
+  :deep(.ant-input) {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1f2329;
+    resize: none;
+
+    &::placeholder {
+      color: #8c929a;
+    }
+
+    &:focus {
+      box-shadow: none;
+      outline: none;
+    }
+  }
+}
+
+.submit-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: #e4e7ed;
+  color: #8c929a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: not-allowed;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+
+  &.active {
+    background: #1890ff;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(24, 144, 255, 0.35);
 
     &:hover {
-      border-color: $color-border;
-    }
-
-    &:focus-within {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-
-    .input-icon-btn {
-      color: $color-text-secondary;
-      padding: 6px;
-      height: auto;
-      min-width: auto;
-      border-radius: $radius-sm;
-      transition: all 0.2s ease;
-
-      &:hover {
-        color: $color-text-primary;
-        background: $color-bg-message;
-      }
-
-      :deep(.anticon) {
-        font-size: $font-size-lg;
-      }
-    }
-
-    .message-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: $color-text-primary;
-      font-size: $font-size-base;
-      line-height: 1.5;
-      resize: none;
-      min-height: 24px;
-
-      &::placeholder {
-        color: $color-text-placeholder;
-      }
-
-      &:focus {
-        box-shadow: none;
-        outline: none;
-      }
-
-      :deep(.ant-input) {
-        background: transparent;
-        border: none;
-        color: $color-text-primary;
-        padding: 0;
-        font-size: $font-size-base;
-        line-height: 1.5;
-
-        &::placeholder {
-          color: $color-text-placeholder;
-        }
-
-        &:focus {
-          box-shadow: none;
-          outline: none;
-        }
-      }
-    }
-
-    .send-btn {
-      background: $color-text-primary;
-      border: none;
-      border-radius: $radius-sm;
-      padding: $spacing-sm 12px;
-      height: auto;
-      min-width: auto;
-      transition: all 0.2s ease;
-
-      &:hover:not(:disabled) {
-        background: $color-text-secondary;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-      }
-
-      &:active:not(:disabled) {
-        transform: translateY(0);
-      }
-
-      &:disabled {
-        background: rgba(0, 0, 0, 0.2);
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      :deep(.anticon) {
-        font-size: $font-size-lg;
-        color: $color-bg-primary;
-      }
+      background: #40a9ff;
+      transform: translateY(-1px);
     }
   }
+
+  &.loading {
+    background: #1890ff;
+    color: #ffffff;
+    cursor: wait;
+  }
+
+  .btn-icon {
+    font-size: 16px;
+  }
+}
+
+.params-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid #f2f3f5;
+  gap: 8px;
+}
+
+.params-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.model-select-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 2px 8px;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
+  }
+
+  .model-select-icon {
+    color: #faad14;
+    font-size: 13px;
+  }
+
+  .model-select {
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 120px;
+    max-width: 200px;
+
+    :deep(.ant-select-selector) {
+      padding: 0 !important;
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      font-size: 12px;
+    }
+  }
+}
+
+.upload-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #475467;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+
+  &:hover:not(.disabled) {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+  }
+
+  &.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .upload-icon {
+    font-size: 13px;
+  }
+}
+
+.reasoning-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+  font-weight: 500;
+}
+
+.params-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cost-estimate {
+  font-size: 12px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.cost-icon {
+  color: #faad14;
+  font-size: 13px;
+}
+
+.rate-hint {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.credit-warning {
+  font-size: 11px;
+  color: #ef4444;
+  font-weight: 500;
 }
 
 .fade-enter-active,

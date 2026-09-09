@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import {  RouterView } from 'vue-router'
+import { RouterView } from 'vue-router'
+import zhCN from 'ant-design-vue/es/locale/zh_CN'
 </script>
 
 <template>
-  <div class="main-app-container">
-    <RouterView />
-  </div>
+  <a-config-provider :locale="zhCN">
+    <div class="main-app-container">
+      <RouterView />
+    </div>
+  </a-config-provider>
 </template>
 
 <style scoped>
