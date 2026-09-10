@@ -40,6 +40,12 @@ dist-electron/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.*
+
+# ===== 生产与部署相关配置文件 =====
+nginx-aichat.conf
+docker-compose.prod.yml
 
 # ===== 日志文件 =====
 logs/
