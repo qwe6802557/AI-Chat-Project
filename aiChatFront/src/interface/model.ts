@@ -18,6 +18,7 @@ export interface BackendAiModel {
   tps: number
   description?: string
   isActive: boolean
+  category?: 'chat' | 'image'
   billingMode?: string
   creditCost?: number
   sortOrder?: number
@@ -31,4 +32,5 @@ export interface BackendAiModel {
 
 export interface GetActiveModelsParams {
   includeProvider?: boolean
+  category?: 'chat' | 'image'
 }

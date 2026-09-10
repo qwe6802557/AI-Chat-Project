@@ -4,6 +4,7 @@ import { ref } from 'vue'
 
 const mockResetUserScrolling = vi.fn()
 const mockScrollToBottom = vi.fn()
+const mockForceScrollToBottom = vi.fn()
 
 vi.mock('@/hooks/useScrollManager', () => ({
   useScrollManager: () => ({
@@ -11,6 +12,7 @@ vi.mock('@/hooks/useScrollManager', () => ({
     showScrollButton: ref(false),
     distanceFromBottom: ref(0),
     scrollToBottom: mockScrollToBottom,
+    forceScrollToBottom: mockForceScrollToBottom,
     handleStreamingScroll: vi.fn(),
     isNearBottom: vi.fn(() => true),
     resetUserScrolling: mockResetUserScrolling,
@@ -92,6 +94,32 @@ describe('ChatMessageViewport', () => {
 
     expect(mockResetUserScrolling).toHaveBeenCalledTimes(1)
     expect(mockScrollToBottom).toHaveBeenCalledWith(true)
+  })
+
+  it('triggers forceScrollToBottom and resets user scrolling when currentSessionId changes', async () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [
+          {
+            id: 'm-1',
+            role: 'user',
+            content: 'hi',
+            timestamp: Date.now(),
+          },
+        ],
+        loading: false,
+        currentSessionId: 'session-1',
+      },
+      shallow: true,
+      global: {
+        stubs: ['a-avatar', 'a-image', 'a-image-preview-group'],
+      },
+    })
+
+    await wrapper.setProps({ currentSessionId: 'session-2' })
+
+    expect(mockResetUserScrolling).toHaveBeenCalled()
+    expect(mockForceScrollToBottom).toHaveBeenCalled()
   })
 
   it('renders assistant usage metadata when available', () => {

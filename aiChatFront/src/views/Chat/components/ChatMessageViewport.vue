@@ -32,104 +32,106 @@
     </div>
 
     <div v-else ref="messagesListRef" class="messages-list">
-      <div v-if="isLoadingMore" class="loading-more-indicator">
-        <LoadingOutlined class="loading-icon" spin />
-        <span class="loading-text">加载历史消息...</span>
-      </div>
-
-      <div v-for="message in messages" :key="message.id" :class="['message-item', message.role]">
-        <div class="message-avatar">
-          <a-avatar
-            v-if="message.role === 'user'"
-            :size="32"
-            class="user-avatar"
-            style="background: #475467; flex-shrink: 0;"
-          >
-            <template #icon><UserOutlined /></template>
-          </a-avatar>
-          <a-avatar
-            v-else
-            :size="32"
-            class="assistant-avatar"
-            style="background: #0f172a; flex-shrink: 0;"
-          >
-            <template #icon><RobotOutlined /></template>
-          </a-avatar>
+      <div ref="messagesContentRef" class="messages-content-wrapper">
+        <div v-if="isLoadingMore" class="loading-more-indicator">
+          <LoadingOutlined class="loading-icon" spin />
+          <span class="loading-text">加载历史消息...</span>
         </div>
-        <div class="message-content">
-          <ChatReasoningPanel
-            v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
-            :message-id="message.id"
-            :reasoning="message.reasoning"
-          />
-          <MarkdownMessage
-            v-if="message.role === 'assistant'"
-            class="markdown-content"
-            :message-id="message.id"
-            :content="message.content"
-            :streaming="message.streaming"
-          />
-          <div
-            v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage)"
-            class="assistant-meta"
-          >
-            <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
-            <span v-if="message.usage" class="meta-chip">
-              输入 {{ message.usage.promptTokens }} tok
-            </span>
-            <span v-if="message.usage" class="meta-chip">
-              输出 {{ message.usage.completionTokens }} tok
-            </span>
-            <span v-if="message.usage" class="meta-chip">
-              总计 {{ message.usage.totalTokens }} tok
-            </span>
-            <span v-else-if="message.model" class="meta-chip">
-              Token 待统计
-            </span>
+
+        <div v-for="message in messages" :key="message.id" :class="['message-item', message.role]">
+          <div class="message-avatar">
+            <a-avatar
+              v-if="message.role === 'user'"
+              :size="32"
+              class="user-avatar"
+              style="background: #475467; flex-shrink: 0;"
+            >
+              <template #icon><UserOutlined /></template>
+            </a-avatar>
+            <a-avatar
+              v-else
+              :size="32"
+              class="assistant-avatar"
+              style="background: #0f172a; flex-shrink: 0;"
+            >
+              <template #icon><RobotOutlined /></template>
+            </a-avatar>
           </div>
-          <div v-if="message.role === 'user'" class="user-message-content">
-            <div v-if="message.attachments?.length" class="message-attachments">
-              <a-image-preview-group>
-                <template v-for="(att, idx) in message.attachments" :key="idx">
-                  <div :class="['attachment-item', att.type]">
-                    <a-image
-                      v-if="att.type === 'image'"
-                      :src="att.preview || att.url"
-                      :alt="att.name"
-                      class="attachment-image"
-                      :preview="{ src: att.url || att.preview }"
-                    >
-                      <template #previewMask>
-                        <span>预览</span>
-                      </template>
-                    </a-image>
-                    <div v-else class="attachment-file">
-                      <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
-                      <FileTextOutlined v-else class="file-icon doc" />
-                      <span class="file-name">{{ att.name }}</span>
-                    </div>
-                  </div>
-                </template>
-              </a-image-preview-group>
+          <div class="message-content">
+            <ChatReasoningPanel
+              v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
+              :message-id="message.id"
+              :reasoning="message.reasoning"
+            />
+            <MarkdownMessage
+              v-if="message.role === 'assistant'"
+              class="markdown-content"
+              :message-id="message.id"
+              :content="message.content"
+              :streaming="message.streaming"
+            />
+            <div
+              v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage)"
+              class="assistant-meta"
+            >
+              <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
+              <span v-if="message.usage" class="meta-chip">
+                输入 {{ message.usage.promptTokens }} tok
+              </span>
+              <span v-if="message.usage" class="meta-chip">
+                输出 {{ message.usage.completionTokens }} tok
+              </span>
+              <span v-if="message.usage" class="meta-chip">
+                总计 {{ message.usage.totalTokens }} tok
+              </span>
+              <span v-else-if="message.model" class="meta-chip">
+                Token 待统计
+              </span>
             </div>
-            <div v-if="message.content" class="message-text">{{ message.content }}</div>
+            <div v-if="message.role === 'user'" class="user-message-content">
+              <div v-if="message.attachments?.length" class="message-attachments">
+                <a-image-preview-group>
+                  <template v-for="(att, idx) in message.attachments" :key="idx">
+                    <div :class="['attachment-item', att.type]">
+                      <a-image
+                        v-if="att.type === 'image'"
+                        :src="att.preview || att.url"
+                        :alt="att.name"
+                        class="attachment-image"
+                        :preview="{ src: att.url || att.preview }"
+                      >
+                        <template #previewMask>
+                          <span>预览</span>
+                        </template>
+                      </a-image>
+                      <div v-else class="attachment-file">
+                        <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
+                        <FileTextOutlined v-else class="file-icon doc" />
+                        <span class="file-name">{{ att.name }}</span>
+                      </div>
+                    </div>
+                  </template>
+                </a-image-preview-group>
+              </div>
+              <div v-if="message.content" class="message-text">{{ message.content }}</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div v-if="loading && !hasStreamingAssistantMessage" class="message-item assistant">
-        <div class="message-avatar">
-          <a-avatar
-            :size="32"
-            class="assistant-avatar"
-            style="background: #0f172a; flex-shrink: 0;"
-          >
-            <template #icon><RobotOutlined /></template>
-          </a-avatar>
-        </div>
-        <div class="message-content">
-          <div class="typing-indicator">
-            <span></span><span></span><span></span>
+        <div v-if="loading && !hasStreamingAssistantMessage" class="message-item assistant">
+          <div class="message-avatar">
+            <a-avatar
+              :size="32"
+              class="assistant-avatar"
+              style="background: #0f172a; flex-shrink: 0;"
+            >
+              <template #icon><RobotOutlined /></template>
+            </a-avatar>
+          </div>
+          <div class="message-content">
+            <div class="typing-indicator">
+              <span></span><span></span><span></span>
+            </div>
           </div>
         </div>
       </div>
@@ -268,13 +270,17 @@ const hasStreamingAssistantMessage = computed(() =>
 )
 
 const messagesListRef = ref<HTMLElement | null>(null)
+const messagesContentRef = ref<HTMLElement | null>(null)
 const currentPage = ref(1)
+const isSwitchingSession = ref(false)
+let sessionSwitchTimer: number | null = null
 
-const scrollManager = useScrollManager(messagesListRef)
+const scrollManager = useScrollManager(messagesListRef, messagesContentRef)
 const {
   resetUserScrolling,
   showScrollButton,
   scrollToBottom,
+  forceScrollToBottom,
 } = scrollManager
 
 useMessageListWatcher(
@@ -283,10 +289,14 @@ useMessageListWatcher(
   scrollManager
 )
 
+const isInfiniteScrollDisabled = computed(() => {
+  return !!props.loading || isSwitchingSession.value
+})
+
 const { isLoading: isLoadingMore } = useInfiniteScroll(messagesListRef, {
   threshold: 80,
   throttleDelay: 150,
-  disabled: toRef(props, 'loading'),
+  disabled: isInfiniteScrollDisabled,
   hasMore: hasMoreMessagesComputed,
   onLoadMore: async () => {
     if (!props.currentSessionId || !props.loadMoreMessages) {
@@ -299,8 +309,21 @@ const { isLoading: isLoadingMore } = useInfiniteScroll(messagesListRef, {
   }
 })
 
-watch(() => props.currentSessionId, () => {
+watch(() => props.currentSessionId, (nextId, prevId) => {
   currentPage.value = 1
+  if (nextId && nextId !== prevId) {
+    isSwitchingSession.value = true
+    if (sessionSwitchTimer) {
+      clearTimeout(sessionSwitchTimer)
+    }
+    resetUserScrolling()
+    forceScrollToBottom(400)
+
+    sessionSwitchTimer = window.setTimeout(() => {
+      isSwitchingSession.value = false
+      sessionSwitchTimer = null
+    }, 450)
+  }
 })
 
 watch(() => props.scrollSignal, (nextSignal, previousSignal) => {
@@ -449,6 +472,12 @@ $avatar-size: 32px;
 
   @media (max-width: 768px) {
     padding: 16px $spacing-md 100px;
+  }
+
+  .messages-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 
   .loading-more-indicator {

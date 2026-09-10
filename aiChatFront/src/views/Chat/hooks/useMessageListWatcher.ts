@@ -7,6 +7,7 @@ import type { Message } from '@/interface/conversation'
 interface ScrollManager {
   isUserScrolling: Ref<boolean>
   scrollToBottom: (smooth?: boolean) => void
+  forceScrollToBottom?: (settleDurationMs?: number) => void
   handleStreamingScroll: () => void
   resetUserScrolling?: () => void
 }
@@ -21,7 +22,7 @@ export function useMessageListWatcher(
   loading: Ref<boolean>,
   scrollManager: ScrollManager
 ) {
-  const { isUserScrolling, scrollToBottom, handleStreamingScroll, resetUserScrolling } = scrollManager
+  const { isUserScrolling, scrollToBottom, forceScrollToBottom, handleStreamingScroll, resetUserScrolling } = scrollManager
 
   /**
    * 监听长度/首尾ID自动滚动
@@ -49,13 +50,16 @@ export function useMessageListWatcher(
       const isSwitchToLoaded =
         oldLen > 0 &&
         newLen > 0 &&
-        oldFirstId !== newFirstId &&
-        oldLastId !== newLastId
+        (oldFirstId !== newFirstId || oldLastId !== newLastId)
 
-      // 初次加载或会话切换-重置滚动状态并滚动到底部
+      // 初次加载或会话切换-重置滚动状态并持续多帧稳定置底
       if (isInitialLoad || isSwitchToLoaded) {
         resetUserScrolling?.()
-        scrollToBottom(false) // 不平滑，直接跳转到底部
+        if (forceScrollToBottom) {
+          forceScrollToBottom()
+        } else {
+          scrollToBottom(false)
+        }
         return
       }
 

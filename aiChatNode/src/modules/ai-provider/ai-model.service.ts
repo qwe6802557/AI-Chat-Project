@@ -204,13 +204,20 @@ export class AiModelService {
   /**
    * 获取启用的模型列表
    */
-  async findActiveModels(includeProvider = false): Promise<AiModel[]> {
+  async findActiveModels(
+    includeProvider = false,
+    category?: 'chat' | 'image',
+  ): Promise<AiModel[]> {
     const query = this.modelRepository.createQueryBuilder('model');
 
     query
       .where('model.isActive = :isActive', { isActive: true })
       .orderBy('model.sortOrder', 'ASC')
       .addOrderBy('model.createdAt', 'ASC');
+
+    if (category) {
+      query.andWhere('model.category = :category', { category });
+    }
 
     if (includeProvider) {
       query.leftJoinAndSelect('model.provider', 'provider');

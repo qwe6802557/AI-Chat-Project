@@ -5,6 +5,7 @@ import {
   ApiResponse,
   ApiBody,
   ApiBearerAuth,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { AiModelService } from './ai-model.service';
 import { CreateModelDto } from './dto/create-model.dto';
@@ -187,11 +188,26 @@ export class AiModelController {
     summary: '获取启用的模型列表',
     description: '获取所有已启用的AI模型列表。',
   })
+  @ApiQuery({
+    name: 'includeProvider',
+    required: false,
+    description: '是否包含供应商信息',
+  })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    enum: ['chat', 'image'],
+    description: '按模型分类筛选（chat/image）',
+  })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 401, description: '未授权，请先登录' })
-  async findActiveModels(@Query('includeProvider') includeProvider?: string) {
+  async findActiveModels(
+    @Query('includeProvider') includeProvider?: string,
+    @Query('category') category?: 'chat' | 'image',
+  ) {
     const models = await this.modelService.findActiveModels(
       includeProvider === 'true',
+      category,
     );
     return models.map((model) => this.serializeModel(model));
   }

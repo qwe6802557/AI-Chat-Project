@@ -127,9 +127,7 @@ const currentMode = computed(() => {
 const displayName = computed(() => {
   const profile = authStore.userProfile
   if (!profile) return '未知用户'
-  const username = profile.username || '用户'
-  const shortId = profile.id ? profile.id.slice(0, 8) : ''
-  return shortId ? `${username} · ${shortId}` : username
+  return profile.username || '用户'
 })
 
 const userInitial = computed(() => {

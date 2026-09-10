@@ -11,12 +11,18 @@ const NEAR_BOTTOM_THRESHOLD_PX = 100
  * - 用户回到底部或显式触发时恢复自动跟随
  * - 去掉 timeout / visibility hack，降低状态抖动
  */
-export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
+export function useScrollManager(
+  containerRef: Ref<HTMLElement | null>,
+  contentRef?: Ref<HTMLElement | null>
+) {
   const distanceFromBottom = ref(0)
   const shouldAutoFollow = ref(true)
   const isAutoScrolling = ref(false)
   const trackingRafId = ref<number | null>(null)
+  let settlingRafId: number | null = null
+  let settlingDeadline = 0
   let activeElement: HTMLElement | null = null
+  let resizeObserver: ResizeObserver | null = null
 
   const isUserScrolling = computed(() => !shouldAutoFollow.value)
   const showScrollButton = computed(() => distanceFromBottom.value > 200)
@@ -25,6 +31,10 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
     if (trackingRafId.value !== null) {
       cancelAnimationFrame(trackingRafId.value)
       trackingRafId.value = null
+    }
+    if (settlingRafId !== null) {
+      cancelAnimationFrame(settlingRafId)
+      settlingRafId = null
     }
   }
 
@@ -93,6 +103,57 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
     })
   }
 
+  /**
+   * 强制置底并在异步排版（如 Markdown 表格、公式、图片）展开期间多帧持续吸底
+   */
+  const forceScrollToBottom = (settleDurationMs = 350) => {
+    const container = containerRef.value
+    stopTrackingAutoScroll()
+    shouldAutoFollow.value = true
+    isAutoScrolling.value = true
+
+    if (container) {
+      container.scrollTop = container.scrollHeight
+    }
+
+    settlingDeadline = Date.now() + settleDurationMs
+    let stableFrames = 0
+    let lastHeight = container?.scrollHeight ?? 0
+
+    const trackSettling = () => {
+      const currentContainer = containerRef.value
+      if (!currentContainer) {
+        finishAutoScroll()
+        return
+      }
+
+      const currentHeight = currentContainer.scrollHeight
+      if (
+        currentHeight !== lastHeight ||
+        currentContainer.scrollTop < currentHeight - currentContainer.clientHeight
+      ) {
+        currentContainer.scrollTop = currentHeight
+        lastHeight = currentHeight
+        stableFrames = 0
+      } else {
+        stableFrames += 1
+      }
+
+      if (
+        (stableFrames >= 5 && Date.now() > settlingDeadline - 150) ||
+        Date.now() >= settlingDeadline
+      ) {
+        currentContainer.scrollTop = currentContainer.scrollHeight
+        finishAutoScroll()
+        return
+      }
+
+      settlingRafId = requestAnimationFrame(trackSettling)
+    }
+
+    settlingRafId = requestAnimationFrame(trackSettling)
+  }
+
   const handleScroll = () => {
     syncMetrics()
 
@@ -121,6 +182,27 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
     shouldAutoFollow.value = true
   }
 
+  const setupResizeObserver = (el: HTMLElement | null) => {
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
+
+    if (!el || typeof ResizeObserver === 'undefined') return
+
+    resizeObserver = new ResizeObserver(() => {
+      if (shouldAutoFollow.value && !isUserScrolling.value) {
+        const container = containerRef.value
+        if (container) {
+          container.scrollTop = container.scrollHeight
+          syncMetrics()
+        }
+      }
+    })
+
+    resizeObserver.observe(el)
+  }
+
   watch(
     containerRef,
     (nextElement, prevElement) => {
@@ -132,6 +214,10 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
 
       if (!nextElement) {
         stopTrackingAutoScroll()
+        if (resizeObserver) {
+          resizeObserver.disconnect()
+          resizeObserver = null
+        }
         isAutoScrolling.value = false
         shouldAutoFollow.value = true
         distanceFromBottom.value = 0
@@ -139,6 +225,10 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
       }
 
       nextElement.addEventListener('scroll', handleScroll, { passive: true })
+      if (!contentRef) {
+        setupResizeObserver(nextElement)
+      }
+
       requestAnimationFrame(() => {
         syncMetrics()
         shouldAutoFollow.value = distanceFromBottom.value < NEAR_BOTTOM_THRESHOLD_PX
@@ -147,8 +237,22 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
     { immediate: true }
   )
 
+  if (contentRef) {
+    watch(
+      contentRef,
+      (newContentEl) => {
+        setupResizeObserver(newContentEl)
+      },
+      { immediate: true }
+    )
+  }
+
   onBeforeUnmount(() => {
     stopTrackingAutoScroll()
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
     if (activeElement) {
       activeElement.removeEventListener('scroll', handleScroll)
     }
@@ -159,6 +263,7 @@ export function useScrollManager(containerRef: Ref<HTMLElement | null>) {
     showScrollButton,
     distanceFromBottom,
     scrollToBottom,
+    forceScrollToBottom,
     handleStreamingScroll,
     isNearBottom,
     resetUserScrolling,

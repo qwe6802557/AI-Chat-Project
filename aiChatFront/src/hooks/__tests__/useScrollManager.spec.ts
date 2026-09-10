@@ -104,4 +104,51 @@ describe('useScrollManager', () => {
     expect(element!.scrollTop).toBe(600)
     expect(api.isUserScrolling).toBe(false)
   })
+
+  it('forceScrollToBottom settles scroll position when content expands asynchronously', async () => {
+    const wrapper = mount(Harness)
+    const api = wrapper.vm as unknown as {
+      isUserScrolling: boolean
+      forceScrollToBottom: () => void
+      getElement: () => HTMLElement | null
+    }
+
+    const element = api.getElement()
+    expect(element).not.toBeNull()
+    await nextTick()
+    await waitForRaf()
+
+    // Initially at scrollTop 0 with height 500
+    setScrollMetrics(element!, {
+      scrollHeight: 500,
+      clientHeight: 100,
+      scrollTop: 0,
+    })
+    element!.dispatchEvent(new Event('scroll'))
+    await nextTick()
+    expect(api.isUserScrolling).toBe(true)
+
+    // Call forceScrollToBottom
+    api.forceScrollToBottom()
+    await nextTick()
+    await waitForRaf()
+
+    expect(element!.scrollTop).toBe(500)
+    expect(api.isUserScrolling).toBe(false)
+
+    // Simulate async Markdown / table reflow expanding scrollHeight to 1200
+    setScrollMetrics(element!, {
+      scrollHeight: 1200,
+      clientHeight: 100,
+      scrollTop: element!.scrollTop,
+    })
+    // Run next animation frame
+    await waitForRaf()
+    await waitForRaf()
+
+    // It should have settled to the new expanded height
+    expect(element!.scrollTop).toBe(1200)
+    expect(api.isUserScrolling).toBe(false)
+  })
 })
+

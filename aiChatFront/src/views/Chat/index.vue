@@ -103,11 +103,33 @@ const {
 // 流式聊天
 const { loading, sendMessage, cancelCurrentStream } = useStreamChat()
 
+const isChatModel = (model: { modelId?: string; category?: string } | null | undefined): boolean => {
+  if (!model?.modelId) {
+    return false
+  }
+  if (model.category && model.category !== 'chat') {
+    return false
+  }
+  const id = model.modelId.toLowerCase()
+  if (
+    id === 'grok-imagine-image-2.0' ||
+    id.includes('imagine-image') ||
+    id.includes('image-2.0')
+  ) {
+    return false
+  }
+  return true
+}
+
 // 模型选择
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
   'selectedChatModel',
   'grok-4.5'
 )
+if (!isChatModel({ modelId: selectedModel.value })) {
+  selectedModel.value = 'grok-4.5'
+  saveSelectedModel()
+}
 const modelOptions = ref<ChatModelOption[]>([
   { label: 'grok-4.5', value: 'grok-4.5', inputPrice: 0, outputPrice: 0, reserveCredits: 100 }
 ])
@@ -196,6 +218,7 @@ const loadModelOptions = async () => {
   try {
     const response = await getActiveModels({ includeProvider: true })
     const activeModels = response.data
+      .filter(isChatModel)
       .sort((a, b) => {
         const rankA = getModelOrderRank(a)
         const rankB = getModelOrderRank(b)
@@ -240,6 +263,9 @@ const loadModelOptions = async () => {
  * 切换模型
  */
 const handleModelChange = (modelId: string) => {
+  if (!isChatModel({ modelId })) {
+    return
+  }
   selectedModel.value = modelId
   saveSelectedModel()
 }

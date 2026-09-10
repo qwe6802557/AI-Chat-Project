@@ -526,6 +526,48 @@ describe('ChatPage integration', () => {
     expect(localStorage.getItem('selectedChatModel')).toBe('"MODEL-X"')
   })
 
+  it('excludes image models from model options and corrects selectedModel if set to an image model', async () => {
+    localStorage.setItem('selectedChatModel', JSON.stringify('grok-imagine-image-2.0'))
+
+    mockGetActiveModels.mockResolvedValueOnce({
+      code: 0,
+      data: [
+        {
+          modelId: 'grok-4.5',
+          category: 'chat',
+          inputPrice: 1.0,
+          outputPrice: 2.0,
+          creditCost: 100,
+        },
+        {
+          modelId: 'grok-imagine-image-2.0',
+          category: 'image',
+          inputPrice: 0,
+          outputPrice: 0,
+          creditCost: 100,
+        },
+        {
+          modelId: 'custom-image-generator',
+          category: 'image',
+          inputPrice: 0,
+          outputPrice: 0,
+          creditCost: 100,
+        },
+      ],
+      message: 'ok',
+    })
+
+    const { wrapper } = await mountChatPage()
+
+    const optionsText = wrapper.find('.model-options-probe').text()
+    expect(optionsText).toContain('grok-4.5')
+    expect(optionsText).not.toContain('grok-imagine-image-2.0')
+    expect(optionsText).not.toContain('custom-image-generator')
+
+    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
+    expect(localStorage.getItem('selectedChatModel')).toBe('"grok-4.5"')
+  })
+
   it('blocks sending when current credits are lower than selected model cost', async () => {
     const { wrapper } = await mountChatPage({
       credits: {
