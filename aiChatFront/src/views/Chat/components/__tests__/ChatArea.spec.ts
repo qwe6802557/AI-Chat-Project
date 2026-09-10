@@ -181,4 +181,26 @@ describe('ChatArea', () => {
 
     expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined()
   })
+
+  it('renders stop button when loading and emits stop-generation on click', async () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: true,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    const submitBtn = wrapper.find('.submit-btn')
+    expect(submitBtn.attributes('disabled')).toBeUndefined()
+    expect(submitBtn.classes()).toContain('stop-mode')
+    expect(wrapper.find('.stop-square-icon').exists()).toBe(true)
+
+    await submitBtn.trigger('click')
+    expect(wrapper.emitted('stop-generation')).toBeTruthy()
+  })
 })

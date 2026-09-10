@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios'
 import request, { type ResponseData } from '@/utils/request'
 import type {
   CreateImageGenerationParams,
@@ -8,8 +9,8 @@ import type {
 /**
  * 发起图片生成任务
  */
-export function generateImageApi(params: CreateImageGenerationParams) {
-  return request.post<never, ResponseData<ImageGenerationTask>>('/images/generations', params)
+export function generateImageApi(params: CreateImageGenerationParams, config?: AxiosRequestConfig) {
+  return request.post<never, ResponseData<ImageGenerationTask>>('/images/generations', params, config)
 }
 
 /**

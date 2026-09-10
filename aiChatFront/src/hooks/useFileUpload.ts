@@ -1,6 +1,7 @@
 import { ref, computed, onBeforeUnmount, toRaw } from 'vue'
 import { message } from 'ant-design-vue'
 import { uploadFiles } from '@/api/chat'
+import { getApiBaseUrl } from '@/utils/common'
 import logger from '@/utils/logger'
 import type { UploadedFile, UseFileUploadOptions, ServerFileInfo } from '@/interface/upload'
 
@@ -236,7 +237,7 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         fileItem.status = 'uploaded'
         fileItem.serverId = serverFile.id
         // 拼接完整 URL，确保预览时可以正确加载
-        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+        const baseURL = getApiBaseUrl()
         fileItem.serverUrl = `${baseURL}${serverFile.url}`
         logger.debug('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
         return true

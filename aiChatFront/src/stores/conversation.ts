@@ -6,6 +6,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { getApiBaseUrl } from '@/utils/common'
 import logger from '@/utils/logger'
 import {
   getSessionList,
@@ -96,7 +97,7 @@ const hasPersistedAttachments = (conversation: Conversation | undefined): boolea
  */
 const transformBackendMessages = (backendMessages: BackendChatMessage[]): Message[] => {
   const messages: Message[] = []
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const baseURL = getApiBaseUrl()
 
   const sortedMessages = [...backendMessages].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()

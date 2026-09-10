@@ -28,9 +28,8 @@ import { buildDatabaseCoreOptions } from './config/database-options';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
-        const isProduction = configService.get('NODE_ENV') === 'production';
         const enableSynchronize =
-          configService.get('DB_SYNCHRONIZE') === 'true' && !isProduction;
+          configService.get('DB_SYNCHRONIZE') === 'true';
 
         return {
           ...buildDatabaseCoreOptions(configService),

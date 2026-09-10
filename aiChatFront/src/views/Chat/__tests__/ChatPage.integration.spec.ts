@@ -15,6 +15,7 @@ const {
   mockSendStreamMessage,
   mockMessageWarning,
   mockMessageError,
+  mockMessageInfo,
   mockGetCurrentUserAccount,
 } = vi.hoisted(() => ({
   routerPush: vi.fn(),
@@ -28,6 +29,7 @@ const {
   mockSendStreamMessage: vi.fn(),
   mockMessageWarning: vi.fn(),
   mockMessageError: vi.fn(),
+  mockMessageInfo: vi.fn(),
   mockGetCurrentUserAccount: vi.fn(),
 }))
 
@@ -78,7 +80,7 @@ vi.mock('ant-design-vue', async () => {
       warning: mockMessageWarning,
       success: vi.fn(),
       error: mockMessageError,
-      info: vi.fn(),
+      info: mockMessageInfo,
     },
   }
 })
@@ -127,7 +129,7 @@ const ChatAreaStub = defineComponent({
       default: false,
     },
   },
-  emits: ['send-message', 'update:selected-model'],
+  emits: ['send-message', 'update:selected-model', 'stop-generation'],
   template: `
     <div class="chat-area-stub">
       <div class="session-probe">{{ currentSessionId }}</div>
@@ -141,6 +143,7 @@ const ChatAreaStub = defineComponent({
       <div class="has-credit-snapshot-probe">{{ hasCreditSnapshot }}</div>
       <div class="messages-probe">{{ JSON.stringify(messages) }}</div>
       <button class="send-text" @click="$emit('send-message', '你好')">send</button>
+      <button class="stop-generation" @click="$emit('stop-generation')">stop</button>
       <button class="change-model" @click="$emit('update:selected-model', 'MODEL-X')">change-model</button>
     </div>
   `,
@@ -424,8 +427,8 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-4.5')
-    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
+    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-chat-fast')
+    expect(wrapper.find('.model-probe').text()).toBe('grok-chat-fast')
   })
 
   it('does not show model fallback warning when model request fails because auth expired', async () => {
@@ -433,8 +436,29 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-4.5')
-    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
+    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 grok-chat-fast')
+    expect(wrapper.find('.model-probe').text()).toBe('grok-chat-fast')
+  })
+
+  it('handles stop-generation by cancelling active stream and showing message.info', async () => {
+    let closed = false
+    mockSendStreamMessage.mockImplementation(() => ({
+      close: () => {
+        closed = true
+      },
+    }))
+
+    const { wrapper } = await mountChatPage()
+    await wrapper.find('.send-text').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.loading-probe').text()).toBe('true')
+
+    await wrapper.find('.stop-generation').trigger('click')
+    await flushPromises()
+
+    expect(closed).toBe(true)
+    expect(mockMessageInfo).toHaveBeenCalledWith('已停止生成')
+    expect(wrapper.find('.loading-probe').text()).toBe('false')
   })
 
   it('creates a local temporary conversation when session initialization fails', async () => {
@@ -566,6 +590,37 @@ describe('ChatPage integration', () => {
 
     expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
     expect(localStorage.getItem('selectedChatModel')).toBe('"grok-4.5"')
+  })
+
+  it('automatically migrates legacy default model grok-4.5 to grok-chat-fast on load', async () => {
+    localStorage.setItem('selectedChatModel', JSON.stringify('grok-4.5'))
+
+    mockGetActiveModels.mockResolvedValueOnce({
+      code: 0,
+      data: [
+        {
+          modelId: 'grok-chat-fast',
+          category: 'chat',
+          inputPrice: 0.5,
+          outputPrice: 1.0,
+          creditCost: 100,
+        },
+        {
+          modelId: 'grok-4.5',
+          category: 'chat',
+          inputPrice: 1.0,
+          outputPrice: 2.0,
+          creditCost: 100,
+        },
+      ],
+      message: 'ok',
+    })
+
+    const { wrapper } = await mountChatPage()
+
+    expect(wrapper.find('.model-probe').text()).toBe('grok-chat-fast')
+    expect(localStorage.getItem('selectedChatModel')).toBe('"grok-chat-fast"')
+    expect(localStorage.getItem('chat_model_default_version')).toBe('2026-09-10-grok-fast')
   })
 
   it('blocks sending when current credits are lower than selected model cost', async () => {

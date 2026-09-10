@@ -165,7 +165,7 @@ export function useStreamChat() {
     const {
       fileIds,
       serverFiles,
-      model: selectedModelId = 'grok-4.5',
+      model: selectedModelId = 'grok-chat-fast',
     } = options || {}
 
     if (!userId) {

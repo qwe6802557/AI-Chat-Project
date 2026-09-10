@@ -32,6 +32,7 @@
             :loading="isGenerating"
             :unit-credit-cost="unitCreditCost"
             @submit="handleGenerate"
+            @stop="handleStopGenerate"
           />
         </footer>
       </div>
@@ -44,6 +45,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
+import axios from 'axios'
 import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from '@/views/Chat/components/Sidebar.vue'
 import ImageGallery from './components/ImageGallery.vue'
@@ -74,6 +76,17 @@ const generatingElapsedSeconds = ref(0)
 const unitCreditCost = ref(100)
 
 let timerId: ReturnType<typeof setInterval> | null = null
+let activeAbortController: AbortController | null = null
+
+/**
+ * 中止当前图片生成请求
+ */
+const handleStopGenerate = () => {
+  if (activeAbortController) {
+    activeAbortController.abort()
+    activeAbortController = null
+  }
+}
 
 /**
  * 将画廊主视口平滑或即刻滚动置顶
@@ -100,6 +113,11 @@ const stopTimer = () => {
     timerId = null
   }
 }
+
+onUnmounted(() => {
+  stopTimer()
+  handleStopGenerate()
+})
 
 /**
  * 加载历史生图记录
@@ -137,8 +155,10 @@ const handleGenerate = async (params: CreateImageGenerationParams) => {
     scrollToTop(true)
   })
 
+  activeAbortController = new AbortController()
+
   try {
-    const res = await generateImageApi(params)
+    const res = await generateImageApi(params, { signal: activeAbortController.signal })
     if (res.data) {
       tasks.value.unshift(res.data)
       controlBarRef.value?.clearPrompt()
@@ -148,9 +168,18 @@ const handleGenerate = async (params: CreateImageGenerationParams) => {
       message.success('图片生成成功')
     }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : '生图请求失败'
-    message.error(msg)
+    if (
+      axios.isCancel(error) ||
+      (error as Error)?.name === 'CanceledError' ||
+      (error as Error)?.name === 'AbortError'
+    ) {
+      message.info('已中止图片生成')
+    } else {
+      const msg = error instanceof Error ? error.message : '生图请求失败'
+      message.error(msg)
+    }
   } finally {
+    activeAbortController = null
     stopTimer()
     isGenerating.value = false
     refreshUserProfile()

@@ -49,3 +49,16 @@ export function clearUserInfo(): void {
     void router.replace({ name: 'login' })
   }
 }
+
+/**
+ * 获取 API 基础路径
+ * 若配置了 VITE_API_BASE_URL（如生产环境相对路径 "" 或特定地址），优先使用；未配置时回退到 http://localhost:3000
+ */
+export function getApiBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_BASE_URL
+  if (typeof envUrl === 'string') {
+    return envUrl
+  }
+  return 'http://localhost:3000'
+}
+

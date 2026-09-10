@@ -55,12 +55,12 @@
 
           <button
             type="button"
-            :class="['submit-btn', { active: canSend, loading: loading }]"
-            :disabled="!canSend || loading"
-            :title="canSend ? '发送 (Enter)' : '请输入内容'"
-            @click="handleSend"
+            :class="['submit-btn', { active: canSend || loading, 'stop-mode': loading }]"
+            :disabled="!canSend && !loading"
+            :title="loading ? '停止生成' : (canSend ? '发送 (Enter)' : '请输入内容')"
+            @click="handleButtonClick"
           >
-            <LoadingOutlined v-if="loading" class="btn-icon" />
+            <span v-if="loading" class="stop-square-icon" aria-hidden="true"></span>
             <ArrowUpOutlined v-else class="btn-icon" />
           </button>
         </div>
@@ -188,6 +188,7 @@ const emit = defineEmits<{
       serverFiles?: { id: string; url: string; name: string; type: string }[]
     }
   ]
+  'stop-generation': []
 }>()
 
 const inputMessage = ref('')
@@ -237,6 +238,14 @@ const handleModelChange = (value: string) => {
 
 const handlePromptClick = (prompt: string) => {
   emit('send-message', prompt)
+}
+
+const handleButtonClick = () => {
+  if (props.loading) {
+    emit('stop-generation')
+  } else if (canSend.value) {
+    handleSend()
+  }
 }
 
 const handleSend = () => {
@@ -535,6 +544,28 @@ $font-size-lg: 16px;
     background: #1890ff;
     color: #ffffff;
     cursor: wait;
+  }
+
+  &.stop-mode {
+    background: #18181b;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      background: #ef4444;
+      box-shadow: 0 2px 12px rgba(239, 68, 68, 0.45);
+      transform: scale(1.05);
+    }
+
+    .stop-square-icon {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: #ffffff;
+      border-radius: 2px;
+    }
   }
 
   .btn-icon {

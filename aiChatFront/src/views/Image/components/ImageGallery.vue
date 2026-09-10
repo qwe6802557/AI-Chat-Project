@@ -143,6 +143,7 @@ import {
   EyeOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
+import { getApiBaseUrl } from '@/utils/common'
 import type { ImageGenerationTask } from '@/interface/image'
 
 defineOptions({
@@ -188,7 +189,10 @@ const resolveImageUrl = (url: string): string => {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const baseURL = getApiBaseUrl()
+  if (!baseURL) {
+    return url.startsWith('/') ? url : `/${url}`
+  }
   return `${baseURL.replace(/\/+$/, '')}${url.startsWith('/') ? '' : '/'}${url}`
 }
 

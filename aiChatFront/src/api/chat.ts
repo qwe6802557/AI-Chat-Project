@@ -3,6 +3,7 @@
  */
 import request, { type ResponseData } from '@/utils/request'
 import { useAuthStore } from '@/stores'
+import { getApiBaseUrl } from '@/utils/common'
 import logger from '@/utils/logger'
 import type {
   BackendChatSession,
@@ -53,7 +54,7 @@ export function sendStreamMessage(
     onError: (error: string) => void
   }
 ): StreamRequestController {
-  const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+  const baseURL = getApiBaseUrl()
   const authStore = useAuthStore()
   const token = authStore.getToken()
   const abortController = new AbortController()

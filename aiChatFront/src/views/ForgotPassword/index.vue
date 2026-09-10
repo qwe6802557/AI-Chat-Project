@@ -7,19 +7,16 @@
       <!-- Logo -->
       <div class="logo-social-wrapper">
         <div class="logo-section">
-          <div class="logo-icon"></div>
+          <img src="@/assets/logo.png" alt="Logo" class="logo-icon" />
           <span class="logo-text">ERJ CHAT</span>
         </div>
 
         <div class="social-login">
-          <div class="social-icon">
-            <FacebookOutlined />
+          <div class="social-icon qq" @click="handleSocialLogin('QQ')" title="QQ登录">
+            <QqOutlined />
           </div>
-          <div class="social-icon">
-            <InstagramOutlined />
-          </div>
-          <div class="social-icon">
-            <TwitterOutlined />
+          <div class="social-icon wechat" @click="handleSocialLogin('微信')" title="微信登录">
+            <WechatOutlined />
           </div>
         </div>
       </div>
@@ -138,11 +135,10 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import {
-  FacebookOutlined,
-  InstagramOutlined,
-  TwitterOutlined,
+  QqOutlined,
+  WechatOutlined,
   MailOutlined,
   LockOutlined,
   SafetyOutlined,
@@ -157,6 +153,16 @@ defineOptions({
 })
 
 const router = useRouter()
+
+// 第三方登录提示
+const handleSocialLogin = (platform: string) => {
+  Modal.info({
+    title: '系统提示',
+    content: `${platform}登录功能正在开发中，敬请期待！`,
+    okText: '我知道了',
+    centered: true,
+  })
+}
 const loading = ref(false)
 const sendingCode = ref(false)
 const countdown = ref(0)
@@ -312,11 +318,19 @@ const handleGoToLogin = () => {
       gap: 17px;
 
       .logo-icon {
-        width: 42px;
-        height: 41px;
-        background: #d8d8d8;
-        border: 4.56px solid #ffffff;
-        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        border-radius: 12px;
+        box-shadow: 0 0 20px rgba(0, 242, 254, 0.4), 0 0 10px rgba(21, 112, 239, 0.3);
+        border: 1.5px solid rgba(83, 177, 253, 0.4);
+        background: #000000;
+        transition: all 0.3s ease;
+
+        &:hover {
+          transform: scale(1.06);
+          box-shadow: 0 0 28px rgba(0, 242, 254, 0.7);
+        }
       }
 
       .logo-text {
@@ -340,24 +354,35 @@ const handleGoToLogin = () => {
 
     .social-login {
       display: flex;
-      gap: 12px;
+      gap: 14px;
 
       .social-icon {
-        width: 34px;
-        height: 34px;
-        background: #ffffff;
-        border-radius: 6px;
+        width: 38px;
+        height: 38px;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 18px;
-        color: #858888;
+        font-size: 20px;
+        color: #4b5563;
         cursor: pointer;
-        transition: all 0.3s;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 
         &:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        }
+
+        &.qq:hover {
+          color: #1296db;
+          box-shadow: 0 4px 12px rgba(18, 150, 219, 0.45);
+        }
+
+        &.wechat:hover {
+          color: #07c160;
+          box-shadow: 0 4px 12px rgba(7, 193, 96, 0.45);
         }
       }
     }

@@ -4,7 +4,7 @@
 import axios, { type AxiosInstance, type AxiosResponse } from 'axios'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores'
-import { clearUserInfo } from "@/utils/common.ts";
+import { clearUserInfo, getApiBaseUrl } from "@/utils/common.ts";
 import logger from '@/utils/logger'
 
 // 响应数据接口
@@ -77,7 +77,7 @@ export const isAuthFailureError = (error: unknown): boolean => {
 
 // 创建 axios 实例
 const request: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  baseURL: getApiBaseUrl(),
   timeout: 30000,
 })
 
@@ -137,6 +137,11 @@ request.interceptors.response.use(
     return Promise.reject(new Error(msg || '操作失败'))
   },
   (error) => {
+    // 主动中断/取消的请求不弹出全局错误弹窗
+    if (axios.isCancel(error)) {
+      return Promise.reject(error)
+    }
+
     // 错误处理
     if (error.response) {
       const { status, data } = error.response

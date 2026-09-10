@@ -83,4 +83,23 @@ describe('ImageControlBar', () => {
     await wrapper.vm.$nextTick()
     expect((textarea.element as HTMLTextAreaElement).value).toBe('')
   })
+
+  it('renders stop button when loading and emits stop event on click', async () => {
+    const wrapper = mount(ImageControlBar, {
+      props: {
+        loading: true,
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    const submitBtn = wrapper.find('.submit-btn')
+    expect(submitBtn.attributes('disabled')).toBeUndefined()
+    expect(submitBtn.classes()).toContain('stop-mode')
+    expect(wrapper.find('.stop-square-icon').exists()).toBe(true)
+
+    await submitBtn.trigger('click')
+    expect(wrapper.emitted('stop')).toBeTruthy()
+  })
 })

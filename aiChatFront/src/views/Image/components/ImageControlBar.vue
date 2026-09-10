@@ -13,11 +13,12 @@
         />
         <button
           type="button"
-          :class="['submit-btn', { active: canSubmit, loading: props.loading }]"
-          :disabled="!canSubmit || props.loading"
-          @click="handleSubmit"
+          :class="['submit-btn', { active: canSubmit || props.loading, 'stop-mode': props.loading }]"
+          :disabled="!canSubmit && !props.loading"
+          :title="props.loading ? '停止生成' : (canSubmit ? '生成图片 (Enter)' : '请输入画面描述')"
+          @click="handleButtonClick"
         >
-          <LoadingOutlined v-if="props.loading" class="btn-icon" />
+          <span v-if="props.loading" class="stop-square-icon" aria-hidden="true"></span>
           <ArrowUpOutlined v-else class="btn-icon" />
         </button>
       </div>
@@ -149,6 +150,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'submit': [params: CreateImageGenerationParams]
+  'stop': []
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -177,6 +179,14 @@ const handleKeydown = (e: KeyboardEvent) => {
     return
   }
   if (canSubmit.value) {
+    handleSubmit()
+  }
+}
+
+const handleButtonClick = () => {
+  if (props.loading) {
+    emit('stop')
+  } else if (canSubmit.value) {
     handleSubmit()
   }
 }
@@ -295,6 +305,28 @@ defineExpose({
   background: #1890ff;
   color: #ffffff;
   cursor: wait;
+}
+
+.submit-btn.stop-mode {
+  background: #18181b;
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    background: #ef4444;
+    box-shadow: 0 2px 12px rgba(239, 68, 68, 0.45);
+    transform: scale(1.05);
+  }
+
+  .stop-square-icon {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #ffffff;
+    border-radius: 2px;
+  }
 }
 
 .btn-icon {

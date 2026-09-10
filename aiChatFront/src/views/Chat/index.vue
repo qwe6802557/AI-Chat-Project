@@ -31,6 +31,7 @@
         :has-credit-snapshot="hasCreditSnapshot"
         @update:selected-model="handleModelChange"
         @send-message="handleSendMessage"
+        @stop-generation="handleStopGeneration"
       />
     </div>
   </div>
@@ -122,16 +123,29 @@ const isChatModel = (model: { modelId?: string; category?: string } | null | und
 }
 
 // 模型选择
+const DEFAULT_CHAT_MODEL = 'grok-chat-fast'
+const MODEL_VERSION_KEY = 'chat_model_default_version'
+const CURRENT_MODEL_VERSION = '2026-09-10-grok-fast'
+
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
   'selectedChatModel',
-  'grok-4.5'
+  DEFAULT_CHAT_MODEL
 )
-if (!isChatModel({ modelId: selectedModel.value })) {
-  selectedModel.value = 'grok-4.5'
+
+// 自动迁移旧版本默认模型（原默认值为 grok-4.5）至新默认模型 grok-chat-fast
+if (localStorage.getItem(MODEL_VERSION_KEY) !== CURRENT_MODEL_VERSION) {
+  if (selectedModel.value === 'grok-4.5' || !isChatModel({ modelId: selectedModel.value })) {
+    selectedModel.value = DEFAULT_CHAT_MODEL
+    saveSelectedModel()
+  }
+  localStorage.setItem(MODEL_VERSION_KEY, CURRENT_MODEL_VERSION)
+} else if (!isChatModel({ modelId: selectedModel.value })) {
+  selectedModel.value = DEFAULT_CHAT_MODEL
   saveSelectedModel()
 }
+
 const modelOptions = ref<ChatModelOption[]>([
-  { label: 'grok-4.5', value: 'grok-4.5', inputPrice: 0, outputPrice: 0, reserveCredits: 100 }
+  { label: DEFAULT_CHAT_MODEL, value: DEFAULT_CHAT_MODEL, inputPrice: 0, outputPrice: 0, reserveCredits: 100 }
 ])
 const modelsLoading = ref(false)
 const hasCreditSnapshot = computed(() => !!authStore.userProfile?.credits)
@@ -200,6 +214,14 @@ const handleSendMessage = async (
   })
 }
 
+/**
+ * 停止生成
+ */
+const handleStopGeneration = () => {
+  cancelCurrentStream()
+  message.info('已停止生成')
+}
+
 // 加载更多消息
 const handleLoadMoreMessages = async (sessionId: string, page: number) => {
   // desc倒序：page 获取的更早的消息-历史消息
@@ -243,7 +265,7 @@ const loadModelOptions = async () => {
     }
 
     if (!modelOptions.value.some((model) => model.value === selectedModel.value)) {
-      selectedModel.value = modelOptions.value[0]?.value || 'grok-chat-fast'
+      selectedModel.value = modelOptions.value[0]?.value || DEFAULT_CHAT_MODEL
       saveSelectedModel()
     }
   } catch (error) {
@@ -251,8 +273,8 @@ const loadModelOptions = async () => {
     if (isAuthFailureError(error)) {
       return
     }
-    message.warning('模型列表加载失败，已使用默认模型 grok-4.5')
-    selectedModel.value = 'grok-4.5'
+    message.warning(`模型列表加载失败，已使用默认模型 ${DEFAULT_CHAT_MODEL}`)
+    selectedModel.value = DEFAULT_CHAT_MODEL
     saveSelectedModel()
   } finally {
     modelsLoading.value = false
