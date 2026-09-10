@@ -23,6 +23,7 @@
       :load-more-messages="loadMoreMessages"
       :scroll-signal="scrollSignal"
       @prompt-click="handlePromptClick"
+      @retry-message="(messageId) => emit('retry-message', messageId)"
     />
 
     <div class="input-area-container">
@@ -102,10 +103,10 @@
           <div class="params-right">
             <span class="cost-estimate">
               <ThunderboltFilled class="cost-icon" />
-              预留 {{ selectedModelReserveCredits }} 积分上限
+              每次消耗 {{ selectedModelReserveCredits }} 积分
             </span>
             <span
-              v-if="selectedModelInputPrice || selectedModelOutputPrice"
+              v-if="selectedModelInputPrice > 0 || selectedModelOutputPrice > 0"
               class="rate-hint"
             >
               ({{ formatRate(selectedModelInputPrice) }}/{{ formatRate(selectedModelOutputPrice) }} tok)
@@ -172,7 +173,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   selectedModelInputPrice: 0,
   selectedModelOutputPrice: 0,
-  selectedModelReserveCredits: 0,
+  selectedModelReserveCredits: 10,
   selectedModelReasoningCapability: 'none',
   selectedModelReasoningBadgeLabel: '',
   currentCreditsRemaining: 0,
@@ -189,6 +190,7 @@ const emit = defineEmits<{
     }
   ]
   'stop-generation': []
+  'retry-message': [messageId: string]
 }>()
 
 const inputMessage = ref('')

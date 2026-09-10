@@ -73,6 +73,7 @@ export interface Message {
   charge?: MessageChargeSummary
   reasoning?: MessageReasoning
   attachments?: MessageAttachment[]
+  error?: string
 }
 
 /**

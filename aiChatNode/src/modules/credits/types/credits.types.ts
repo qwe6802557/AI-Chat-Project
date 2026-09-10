@@ -2,11 +2,14 @@
  * 用户积分配置与快照类型
  */
 export const DEFAULT_REGISTER_CREDITS = 2000;
-// 作为聊天请求的默认预占上限，最终会按实际 token 消耗结算。
+// 聊天模型默认固定每次消耗 10 积分
+export const DEFAULT_CHAT_MODEL_CREDIT_COST = 10;
+// 作为通用模型的默认预占上限
 export const DEFAULT_MODEL_CREDIT_COST = 100;
 // Claude 系列通常输出倍率更高，默认提高预占上限避免低估。
 export const ZAIWEN_CLAUDE_MODEL_CREDIT_COST = 200;
 export const DEFAULT_MODEL_BILLING_MODE = 'token_usage_with_reserve';
+export const DEFAULT_CHAT_BILLING_MODE = 'flat_per_request';
 
 export enum CreditLedgerType {
   GRANT = 'grant',

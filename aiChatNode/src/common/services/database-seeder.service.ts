@@ -6,6 +6,8 @@ import type { AiProvider } from '../../modules/ai-provider/entities/ai-provider.
 import {
   DEFAULT_MODEL_BILLING_MODE,
   DEFAULT_MODEL_CREDIT_COST,
+  DEFAULT_CHAT_BILLING_MODE,
+  DEFAULT_CHAT_MODEL_CREDIT_COST,
   CreditBusinessType,
 } from '../../modules/credits/types/credits.types';
 import { CreditsService } from '../../modules/credits/credits.service';
@@ -224,8 +226,8 @@ export class DatabaseSeederService implements OnModuleInit {
         availability: 99.9,
         tps: 0,
         description: model.description,
-        billingMode: DEFAULT_MODEL_BILLING_MODE,
-        creditCost: DEFAULT_MODEL_CREDIT_COST,
+        billingMode: DEFAULT_CHAT_BILLING_MODE,
+        creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
         sortOrder: model.sortOrder,
         isActive: model.isActive,
         category: 'chat',
@@ -252,6 +254,26 @@ export class DatabaseSeederService implements OnModuleInit {
         category: model.category,
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
+    // 同步数据库中所有已存在的聊天模型为固定 10 积分按次计费
+    try {
+      const allModels = await this.aiModelService.findAll();
+      for (const m of allModels) {
+        if (m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-2.0')) {
+          if (m.creditCost !== DEFAULT_CHAT_MODEL_CREDIT_COST || m.billingMode !== DEFAULT_CHAT_BILLING_MODE) {
+            await this.aiModelService.update(m.id, {
+              creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
+              billingMode: DEFAULT_CHAT_BILLING_MODE,
+            });
+            this.logger.log(
+              `已同步聊天模型 ${m.modelId} 为固定 ${DEFAULT_CHAT_MODEL_CREDIT_COST} 积分 ${DEFAULT_CHAT_BILLING_MODE}`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`同步已有聊天模型积分配置失败: ${err}`);
     }
 
     return summary;
@@ -321,14 +343,28 @@ export class DatabaseSeederService implements OnModuleInit {
       const needsCategoryUpdate =
         payload.category !== undefined &&
         existingModel.category !== payload.category;
+      const needsBillingModeUpdate =
+        payload.billingMode !== undefined &&
+        existingModel.billingMode !== payload.billingMode;
+      const needsCreditCostUpdate =
+        payload.creditCost !== undefined &&
+        existingModel.creditCost !== payload.creditCost;
 
-      if (needsSortUpdate || needsActiveUpdate || needsCategoryUpdate) {
+      if (
+        needsSortUpdate ||
+        needsActiveUpdate ||
+        needsCategoryUpdate ||
+        needsBillingModeUpdate ||
+        needsCreditCostUpdate
+      ) {
         await this.aiModelService.update(existingModel.id, {
           sortOrder: payload.sortOrder ?? existingModel.sortOrder,
           isActive: payload.isActive ?? existingModel.isActive,
           category: payload.category ?? existingModel.category,
+          billingMode: payload.billingMode ?? existingModel.billingMode,
+          creditCost: payload.creditCost ?? existingModel.creditCost,
         });
-        this.logger.log(`模型已更新排序/状态/分类: ${payload.modelId}`);
+        this.logger.log(`模型已更新配置(排序/状态/分类/计费): ${payload.modelId}`);
       } else {
         this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
       }

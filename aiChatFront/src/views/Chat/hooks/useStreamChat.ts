@@ -5,6 +5,7 @@ import type { StreamChunk, StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
 import logger from '@/utils/logger'
+import { generateUUID } from '@/utils/common'
 import type {
   Message,
   MessageAttachment,
@@ -50,12 +51,7 @@ export function useStreamChat() {
     assistantMessageId: string | null
   } | null>(null)
 
-  const createId = (): string => {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return (crypto as Crypto).randomUUID()
-    }
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  }
+  const createId = generateUUID
 
   const mapUsage = (
     usage: StreamChunk['usage'],
@@ -431,10 +427,11 @@ export function useStreamChat() {
               pendingReasoningDelta = ''
             }
 
-            message.error(`${error}`)
-            if (assistantMessageId) {
-              conversationStore.deleteMessageById(sessionId, assistantMessageId)
-            }
+            const finalAssistantId = ensureAssistantMessage()
+            conversationStore.patchMessageById(sessionId, finalAssistantId, {
+              streaming: false,
+              error: error || '流式请求失败，请稍后重试',
+            })
             loading.value = false
 
             conversationStore.saveConversations({ immediate: true })
@@ -448,10 +445,13 @@ export function useStreamChat() {
       activeController.value = controller
     } catch (error: unknown) {
       logger.error('发送消息失败:', error)
-      message.error('发送消息失败，请稍后重试')
-      if (assistantMessageId) {
-        conversationStore.deleteMessageById(sessionId, assistantMessageId)
-      }
+      const errorMessage =
+        error instanceof Error ? error.message : '发送消息失败，请稍后重试'
+      const finalAssistantId = ensureAssistantMessage()
+      conversationStore.patchMessageById(sessionId, finalAssistantId, {
+        streaming: false,
+        error: errorMessage,
+      })
       loading.value = false
 
       conversationStore.saveConversations({ immediate: true })
@@ -461,9 +461,46 @@ export function useStreamChat() {
     }
   }
 
+  /**
+   * 重试某条失败的消息
+   */
+  const retryMessage = async (sessionId: string, failedMessageId: string) => {
+    const conversation = conversationStore.getConversationById(sessionId)
+    if (!conversation) return
+
+    const messages = conversation.messages
+    const failedIndex = messages.findIndex((m) => m.id === failedMessageId)
+    if (failedIndex === -1) return
+
+    // 向上寻找对应的用户消息
+    let userMessage: Message | undefined
+    for (let i = failedIndex - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (msg && msg.role === 'user') {
+        userMessage = msg
+        break
+      }
+    }
+    if (!userMessage) return
+
+    // 删除当前失败的助手消息
+    conversationStore.deleteMessageById(sessionId, failedMessageId)
+
+    const userId = authStore.getUserId()
+    if (!userId) {
+      message.warning('未获取到用户信息，请重新登录')
+      return
+    }
+
+    await sendMessage(userId, userMessage.content, {
+      model: userMessage.model || undefined,
+    })
+  }
+
   return {
     loading,
     sendMessage,
     cancelCurrentStream,
+    retryMessage,
   }
 }

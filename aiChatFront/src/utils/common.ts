@@ -62,3 +62,19 @@ export function getApiBaseUrl(): string {
   return 'http://localhost:3000'
 }
 
+/**
+ * 生成符合 RFC4122 v4 标准的 UUID
+ * - 优先使用浏览器原生 crypto.randomUUID()（安全上下文）
+ * - 在非安全上下文（如纯 HTTP IP 访问）下，使用 Math.random 回退生成标准 v4 格式：xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+ */
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+

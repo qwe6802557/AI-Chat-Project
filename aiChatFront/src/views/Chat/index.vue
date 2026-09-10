@@ -32,6 +32,7 @@
         @update:selected-model="handleModelChange"
         @send-message="handleSendMessage"
         @stop-generation="handleStopGeneration"
+        @retry-message="handleRetryMessage"
       />
     </div>
   </div>
@@ -102,7 +103,7 @@ const {
 } = storeToRefs(conversationStore)
 
 // 流式聊天
-const { loading, sendMessage, cancelCurrentStream } = useStreamChat()
+const { loading, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
 
 const isChatModel = (model: { modelId?: string; category?: string } | null | undefined): boolean => {
   if (!model?.modelId) {
@@ -145,7 +146,7 @@ if (localStorage.getItem(MODEL_VERSION_KEY) !== CURRENT_MODEL_VERSION) {
 }
 
 const modelOptions = ref<ChatModelOption[]>([
-  { label: DEFAULT_CHAT_MODEL, value: DEFAULT_CHAT_MODEL, inputPrice: 0, outputPrice: 0, reserveCredits: 100 }
+  { label: DEFAULT_CHAT_MODEL, value: DEFAULT_CHAT_MODEL, inputPrice: 0, outputPrice: 0, reserveCredits: 10 }
 ])
 const modelsLoading = ref(false)
 const hasCreditSnapshot = computed(() => !!authStore.userProfile?.credits)
@@ -162,7 +163,7 @@ const selectedModelOutputPrice = computed(() => {
   return Number(selectedModelOption.value?.outputPrice ?? 0)
 })
 const selectedModelReserveCredits = computed(() => {
-  return Number(selectedModelOption.value?.reserveCredits ?? 100)
+  return Number(selectedModelOption.value?.reserveCredits ?? 10)
 })
 const selectedModelReasoningCapability = computed(() => {
   return selectedModelOption.value?.reasoningCapability || 'none'
@@ -197,7 +198,7 @@ const handleSendMessage = async (
   const isAdmin = authStore.userProfile?.role === 'admin'
   if (!isAdmin && hasCreditSnapshot.value && currentCreditsRemaining.value < selectedModelReserveCredits.value) {
     message.warning(
-      `当前模型发送前至少需预留 ${selectedModelReserveCredits.value} 积分，最终按实际 token 结算，剩余 ${currentCreditsRemaining.value} 积分`,
+      `当前模型发送前至少需预留 ${selectedModelReserveCredits.value} 积分，剩余 ${currentCreditsRemaining.value} 积分`,
     )
     return
   }
@@ -220,6 +221,14 @@ const handleSendMessage = async (
 const handleStopGeneration = () => {
   cancelCurrentStream()
   message.info('已停止生成')
+}
+
+/**
+ * 重试生成失败的消息
+ */
+const handleRetryMessage = async (messageId: string) => {
+  if (!currentConversationId.value) return
+  await retryMessage(currentConversationId.value, messageId)
 }
 
 // 加载更多消息
@@ -254,7 +263,7 @@ const loadModelOptions = async () => {
         value: model.modelId,
         inputPrice: Number(model.inputPrice ?? 0),
         outputPrice: Number(model.outputPrice ?? 0),
-        reserveCredits: Number(model.creditCost ?? 100),
+        reserveCredits: Number(model.creditCost ?? 10),
         reasoningCapability: model.reasoningCapability || 'none',
         reasoningStrategy: model.reasoningStrategy,
         reasoningBadgeLabel: model.reasoningBadgeLabel,

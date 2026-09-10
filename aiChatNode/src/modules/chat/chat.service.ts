@@ -24,11 +24,13 @@ import { FilesService } from '../files/files.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { ChatCreditCharge } from '../credits/entities/chat-credit-charge.entity';
-import type {
-  ChatCreditChargeSummary,
-  UserCreditsSnapshot,
+import {
+  type ChatCreditChargeSummary,
+  type UserCreditsSnapshot,
+  DEFAULT_MODEL_BILLING_MODE,
+  DEFAULT_CHAT_BILLING_MODE,
+  DEFAULT_CHAT_MODEL_CREDIT_COST,
 } from '../credits/types/credits.types';
-import { DEFAULT_MODEL_BILLING_MODE } from '../credits/types/credits.types';
 import {
   extractAssistantContent,
   type ExtractedAssistantReasoning,
@@ -129,11 +131,8 @@ export class ChatService {
 
     return {
       modelId: model.modelId,
-      billingMode:
-        model.billingMode === 'flat_per_request'
-          ? DEFAULT_MODEL_BILLING_MODE
-          : model.billingMode,
-      reserveCredits: model.creditCost,
+      billingMode: model.billingMode || DEFAULT_CHAT_BILLING_MODE,
+      reserveCredits: model.creditCost ?? DEFAULT_CHAT_MODEL_CREDIT_COST,
       inputPrice: Number(model.inputPrice || 0),
       outputPrice: Number(model.outputPrice || 0),
       maxOutput: Number(model.maxOutput || 0),
@@ -191,6 +190,10 @@ export class ChatService {
     model: ResolvedChatModelConfig;
     maxTokens?: number;
   }): number {
+    if (params.model.billingMode === 'flat_per_request') {
+      return params.model.reserveCredits || DEFAULT_CHAT_MODEL_CREDIT_COST;
+    }
+
     const promptTokens = this.estimatePromptTokens(params.messages);
     const outputTokenBudget =
       params.maxTokens ||
@@ -209,8 +212,15 @@ export class ChatService {
 
   private estimateActualChargeCredits(
     usage: CompletionUsageStats | null | undefined,
-    model: Pick<ResolvedChatModelConfig, 'inputPrice' | 'outputPrice'>,
+    model: Pick<
+      ResolvedChatModelConfig,
+      'inputPrice' | 'outputPrice' | 'billingMode' | 'reserveCredits'
+    >,
   ): number | undefined {
+    if (model.billingMode === 'flat_per_request') {
+      return model.reserveCredits ?? DEFAULT_CHAT_MODEL_CREDIT_COST;
+    }
+
     if (!usage) {
       return undefined;
     }

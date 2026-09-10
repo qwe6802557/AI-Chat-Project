@@ -129,7 +129,7 @@ const ChatAreaStub = defineComponent({
       default: false,
     },
   },
-  emits: ['send-message', 'update:selected-model', 'stop-generation'],
+  emits: ['send-message', 'update:selected-model', 'stop-generation', 'retry-message'],
   template: `
     <div class="chat-area-stub">
       <div class="session-probe">{{ currentSessionId }}</div>
@@ -144,6 +144,7 @@ const ChatAreaStub = defineComponent({
       <div class="messages-probe">{{ JSON.stringify(messages) }}</div>
       <button class="send-text" @click="$emit('send-message', '你好')">send</button>
       <button class="stop-generation" @click="$emit('stop-generation')">stop</button>
+      <button class="retry-msg" @click="$emit('retry-message', messages[1]?.id)">retry</button>
       <button class="change-model" @click="$emit('update:selected-model', 'MODEL-X')">change-model</button>
     </div>
   `,
@@ -265,7 +266,7 @@ describe('ChatPage integration', () => {
           modelId: 'GLM-5',
           inputPrice: 1.83,
           outputPrice: 7.32,
-          creditCost: 100,
+          creditCost: 10,
           provider: {
             name: 'Zaiwen',
           },
@@ -297,7 +298,7 @@ describe('ChatPage integration', () => {
     expect(mockGetActiveModels).toHaveBeenCalledWith({ includeProvider: true })
     expect(wrapper.find('.model-input-price-probe').text()).toBe('1.83')
     expect(wrapper.find('.model-output-price-probe').text()).toBe('7.32')
-    expect(wrapper.find('.model-reserve-credits-probe').text()).toBe('100')
+    expect(wrapper.find('.model-reserve-credits-probe').text()).toBe('10')
     expect(wrapper.find('.model-options-probe').text()).toContain('"label":"GLM-5"')
 
     await wrapper.find('.send-text').trigger('click')
@@ -627,13 +628,13 @@ describe('ChatPage integration', () => {
     const { wrapper } = await mountChatPage({
       credits: {
         total: 2000,
-        consumed: 1950,
-        remaining: 50,
+        consumed: 1995,
+        remaining: 5,
         reserved: 0,
       },
     })
 
-    expect(wrapper.find('.current-credits-probe').text()).toBe('50')
+    expect(wrapper.find('.current-credits-probe').text()).toBe('5')
     expect(wrapper.find('.has-credit-snapshot-probe').text()).toBe('true')
 
     await wrapper.find('.send-text').trigger('click')
@@ -641,10 +642,10 @@ describe('ChatPage integration', () => {
 
     expect(mockCreateSession).not.toHaveBeenCalled()
     expect(mockSendStreamMessage).not.toHaveBeenCalled()
-    expect(mockMessageWarning).toHaveBeenCalledWith('当前模型发送前至少需预留 100 积分，最终按实际 token 结算，剩余 50 积分')
+    expect(mockMessageWarning).toHaveBeenCalledWith('当前模型发送前至少需预留 10 积分，剩余 5 积分')
   })
 
-  it('removes streaming assistant message when stream returns error', async () => {
+  it('retains assistant message with error state and stops loading when stream returns error', async () => {
     let streamCallbacks:
       | {
           onChunk: (chunk: Record<string, unknown>) => void
@@ -676,13 +677,56 @@ describe('ChatPage integration', () => {
     await flushPromises()
 
     const messages = JSON.parse(wrapper.find('.messages-probe').text()) as Array<Record<string, unknown>>
-    expect(messages).toHaveLength(1)
+    expect(messages).toHaveLength(2)
     expect(messages[0]).toMatchObject({
       role: 'user',
       content: '你好',
     })
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      streaming: false,
+      error: 'stream failed',
+    })
     expect(wrapper.find('.loading-probe').text()).toBe('false')
-    expect(mockMessageError).toHaveBeenCalledWith('stream failed')
+  })
+
+  it('creates an assistant message with error state when stream returns error immediately and supports retry', async () => {
+    let streamCallbacks:
+      | {
+          onError: (error: string) => void
+        }
+      | undefined
+
+    mockSendStreamMessage.mockImplementation((_payload, callbacks) => {
+      streamCallbacks = callbacks
+      return {
+        close: vi.fn(),
+      }
+    })
+
+    const { wrapper } = await mountChatPage()
+
+    await wrapper.find('.send-text').trigger('click')
+    await flushPromises()
+
+    streamCallbacks?.onError('客户端请求ID格式不正确')
+    await flushPromises()
+
+    expect(wrapper.find('.loading-probe').text()).toBe('false')
+
+    const messages = JSON.parse(wrapper.find('.messages-probe').text()) as Array<Record<string, unknown>>
+    expect(messages).toHaveLength(2)
+    expect(messages[1]).toMatchObject({
+      role: 'assistant',
+      streaming: false,
+      error: '客户端请求ID格式不正确',
+    })
+
+    // 测试重试
+    await wrapper.find('.retry-msg').trigger('click')
+    await flushPromises()
+
+    expect(mockSendStreamMessage).toHaveBeenCalledTimes(2)
   })
 
   it('closes active stream when user starts a new chat during streaming', async () => {

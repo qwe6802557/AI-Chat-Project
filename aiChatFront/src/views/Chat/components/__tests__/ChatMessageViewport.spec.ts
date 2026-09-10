@@ -187,4 +187,32 @@ describe('ChatMessageViewport', () => {
 
     expect(wrapper.find('.user-message-content').exists()).toBe(false)
   })
+
+  it('renders assistant-error-card and emits retry-message on click', async () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [
+          {
+            id: 'assistant-error-1',
+            role: 'assistant',
+            content: '',
+            timestamp: Date.now(),
+            streaming: false,
+            error: '客户端请求ID格式不正确',
+          },
+        ],
+        loading: false,
+      },
+      global: {
+        stubs: ['a-avatar', 'a-image', 'a-image-preview-group', 'MarkdownMessage', 'ChatReasoningPanel'],
+      },
+    })
+
+    expect(wrapper.find('.assistant-error-card').exists()).toBe(true)
+    expect(wrapper.find('.error-title').text()).toBe('生成遇到问题')
+    expect(wrapper.find('.error-desc').text()).toBe('客户端请求ID格式不正确')
+
+    await wrapper.find('.error-retry-btn').trigger('click')
+    expect(wrapper.emitted('retry-message')?.[0]).toEqual(['assistant-error-1'])
+  })
 })

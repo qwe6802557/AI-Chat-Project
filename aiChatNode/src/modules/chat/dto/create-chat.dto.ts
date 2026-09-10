@@ -8,6 +8,7 @@ import {
   IsNumber,
   Min,
   Max,
+  MaxLength,
   IsBoolean,
   ValidateNested,
 } from 'class-validator';
@@ -89,10 +90,10 @@ export class CreateChatDto {
     description: '客户端请求ID（用于幂等控制）',
     example: '9e03cb8b-0dd0-4f68-b0af-fce4c8821f0d',
     required: false,
-    format: 'uuid',
   })
   @IsOptional()
-  @IsUUID('4', { message: '客户端请求ID格式不正确' })
+  @IsString({ message: '客户端请求ID必须是字符串' })
+  @MaxLength(64, { message: '客户端请求ID长度不能超过64' })
   clientRequestId?: string;
 
   /**

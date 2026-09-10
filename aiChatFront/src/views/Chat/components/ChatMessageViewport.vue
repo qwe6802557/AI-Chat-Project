@@ -64,12 +64,32 @@
               :reasoning="message.reasoning"
             />
             <MarkdownMessage
-              v-if="message.role === 'assistant'"
+              v-if="message.role === 'assistant' && (message.content || !message.error)"
               class="markdown-content"
               :message-id="message.id"
               :content="message.content"
               :streaming="message.streaming"
             />
+            <div
+              v-if="message.role === 'assistant' && message.error"
+              class="assistant-error-card"
+            >
+              <div class="error-badge-row">
+                <ExclamationCircleFilled class="error-badge-icon" />
+                <span class="error-title">生成遇到问题</span>
+              </div>
+              <div class="error-desc">{{ message.error }}</div>
+              <button
+                type="button"
+                class="error-retry-btn"
+                :disabled="loading"
+                title="重新发送此提问"
+                @click="emit('retry-message', message.id)"
+              >
+                <ReloadOutlined class="retry-icon" />
+                <span>重新生成</span>
+              </button>
+            </div>
             <div
               v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage)"
               class="assistant-meta"
@@ -162,6 +182,8 @@ import {
   LoadingOutlined,
   FilePdfOutlined,
   FileTextOutlined,
+  ExclamationCircleFilled,
+  ReloadOutlined,
 } from '@ant-design/icons-vue'
 import { useScrollManager } from '@/hooks/useScrollManager'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
@@ -186,6 +208,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
   'prompt-click': [prompt: string]
+  'retry-message': [messageId: string]
 }>()
 
 interface FeatureItem {
@@ -872,6 +895,70 @@ $avatar-size: 32px;
           font-size: 11px;
           line-height: 1.4;
           font-variant-numeric: tabular-nums;
+        }
+      }
+
+      .assistant-error-card {
+        margin-top: 6px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background: rgba(239, 68, 68, 0.05);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        max-width: 520px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .error-badge-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: #ef4444;
+          font-weight: 600;
+          font-size: 13px;
+
+          .error-badge-icon {
+            font-size: 14px;
+          }
+        }
+
+        .error-desc {
+          font-size: 13px;
+          color: #64748b;
+          line-height: 1.5;
+          word-break: break-word;
+        }
+
+        .error-retry-btn {
+          align-self: flex-start;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 12px;
+          border-radius: 8px;
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          background: #ffffff;
+          color: #ef4444;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+          &:hover:not(:disabled) {
+            background: #fef2f2;
+            border-color: #ef4444;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+          }
+
+          &:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+          }
+
+          .retry-icon {
+            font-size: 12px;
+          }
         }
       }
 
