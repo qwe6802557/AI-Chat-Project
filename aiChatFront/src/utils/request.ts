@@ -177,6 +177,11 @@ request.interceptors.response.use(
       if (shouldClearAuth) {
         clearUserInfo()
       }
+    } else if (
+      error.code === 'ECONNABORTED' ||
+      (typeof error.message === 'string' && error.message.includes('timeout'))
+    ) {
+      showSingletonErrorMessage('请求处理超时，请稍后重试')
     } else if (error.request) {
       showSingletonErrorMessage('网络连接失败，请检查网络')
     } else {

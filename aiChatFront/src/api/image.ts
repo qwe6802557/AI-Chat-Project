@@ -7,10 +7,13 @@ import type {
 } from '@/interface/image'
 
 /**
- * 发起图片生成任务
+ * 发起图片生成任务 (独立配置 180 秒长超时，防止大模型生图被过早中断)
  */
 export function generateImageApi(params: CreateImageGenerationParams, config?: AxiosRequestConfig) {
-  return request.post<never, ResponseData<ImageGenerationTask>>('/images/generations', params, config)
+  return request.post<never, ResponseData<ImageGenerationTask>>('/images/generations', params, {
+    timeout: 180000,
+    ...config,
+  })
 }
 
 /**
