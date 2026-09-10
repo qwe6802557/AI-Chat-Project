@@ -12,22 +12,24 @@ import {
  */
 export class LoginDto {
   /**
-   * 用户名
+   * 用户名或邮箱
    */
   @ApiProperty({
-    description: '用户名（3-20个字符，只能包含字母、数字、下划线）',
-    example: 'admin',
+    description: '用户名或邮箱（3-100个字符）',
+    example: 'admin 或 user@example.com',
     minLength: 3,
-    maxLength: 20,
-    pattern: '^[a-zA-Z0-9_]{3,20}$',
+    maxLength: 100,
   })
-  @IsNotEmpty({ message: '用户名不能为空' })
-  @IsString({ message: '用户名必须是字符串' })
-  @MinLength(3, { message: '用户名至少3个字符' })
-  @MaxLength(20, { message: '用户名最多20个字符' })
-  @Matches(/^[a-zA-Z0-9_]{3,20}$/, {
-    message: '用户名只能包含字母、数字、下划线',
-  })
+  @IsNotEmpty({ message: '用户名或邮箱不能为空' })
+  @IsString({ message: '用户名或邮箱必须是字符串' })
+  @MinLength(3, { message: '账号至少3个字符' })
+  @MaxLength(100, { message: '账号最多100个字符' })
+  @Matches(
+    /^(?:[a-zA-Z0-9_]{3,20}|[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)$/,
+    {
+      message: '请输入合法的用户名（3-20位字母数字下划线）或电子邮箱',
+    },
+  )
   username: string;
 
   /**

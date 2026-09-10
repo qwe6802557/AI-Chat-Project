@@ -53,15 +53,16 @@ export class CreateUserDto {
   password: string;
 
   /**
-   * 邮箱（必填）
+   * 邮箱（可选，唯一）
    */
   @ApiProperty({
-    description: '邮箱（必填，唯一）',
+    description: '邮箱（可选，唯一）',
     example: 'test@example.com',
+    required: false,
   })
-  @IsNotEmpty({ message: '邮箱不能为空' })
+  @IsOptional()
   @IsEmail({}, { message: '邮箱格式不正确' })
-  email: string;
+  email?: string;
 
   /**
    * 手机号（可选）

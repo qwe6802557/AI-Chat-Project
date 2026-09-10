@@ -10,6 +10,7 @@ import { AiProviderModule } from './modules/ai-provider/ai-provider.module';
 import { FilesModule } from './modules/files/files.module';
 import { CreditsModule } from './modules/credits/credits.module';
 import { ImagesModule } from './modules/images/images.module';
+import { VoiceModule } from './modules/voice/voice.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import databaseConfig from './config/database.config';
@@ -47,6 +48,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     FilesModule,
     AiProviderModule,
     ImagesModule,
+    VoiceModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

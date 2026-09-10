@@ -33,12 +33,14 @@
           </button>
         </a-tooltip>
 
-        <a-tooltip title="即将上线，敬请期待">
-          <button type="button" class="mode-tab disabled">
-            <AudioOutlined class="tab-icon" />
-            <span>语音</span>
-          </button>
-        </a-tooltip>
+        <button
+          type="button"
+          :class="['mode-tab', { active: currentMode === 'voice' }]"
+          @click="handleSwitchMode('voice')"
+        >
+          <AudioOutlined class="tab-icon" />
+          <span>语音</span>
+        </button>
       </div>
     </div>
 
@@ -109,7 +111,7 @@ defineOptions({
 })
 
 const props = defineProps<{
-  activeMode?: 'chat' | 'image' | 'video' | 'audio'
+  activeMode?: 'chat' | 'image' | 'video' | 'audio' | 'voice'
 }>()
 
 const route = useRoute()
@@ -121,6 +123,7 @@ const showAboutModal = ref(false)
 const currentMode = computed(() => {
   if (props.activeMode) return props.activeMode
   if (route.path.startsWith('/image')) return 'image'
+  if (route.path.startsWith('/voice')) return 'voice'
   return 'chat'
 })
 
@@ -139,11 +142,13 @@ const creditsRemaining = computed(() => {
   return authStore.userProfile?.credits?.remaining ?? 0
 })
 
-const handleSwitchMode = (mode: 'chat' | 'image') => {
+const handleSwitchMode = (mode: 'chat' | 'image' | 'voice') => {
   if (mode === 'chat' && route.path !== '/chat') {
     router.push('/chat')
   } else if (mode === 'image' && route.path !== '/image') {
     router.push('/image')
+  } else if (mode === 'voice' && route.path !== '/voice') {
+    router.push('/voice')
   }
 }
 

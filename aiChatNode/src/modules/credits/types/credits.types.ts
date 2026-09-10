@@ -24,6 +24,8 @@ export enum CreditBusinessType {
   REGISTER_BONUS = 'register_bonus',
   CHAT_MESSAGE = 'chat_message',
   IMAGE_GENERATION = 'image_generation',
+  VOICE_TTS = 'voice_tts',
+  VOICE_STT = 'voice_stt',
   MANUAL = 'manual',
   SYSTEM = 'system',
 }

@@ -1,6 +1,6 @@
 import { Injectable, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import { EntityManager, Repository, ILike } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import { User, UserRole } from './entities/user.entity';
@@ -36,13 +36,15 @@ export class UserService {
       throw new ConflictException('用户名已存在');
     }
 
-    // 检查邮箱是否已存在
-    const existingEmail = await userRepository.findOne({
-      where: { email: createUserDto.email },
-    });
+    // 检查邮箱是否已存在（若提供）
+    if (createUserDto.email) {
+      const existingEmail = await userRepository.findOne({
+        where: { email: createUserDto.email },
+      });
 
-    if (existingEmail) {
-      throw new ConflictException('邮箱已存在');
+      if (existingEmail) {
+        throw new ConflictException('邮箱已存在');
+      }
     }
 
     // 检查手机号是否已存在（可选-留做后续发短信注册）
@@ -70,6 +72,22 @@ export class UserService {
    */
   async findByUsername(username: string): Promise<User | null> {
     return this.userRepository.findOne({ where: { username } });
+  }
+
+  /**
+   * 根据用户名或邮箱智能查找用户
+   * 若含 @ 则走邮箱匹配（大小写不敏感且去除首尾空格），否则走用户名精确匹配
+   */
+  async findByUsernameOrEmail(account: string): Promise<User | null> {
+    const trimmed = account.trim();
+    if (trimmed.includes('@')) {
+      return this.userRepository.findOne({
+        where: { email: ILike(trimmed.toLowerCase()) },
+      });
+    }
+    return this.userRepository.findOne({
+      where: { username: trimmed },
+    });
   }
 
   /**

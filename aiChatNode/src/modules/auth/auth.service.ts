@@ -60,8 +60,8 @@ export class AuthService {
       throw new BadRequestException('验证码错误或已过期');
     }
 
-    // 查找用户
-    const user = await this.userService.findByUsername(username);
+    // 查找用户（支持用户名或邮箱）
+    const user = await this.userService.findByUsernameOrEmail(username);
     if (!user) {
       throw new UnauthorizedException(this.invalidCredentialsMessage);
     }
@@ -167,7 +167,7 @@ export class AuthService {
   /**
    * 生成 JWT token
    */
-  private generateToken(user: Pick<User, 'id' | 'username' | 'role'>): string {
+  generateToken(user: Pick<User, 'id' | 'username' | 'role'>): string {
     const payload: JwtPayload = {
       userId: user.id,
       username: user.username,

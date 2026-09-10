@@ -33,6 +33,24 @@ const router = createRouter({
       },
     },
     {
+      path: '/oauth/callback',
+      name: 'oauth-callback',
+      component: () => import('../views/OAuth/Callback.vue'),
+      meta: {
+        title: 'OAuth Authorization',
+        requiresAuth: false,
+      },
+    },
+    {
+      path: '/oauth/mock-auth',
+      name: 'oauth-mock-auth',
+      component: () => import('../views/OAuth/MockAuthorize.vue'),
+      meta: {
+        title: 'QQ 登录模拟授权',
+        requiresAuth: false,
+      },
+    },
+    {
       path: '/',
       redirect: '/chat',
     },
@@ -51,6 +69,15 @@ const router = createRouter({
       component: () => import('../views/Image/index.vue'),
       meta: {
         title: 'AI 创作控制台',
+        requiresAuth: true,
+      },
+    },
+    {
+      path: '/voice',
+      name: 'voice',
+      component: () => import('../views/Voice/index.vue'),
+      meta: {
+        title: 'AI 语音控制台',
         requiresAuth: true,
       },
     },

@@ -47,6 +47,11 @@ vi.mock('@/api/auth', () => ({
   resetPassword: vi.fn(),
 }))
 
+vi.mock('@/api/oauth', () => ({
+  getOAuthAuthorizeUrl: vi.fn(),
+  handleOAuthCallback: vi.fn(),
+}))
+
 vi.mock('ant-design-vue', () => ({
   message: {
     success: mockMessageSuccess,
@@ -128,6 +133,102 @@ describe('auth page action chains', () => {
     expect(store.username).toBe('tester')
     expect(store.rememberedUsername).toBe('tester')
     expect(routerPush).toHaveBeenCalledWith('/chat')
+  })
+
+  it('login page allows logging in with email and preserves input in remembered credentials', async () => {
+    mockLogin.mockResolvedValue({
+      code: 0,
+      data: {
+        token: 'token-email',
+        user: {
+          id: 'user-email-1',
+          username: 'account_name',
+          email: 'my_email@example.com',
+          role: 'user',
+          isActive: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      message: 'ok',
+    })
+
+    const wrapper = mount(LoginPage, {
+      shallow: true,
+      global: {
+        plugins: [pinia],
+        stubs: globalStubs,
+      },
+    })
+
+    await flushPromises()
+
+    const vm = wrapper.vm as any
+    // 校验规则已更新为 用户名或邮箱
+    expect(vm.rules.username[0].message).toBe('请输入用户名或邮箱!')
+
+    vm.formState.username = 'my_email@example.com'
+    vm.formState.password = 'password123'
+    vm.formState.captcha = '1234'
+    vm.formState.remember = true
+
+    await vm.handleLogin()
+
+    expect(mockLogin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: 'my_email@example.com',
+      })
+    )
+
+    const store = useAuthStore()
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.rememberedUsername).toBe('my_email@example.com')
+    expect(routerPush).toHaveBeenCalledWith('/chat')
+  })
+
+  it('login page handles OAUTH_LOGIN_SUCCESS message and navigates to chat', async () => {
+    const wrapper = mount(LoginPage, {
+      shallow: true,
+      global: {
+        plugins: [pinia],
+        stubs: globalStubs,
+      },
+    })
+
+    await flushPromises()
+
+    const oauthPayload = {
+      token: 'oauth-jwt-token',
+      user: {
+        id: 'oauth-user-id',
+        username: 'qq_oauth_user',
+        email: null,
+        role: 'user',
+        isActive: true,
+        createdAt: '2026-01-01',
+        updatedAt: '2026-01-01',
+      },
+    }
+
+    // 触发 window message 事件
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        data: {
+          type: 'OAUTH_LOGIN_SUCCESS',
+          session: oauthPayload,
+        },
+      })
+    )
+
+    await flushPromises()
+
+    const store = useAuthStore()
+    expect(store.isAuthenticated).toBe(true)
+    expect(store.userId).toBe('oauth-user-id')
+    expect(store.username).toBe('qq_oauth_user')
+    expect(routerPush).toHaveBeenCalledWith('/chat')
+    wrapper.unmount()
   })
 
   it('register page writes auth session and redirects after timeout', async () => {

@@ -8,6 +8,7 @@ describe('AuthService', () => {
   const userService = {
     findByUsername: jest.fn(),
     findByEmail: jest.fn(),
+    findByUsernameOrEmail: jest.fn(),
     updatePassword: jest.fn(),
     create: jest.fn(),
   };
@@ -54,7 +55,7 @@ describe('AuthService', () => {
 
   it('returns the same login error when user does not exist', async () => {
     captchaService.verifyCaptcha.mockResolvedValue(true);
-    userService.findByUsername.mockResolvedValue(null);
+    userService.findByUsernameOrEmail.mockResolvedValue(null);
 
     await expect(
       service.login({
@@ -68,7 +69,7 @@ describe('AuthService', () => {
 
   it('returns the same login error when password is invalid', async () => {
     captchaService.verifyCaptcha.mockResolvedValue(true);
-    userService.findByUsername.mockResolvedValue({
+    userService.findByUsernameOrEmail.mockResolvedValue({
       id: 'user-1',
       username: 'demo',
       password: bcrypt.hashSync('Correct123', 10),
@@ -84,6 +85,35 @@ describe('AuthService', () => {
         captchaId: 'captcha-id',
       }),
     ).rejects.toEqual(new UnauthorizedException('用户名或密码错误'));
+  });
+
+  it('successfully logs in when user provides valid email address', async () => {
+    captchaService.verifyCaptcha.mockResolvedValue(true);
+    const mockUser = {
+      id: 'user-email-1',
+      username: 'tester',
+      email: 'tester@example.com',
+      password: bcrypt.hashSync('Password123', 10),
+      role: 'user',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    userService.findByUsernameOrEmail.mockResolvedValue(mockUser);
+    jwtService.sign.mockReturnValue('jwt-token-ok');
+    creditsService.getSnapshotForUser.mockResolvedValue({ balance: 2000 } as any);
+
+    const result = await service.login({
+      username: 'tester@example.com',
+      password: 'Password123',
+      captcha: 'ABCD',
+      captchaId: 'captcha-id',
+    });
+
+    expect(userService.findByUsernameOrEmail).toHaveBeenCalledWith('tester@example.com');
+    expect(result.token).toBe('jwt-token-ok');
+    expect(result.user.username).toBe('tester');
+    expect(result.user.email).toBe('tester@example.com');
   });
 
   it('returns the same reset-password error when code is invalid', async () => {
@@ -142,7 +172,7 @@ describe('AuthService', () => {
 
   it('returns credits snapshot when login succeeds', async () => {
     captchaService.verifyCaptcha.mockResolvedValue(true);
-    userService.findByUsername.mockResolvedValue({
+    userService.findByUsernameOrEmail.mockResolvedValue({
       id: 'user-1',
       username: 'demo',
       email: 'demo@example.com',

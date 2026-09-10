@@ -11,6 +11,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { ChatMessage } from '../../chat/entities/chat.entity';
 import { ChatSession } from '../../chat/entities/chat-session.entity';
+import { UserOauth } from '../../auth/entities/user-oauth.entity';
 
 /**
  * 用户角色枚举
@@ -47,13 +48,13 @@ export class User {
   phone?: string;
 
   /**
-   * 邮箱（必填）
+   * 邮箱（传统注册必填，第三方登录可选）
    */
-  @Column({ type: 'varchar', length: 100, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 100, unique: true, nullable: true })
+  email?: string | null;
 
   /**
-   *角色
+   * 角色
    */
   @Column({
     type: 'enum',
@@ -78,6 +79,12 @@ export class User {
    */
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  /**
+   * 关联的第三方 OAuth 绑定账号
+   */
+  @OneToMany(() => UserOauth, (oauth) => oauth.user)
+  oauthAccounts: UserOauth[];
 
   /**
    * 关联的聊天记录

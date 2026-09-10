@@ -12,10 +12,10 @@
         </div>
 
         <div class="social-login">
-          <div class="social-icon qq" @click="handleSocialLogin('QQ')" title="QQ登录">
+          <div class="social-icon qq" @click="handleSocialLogin('qq')" title="QQ登录">
             <QqOutlined />
           </div>
-          <div class="social-icon wechat" @click="handleSocialLogin('微信')" title="微信登录">
+          <div class="social-icon wechat" @click="handleSocialLogin('wechat')" title="微信登录">
             <WechatOutlined />
           </div>
         </div>
@@ -39,16 +39,16 @@
           layout="vertical"
           class="login-form"
         >
-          <!-- 用户名 -->
+          <!-- 用户名或邮箱 -->
           <a-form-item name="username" class="form-item">
             <div class="input-wrapper">
               <UserOutlined class="input-icon" />
               <a-input
                 v-model:value="formState.username"
-                placeholder="用户名"
+                placeholder="用户名 / 邮箱"
                 size="large"
                 class="custom-input"
-                autocomplete="username"
+                autocomplete="username email"
               />
             </div>
           </a-form-item>
@@ -128,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -141,6 +141,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons-vue'
 import { getCaptcha, login } from '@/api/auth'
+import { getOAuthAuthorizeUrl } from '@/api/oauth'
 import type { LoginParams } from '@/interface/auth'
 import { useAuthStore } from '@/stores'
 import logger from '@/utils/logger'
@@ -154,14 +155,69 @@ const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
 
-// 第三方登录提示
-const handleSocialLogin = (platform: string) => {
-  Modal.info({
-    title: '系统提示',
-    content: `${platform}登录功能正在开发中，敬请期待！`,
-    okText: '我知道了',
-    centered: true,
-  })
+// 第三方登录处理
+const handleSocialLogin = async (platform: 'qq' | 'wechat') => {
+  try {
+    const res = await getOAuthAuthorizeUrl(platform)
+    const authUrl = res.data?.url
+    if (!authUrl) {
+      message.error('未能获取到第三方授权地址')
+      return
+    }
+
+    // 计算居中弹窗参数
+    const width = 650
+    const height = 620
+    const left = window.screenX + Math.max(0, (window.outerWidth - width) / 2)
+    const top = window.screenY + Math.max(0, (window.outerHeight - height) / 2)
+
+    const popup = window.open(
+      authUrl,
+      `oauth_${platform}_window`,
+      `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+    )
+
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      message.warning('检测到弹窗被浏览器拦截，正在为您直接跳转授权...')
+      window.location.href = authUrl
+    } else {
+      popup.focus()
+    }
+  } catch (err: any) {
+    logger.error(`${platform} 登录发起失败:`, err)
+    const msg = err?.response?.data?.message || err?.message || '发起第三方登录失败'
+    if (platform === 'wechat') {
+      Modal.info({
+        title: '微信登录提示',
+        content: msg,
+        okText: '我知道了',
+        centered: true,
+      })
+    } else {
+      message.error(msg)
+    }
+  }
+}
+
+// 跨窗口 OAuth 消息监听
+const handleOAuthMessage = (event: MessageEvent) => {
+  if (event.origin !== window.location.origin) return
+  if (!event.data || typeof event.data !== 'object') return
+
+  if (event.data.type === 'OAUTH_LOGIN_SUCCESS') {
+    const session = event.data.session
+    if (session?.token && session?.user) {
+      authStore.setAuthSession({
+        token: session.token,
+        user: session.user,
+      })
+      message.success(`登录成功！欢迎回来，${session.user?.username || ''}`)
+      const redirect = router.currentRoute.value.query.redirect as string
+      router.push(redirect || '/chat')
+    }
+  } else if (event.data.type === 'OAUTH_LOGIN_ERROR') {
+    message.error(event.data.message || '第三方授权登录失败，请重试')
+  }
 }
 
 // 验证码相关
@@ -210,13 +266,21 @@ onMounted(() => {
 
   // 加载验证码
   fetchCaptcha()
+
+  // 监听第三方登录回调弹窗通信
+  window.addEventListener('message', handleOAuthMessage)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleOAuthMessage)
 })
 
 // 表单验证规则
 const rules = {
   username: [
-    { required: true, message: '请输入用户名!', trigger: 'blur' },
-    { min: 3, message: '用户名不能少于3位!', trigger: 'blur' },
+    { required: true, message: '请输入用户名或邮箱!', trigger: 'blur' },
+    { min: 3, message: '账号不能少于3位!', trigger: 'blur' },
+    { max: 100, message: '账号不能超过100位!', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码!', trigger: 'blur' },
@@ -648,6 +712,7 @@ const handleGoToRegister = () => {
         }
       }
     }
+
 
     .footer-text {
       display: flex;

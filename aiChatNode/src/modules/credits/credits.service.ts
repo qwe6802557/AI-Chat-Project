@@ -116,6 +116,20 @@ export class CreditsService {
             ledger.modelId ? `模型：${ledger.modelId}` : 'AI 生图扣费',
           );
         }
+        if (ledger.businessType === CreditBusinessType.VOICE_TTS) {
+          return createItem(
+            '语音合成扣费',
+            ledger.deltaAvailable,
+            ledger.modelId ? `模型：${ledger.modelId}` : '语音合成扣费',
+          );
+        }
+        if (ledger.businessType === CreditBusinessType.VOICE_STT) {
+          return createItem(
+            '语音识别扣费',
+            ledger.deltaAvailable,
+            ledger.modelId ? `模型：${ledger.modelId}` : '语音识别扣费',
+          );
+        }
         if (ledger.businessType === CreditBusinessType.CHAT_MESSAGE) {
           const settledAmount = ledger.deltaAvailable + ledger.deltaReserved;
           return createItem(
@@ -143,6 +157,20 @@ export class CreditsService {
             '生图失败退款',
             ledger.deltaAvailable,
             ledger.remark || '生图失败退还积分',
+          );
+        }
+        if (ledger.businessType === CreditBusinessType.VOICE_TTS) {
+          return createItem(
+            '语音合成失败退款',
+            ledger.deltaAvailable,
+            ledger.remark || '语音合成失败退还积分',
+          );
+        }
+        if (ledger.businessType === CreditBusinessType.VOICE_STT) {
+          return createItem(
+            '语音识别失败退款',
+            ledger.deltaAvailable,
+            ledger.remark || '语音识别失败退还积分',
           );
         }
         return createItem('积分退款', ledger.deltaAvailable);

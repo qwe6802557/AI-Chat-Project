@@ -21,6 +21,7 @@ const AUTH_ENDPOINTS = [
   '/auth/sms/send',
   '/auth/email/send',
   '/auth/reset-password',
+  '/auth/oauth',
 ]
 
 const AUTH_ERROR_CODE = 1
