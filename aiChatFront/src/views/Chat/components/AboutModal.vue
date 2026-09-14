@@ -38,7 +38,10 @@
       </div>
 
       <!-- 版权信息 -->
-      <p class="copyright">&copy; 2025 ERJ Chat. All rights reserved.</p>
+      <p class="copyright">&copy; 2026 ERJ Chat. All rights reserved.</p>
+
+      <!-- ICP 备案号合规悬挂 -->
+      <SiteIcpFooter />
     </div>
   </a-modal>
 </template>
@@ -50,6 +53,7 @@ import {
   SyncOutlined,
   LinkOutlined
 } from '@ant-design/icons-vue'
+import SiteIcpFooter from '@/components/SiteIcpFooter.vue'
 
 defineOptions({
   name: 'AboutModal'

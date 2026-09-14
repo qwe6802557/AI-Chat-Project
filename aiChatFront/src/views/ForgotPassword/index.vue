@@ -127,6 +127,9 @@
           <span class="footer-label">已经想起密码？</span>
           <a class="footer-link" @click="handleGoToLogin">返回登录</a>
         </div>
+
+        <!-- ICP 备案号合规悬挂 -->
+        <SiteIcpFooter />
       </div>
     </div>
   </div>
@@ -144,6 +147,7 @@ import {
   SafetyOutlined,
   RightOutlined,
 } from '@ant-design/icons-vue'
+import SiteIcpFooter from '@/components/SiteIcpFooter.vue'
 import { sendEmailCode, resetPassword } from '@/api/auth'
 import logger from '@/utils/logger'
 

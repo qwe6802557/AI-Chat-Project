@@ -122,6 +122,9 @@
           <span class="footer-label">还没有账号?</span>
           <a class="footer-link" @click="handleGoToRegister">注册账号</a>
         </div>
+
+        <!-- ICP 备案号合规悬挂 -->
+        <SiteIcpFooter />
       </div>
     </div>
   </div>
@@ -140,6 +143,7 @@ import {
   SafetyOutlined,
   LoadingOutlined,
 } from '@ant-design/icons-vue'
+import SiteIcpFooter from '@/components/SiteIcpFooter.vue'
 import { getCaptcha, login } from '@/api/auth'
 import { getOAuthAuthorizeUrl } from '@/api/oauth'
 import type { LoginParams } from '@/interface/auth'
