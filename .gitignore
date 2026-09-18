@@ -81,3 +81,6 @@ start-dev.ps1
 start-env.bat
 stop-env.bat
 scripts/
+
+# ===== Stitch UI 导出源文件 =====
+stitch_ai_chat_mobile_ui/
