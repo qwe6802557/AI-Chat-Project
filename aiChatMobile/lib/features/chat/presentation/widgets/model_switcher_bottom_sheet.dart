@@ -48,7 +48,7 @@ const List<ModelInfo> kAvailableChatModels = [
     latency: '80ms',
     contextWindow: '64k',
     cost: 10,
-    icon: Icons.neurology_rounded,
+    icon: Icons.psychology_rounded,
   ),
   ModelInfo(
     id: 'grok-4.5',
@@ -81,7 +81,7 @@ const List<ModelInfo> kAvailableChatModels = [
     latency: '110ms',
     contextWindow: '200k',
     cost: 10,
-    icon: Icons.code_blocks_rounded,
+    icon: Icons.code_rounded,
   ),
 ];
 

@@ -15,12 +15,31 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '5mb' });
   app.useBodyParser('urlencoded', { limit: '5mb', extended: true });
 
-  // 跨域处理
+  // 跨域处理：放行本地全端口调试（Vite 5173、Flutter Web 等）与线上生产域名
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], // 允许的地址
-    credentials: true, // 允许携带凭证
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 允许的请求方法
-    allowedHeaders: ['Content-Type', 'Authorization'], // 允许的请求头
+    origin: (origin, callback) => {
+      // 允许移动端原生/桌面端/Postman等无 origin 请求
+      if (!origin) return callback(null, true);
+      const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      const isProduction = /^https:\/\/([a-zA-Z0-9-]+\.)?yanggenbwebsite\.site$/.test(origin);
+      if (isLocalhost || isProduction) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'Cache-Control',
+      'X-Requested-With',
+      'X-Client-Request-Id',
+      'Range',
+      'Origin',
+    ],
+    exposedHeaders: ['Content-Range', 'X-Accel-Buffering'],
   });
 
   // 注册全局验证管道

@@ -113,9 +113,9 @@ class ChatRepository {
       },
       options: Options(
         responseType: ResponseType.stream,
+        receiveTimeout: const Duration(minutes: 5),
         headers: {
           'Accept': 'text/event-stream',
-          'Cache-Control': 'no-cache',
         },
       ),
       cancelToken: cancelToken,
@@ -126,7 +126,7 @@ class ChatRepository {
       throw Exception('未收到流式数据响应');
     }
 
-    return stream.transform(const SseStreamTransformer());
+    return stream.cast<List<int>>().transform(const SseStreamTransformer());
   }
 
   Future<void> deleteSession(String sessionId) async {

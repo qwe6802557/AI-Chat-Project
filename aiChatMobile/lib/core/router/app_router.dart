@@ -13,13 +13,33 @@ import '../../shared/widgets/floating_glass_nav_bar.dart';
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
+/// 路由监听器：桥接 Riverpod 认证状态与 GoRouter 的 refreshListenable 机制
+class RouterNotifier extends ChangeNotifier {
+  final Ref _ref;
+
+  RouterNotifier(this._ref) {
+    _ref.listen<AuthState>(
+      authProvider,
+      (_, __) => notifyListeners(),
+    );
+  }
+}
+
+final routerNotifierProvider = Provider<RouterNotifier>((ref) {
+  final notifier = RouterNotifier(ref);
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+  final notifier = ref.watch(routerNotifierProvider);
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
+    refreshListenable: notifier,
     initialLocation: '/chat',
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isLoggingIn = state.uri.path == '/login';
 
       if (authState.status == AuthStatus.initial || authState.status == AuthStatus.loading) {

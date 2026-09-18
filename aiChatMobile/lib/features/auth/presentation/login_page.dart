@@ -1,11 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/stitch_tokens.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/cyber_button.dart';
 import '../../../shared/widgets/site_icp_footer.dart';
-import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
 
 /// Stitch 科技毛玻璃登录页面
@@ -22,7 +23,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _captchaController = TextEditingController();
 
   String? _captchaId;
-  ImageProvider? _captchaImageProvider;
+  String? _captchaSvg;
+  Uint8List? _captchaBitmapBytes;
   bool _isLoadingCaptcha = false;
 
   @override
@@ -44,15 +46,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     try {
       final repo = ref.read(authRepositoryProvider);
       final res = await repo.getCaptcha();
-      final base64Raw = res.captchaImage.contains(',')
-          ? res.captchaImage.split(',')[1]
-          : res.captchaImage;
-      final bytes = base64Decode(base64Raw);
+      final raw = res.captchaImage;
+
+      String? svgContent;
+      Uint8List? bitmapBytes;
+
+      if (raw.contains('image/svg+xml') || raw.trim().startsWith('<svg')) {
+        if (raw.contains('base64,')) {
+          final base64Str = raw.split('base64,')[1];
+          svgContent = utf8.decode(base64Decode(base64Str));
+        } else if (raw.contains(',')) {
+          final uriStr = raw.split(',')[1];
+          svgContent = Uri.decodeComponent(uriStr);
+        } else {
+          svgContent = raw;
+        }
+      } else {
+        final base64Raw = raw.contains(',') ? raw.split(',')[1] : raw;
+        try {
+          bitmapBytes = base64Decode(base64Raw);
+        } catch (_) {}
+      }
 
       if (mounted) {
         setState(() {
           _captchaId = res.captchaId;
-          _captchaImageProvider = MemoryImage(bytes);
+          _captchaSvg = svgContent;
+          _captchaBitmapBytes = bitmapBytes;
           _isLoadingCaptcha = false;
         });
       }
@@ -219,20 +239,33 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                       child: CircularProgressIndicator(strokeWidth: 2.0),
                                     ),
                                   )
-                                : (_captchaImageProvider != null
+                                : (_captchaSvg != null
                                     ? ClipRRect(
                                         borderRadius: BorderRadius.circular(12.0),
-                                        child: Image(
-                                          image: _captchaImageProvider!,
+                                        child: SvgPicture.string(
+                                          _captchaSvg!,
                                           fit: BoxFit.fill,
+                                          width: 110.0,
+                                          height: 52.0,
                                         ),
                                       )
-                                    : const Center(
-                                        child: Text(
-                                          '点击刷新',
-                                          style: TextStyle(fontSize: 12.0, color: StitchTokens.outline),
-                                        ),
-                                      )),
+                                    : (_captchaBitmapBytes != null
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(12.0),
+                                            child: Image.memory(
+                                              _captchaBitmapBytes!,
+                                              fit: BoxFit.fill,
+                                            ),
+                                          )
+                                        : const Center(
+                                            child: Text(
+                                              '点击刷新',
+                                              style: TextStyle(
+                                                fontSize: 12.0,
+                                                color: StitchTokens.outline,
+                                              ),
+                                            ),
+                                          ))),
                           ),
                         ),
                       ],

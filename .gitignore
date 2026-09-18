@@ -80,7 +80,30 @@ start-dev.bat
 start-dev.ps1
 start-env.bat
 stop-env.bat
+start-mobile.bat
+start-mobile.ps1
 scripts/
+
+# ===== 部署与生产环境敏感配置 =====
+deploy/
+
+# ===== AI 代理与本地开发工具配置 =====
+.agents/
+.mcp.json
+CLAUDE.md
+
+# ===== 项目根目录下的历史记录与会话导出 JSON =====
+*__*.json
+Project_summary_request*.json
+前端开发*.json
+docs/
 
 # ===== Stitch UI 导出源文件 =====
 stitch_ai_chat_mobile_ui/
+
+# ===== Flutter 移动端编译与依赖临时文件 =====
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/

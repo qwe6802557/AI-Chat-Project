@@ -65,7 +65,7 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                   borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
                 ),
                 child: const Icon(
-                  Icons.neurology_rounded,
+                  Icons.psychology_rounded,
                   size: 16.0,
                   color: StitchTokens.primaryGlow,
                 ),

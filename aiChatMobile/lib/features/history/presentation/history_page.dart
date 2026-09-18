@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/stitch_tokens.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../providers/chat_provider.dart';
+import '../../chat/providers/chat_provider.dart';
 
 /// Stitch 会话历史管理页面
 class HistoryPage extends ConsumerWidget {

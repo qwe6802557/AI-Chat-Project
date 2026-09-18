@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -33,11 +32,11 @@ class AuthState {
   }
 }
 
-final secureStorageProvider = Provider<SecureStorageService>((ref) {
+final Provider<SecureStorageService> secureStorageProvider = Provider<SecureStorageService>((ref) {
   return SecureStorageService();
 });
 
-final dioClientProvider = Provider<DioClient>((ref) {
+final Provider<DioClient> dioClientProvider = Provider<DioClient>((ref) {
   final storage = ref.watch(secureStorageProvider);
   return DioClient(
     storageService: storage,
@@ -47,12 +46,12 @@ final dioClientProvider = Provider<DioClient>((ref) {
   );
 });
 
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
+final Provider<AuthRepository> authRepositoryProvider = Provider<AuthRepository>((ref) {
   final client = ref.watch(dioClientProvider);
   return AuthRepository(client);
 });
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+final StateNotifierProvider<AuthNotifier, AuthState> authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   final storage = ref.watch(secureStorageProvider);
   return AuthNotifier(repo, storage)..initialize();

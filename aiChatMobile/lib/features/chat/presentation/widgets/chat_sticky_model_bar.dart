@@ -31,7 +31,7 @@ class ChatStickyModelBar extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.neurology_rounded,
+                Icons.psychology_rounded,
                 size: 12.0,
                 color: StitchTokens.primaryGlow,
               ),
