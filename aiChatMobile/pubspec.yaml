@@ -35,6 +35,13 @@ dependencies:
   url_launcher: ^6.3.1
   flutter_svg: ^2.3.0
 
+  # 多媒体与音频处理
+  audioplayers: ^6.1.0
+  record: ^5.2.0
+  file_picker: ^8.1.6
+  path_provider: ^2.1.5
+  cross_file: ^0.3.5+5
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

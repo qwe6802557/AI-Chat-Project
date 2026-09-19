@@ -25,7 +25,21 @@ void main() {
       expect(model.aspectRatio, '16:9');
       expect(model.resolution, '2k');
       expect(model.imageUrls.length, 1);
+      expect(model.imageUrls.first, 'https://aichat.yanggenbwebsite.site/images/media/sample.jpg');
       expect(model.status, 'completed');
+    });
+
+    test('相对路径图片 URL 自动拼接 ApiConstants.baseUrl', () {
+      final json = {
+        'id': 'task-1000',
+        'prompt': 'A cyberpunk cat',
+        'imageUrls': [
+          '/images/media/cat_0.png',
+        ],
+      };
+
+      final model = ImageTaskModel.fromJson(json);
+      expect(model.imageUrls.first, 'https://aichat.yanggenbwebsite.site/images/media/cat_0.png');
     });
   });
 }

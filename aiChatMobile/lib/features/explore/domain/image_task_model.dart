@@ -1,3 +1,5 @@
+import '../../../core/constants/api_constants.dart';
+
 /// 生图任务领域实体
 class ImageTaskModel {
   final String id;
@@ -21,17 +23,26 @@ class ImageTaskModel {
   });
 
   factory ImageTaskModel.fromJson(Map<String, dynamic> json) {
-    List<String> urls = [];
+    List<String> rawUrls = [];
     if (json['imageUrls'] is List) {
-      urls = (json['imageUrls'] as List).map((e) => e.toString()).toList();
+      rawUrls = (json['imageUrls'] as List).map((e) => e.toString()).toList();
     } else if (json['images'] is List) {
-      urls = (json['images'] as List).map((e) {
+      rawUrls = (json['images'] as List).map((e) {
         if (e is Map) return (e['url'] ?? e['path'] ?? '').toString();
         return e.toString();
       }).toList();
     } else if (json['url'] != null) {
-      urls = [json['url'].toString()];
+      rawUrls = [json['url'].toString()];
     }
+
+    final urls = rawUrls.map((u) {
+      if (u.isEmpty) return u;
+      if (u.startsWith('http://') || u.startsWith('https://')) {
+        return u;
+      }
+      final path = u.startsWith('/') ? u : '/$u';
+      return '${ApiConstants.baseUrl}$path';
+    }).toList();
 
     return ImageTaskModel(
       id: (json['id'] ?? '').toString(),

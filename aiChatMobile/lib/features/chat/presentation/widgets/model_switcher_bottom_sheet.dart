@@ -33,20 +33,20 @@ const List<ModelInfo> kAvailableChatModels = [
     name: 'grok-chat-fast',
     category: '代码极速',
     tag: '默认极速',
-    description: 'xAI 极速推理引擎，适合日常高频对话、低延迟交互与敏捷编程',
-    latency: '55ms',
+    description: '本机 Grok2API 快速聊天模型，适合日常敏捷交互与快速问答',
+    latency: '50ms',
     contextWindow: '128k',
     cost: 10,
     icon: Icons.bolt_rounded,
   ),
   ModelInfo(
-    id: 'DeepSeek-R1',
-    name: 'DeepSeek-R1',
-    category: '深度推理 (Reasoning)',
-    tag: '满血版 671B',
-    description: '深度强化学习思维链，擅长长程数学推理、逻辑算法与复杂代码构建',
+    id: 'grok-4.3',
+    name: 'grok-4.3',
+    category: '通用全能',
+    tag: '经典全能',
+    description: '本机 Grok2API 4.3 聊天模型，兼顾响应速度与综合表达力',
     latency: '80ms',
-    contextWindow: '64k',
+    contextWindow: '128k',
     cost: 10,
     icon: Icons.psychology_rounded,
   ),
@@ -54,32 +54,43 @@ const List<ModelInfo> kAvailableChatModels = [
     id: 'grok-4.5',
     name: 'grok-4.5',
     category: '通用全能',
-    tag: 'xAI 旗舰',
-    description: '综合全能大模型，具备高保真语义理解与多任务综合执行力',
+    tag: '旗舰主力',
+    description: '本机 Grok2API 4.5 聊天模型，具备高保真语义理解与多任务执行力',
     latency: '90ms',
     contextWindow: '128k',
     cost: 10,
     icon: Icons.smart_toy_rounded,
   ),
   ModelInfo(
-    id: 'GLM-5',
-    name: 'GLM-5',
-    category: '通用全能',
-    tag: '智谱全能',
-    description: '中英文知识图谱深度强化，适合长篇报告生成与结构化总结',
-    latency: '95ms',
+    id: 'grok-4.6',
+    name: 'grok-4.6',
+    category: '深度推理 (Reasoning)',
+    tag: '高阶推理',
+    description: '本机 Grok2API 4.6 聊天模型，复杂逻辑推导与深度知识整合',
+    latency: '100ms',
     contextWindow: '128k',
     cost: 10,
     icon: Icons.auto_awesome_rounded,
   ),
   ModelInfo(
-    id: 'claude-opus-4-5',
-    name: 'claude-opus-4-5',
+    id: 'grok-build-0.1',
+    name: 'grok-build-0.1',
     category: '代码极速',
-    tag: 'Anthropic 标杆',
-    description: '业界公认高标杆代码重构、全栈架构规划与指令严格遵循专家',
-    latency: '110ms',
-    contextWindow: '200k',
+    tag: '工程构建',
+    description: '本机 Grok2API Build 模型，专注软件架构、脚手架与代码构建',
+    latency: '85ms',
+    contextWindow: '128k',
+    cost: 10,
+    icon: Icons.construction_rounded,
+  ),
+  ModelInfo(
+    id: 'grok-composer-2.5-fast',
+    name: 'grok-composer-2.5-fast',
+    category: '代码极速',
+    tag: '创作代码',
+    description: '本机 Grok2API 代码与创作快速模型，支持高效编码与长篇创作',
+    latency: '60ms',
+    contextWindow: '128k',
     cost: 10,
     icon: Icons.code_rounded,
   ),
@@ -104,6 +115,7 @@ class ModelSwitcherBottomSheet extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ModelSwitcherBottomSheet(
         currentModel: currentModel,
@@ -147,16 +159,18 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 顶部小横条
-          Padding(
-            padding: const EdgeInsets.only(top: 12.0, bottom: 8.0),
-            child: Container(
-              width: 44.0,
-              height: 5.0,
-              decoration: BoxDecoration(
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 顶部小横条
+            Padding(
+              padding: const EdgeInsets.only(top: 12.0, bottom: 8.0),
+              child: Container(
+                width: 44.0,
+                height: 5.0,
+                decoration: BoxDecoration(
                 color: StitchTokens.surfaceVariant,
                 borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
               ),
@@ -314,6 +328,7 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 }

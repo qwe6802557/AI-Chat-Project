@@ -44,7 +44,8 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
   void _showImageLightbox(String imageUrl, String prompt) {
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      useRootNavigator: true,
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.black.withValues(alpha: 0.9),
         insetPadding: EdgeInsets.zero,
         child: Stack(
@@ -67,7 +68,7 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
               right: 20.0,
               child: IconButton(
                 icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28.0),
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(dialogContext).pop(),
               ),
             ),
             Positioned(

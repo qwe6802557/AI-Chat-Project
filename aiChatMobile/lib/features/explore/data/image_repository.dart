@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import '../../../core/network/dio_client.dart';
 import '../domain/image_task_model.dart';
 
@@ -25,6 +26,10 @@ class ImageRepository {
         'resolution': resolution,
         'quality': quality,
       },
+      options: Options(
+        sendTimeout: const Duration(seconds: 60),
+        receiveTimeout: const Duration(seconds: 180),
+      ),
     );
 
     final data = response.data;

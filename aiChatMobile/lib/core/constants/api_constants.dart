@@ -23,6 +23,13 @@ class ApiConstants {
   static const String creditsRecords = '/credits/records';
   static const String aiModels = '/ai-provider/models';
 
+  // 语音服务链路
+  static const String voiceVoices = '/voice/voices';
+  static const String voiceTts = '/voice/tts';
+  static const String voiceStt = '/voice/stt';
+  static const String voiceHistory = '/voice/history';
+  static const int voiceUnitCost = 20;
+
   // 业务默认值与阈值
   static const String defaultChatModel = 'grok-chat-fast';
   static const int chatMessageCost = 10;
