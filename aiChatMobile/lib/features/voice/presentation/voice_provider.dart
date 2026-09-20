@@ -366,7 +366,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       if (result != null && result.files.isNotEmpty) {
         final file = result.files.first;
         Uint8List? bytes = file.bytes;
-        if (bytes == null && file.path != null) {
+        if (bytes == null && !kIsWeb && file.path != null) {
           final xFile = XFile(file.path!);
           bytes = await xFile.readAsBytes();
         }

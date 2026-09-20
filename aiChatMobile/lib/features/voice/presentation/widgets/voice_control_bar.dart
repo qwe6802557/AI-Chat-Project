@@ -194,54 +194,102 @@ class VoiceControlBar extends StatelessWidget {
 
             const SizedBox(height: 8.0),
 
-            // TTS 参数快捷调节胶囊与字数统计
-            Row(
+            // TTS 参数快捷调节胶囊与字数统计（双行自适应布局，确保模型全称清晰展示不被截断）
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
+                // 第一行：短参数（音色、语速、语言）与字数统计
+                Row(
+                  children: [
+                    _ParamChip(
+                      icon: Icons.record_voice_over_rounded,
+                      label: state.voices.firstWhere(
+                        (v) => v.voiceId == state.ttsVoiceId,
+                        orElse: () => const VoiceInfoModel(voiceId: '', name: '音色', language: 'zh'),
+                      ).name,
+                      onTap: () => _openParamsSheet(context),
+                    ),
+                    const SizedBox(width: 6.0),
+                    _ParamChip(
+                      icon: Icons.speed_rounded,
+                      label: '${state.ttsSpeed}x',
+                      onTap: () => _openParamsSheet(context),
+                    ),
+                    const SizedBox(width: 6.0),
+                    _ParamChip(
+                      icon: Icons.language_rounded,
+                      label: state.ttsLanguage == 'zh' ? '中文' : 'English',
+                      onTap: () => _openParamsSheet(context),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${state.ttsText.length}/2000',
+                      style: const TextStyle(
+                        fontSize: 11.0,
+                        color: StitchTokens.outline,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6.0),
+                // 第二行：神经语音模型名称（独占一行，完整展示模型全称，点击唤出微调抽屉）
+                InkWell(
+                  borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                  onTap: () => _openParamsSheet(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.5),
+                    decoration: BoxDecoration(
+                      color: StitchTokens.surfaceContainer.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                      border: Border.all(
+                        color: StitchTokens.outlineVariant.withValues(alpha: 0.25),
+                        width: 1.0,
+                      ),
+                    ),
                     child: Row(
                       children: [
-                        // 音色选择胶囊 (点击呼出抽屉)
-                        _ParamChip(
-                          icon: Icons.record_voice_over_rounded,
-                          label: state.voices.firstWhere(
-                            (v) => v.voiceId == state.ttsVoiceId,
-                            orElse: () => const VoiceInfoModel(voiceId: '', name: '音色', language: 'zh'),
-                          ).name,
-                          onTap: () => _openParamsSheet(context),
+                        const Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 13.0,
+                          color: StitchTokens.primary,
                         ),
                         const SizedBox(width: 6.0),
-                        // 语速胶囊
-                        _ParamChip(
-                          icon: Icons.speed_rounded,
-                          label: '${state.ttsSpeed}x',
-                          onTap: () => _openParamsSheet(context),
+                        const Text(
+                          '模型: ',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: StitchTokens.outline,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            state.ttsModel,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: StitchTokens.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         const SizedBox(width: 6.0),
-                        // 语言胶囊
-                        _ParamChip(
-                          icon: Icons.language_rounded,
-                          label: state.ttsLanguage == 'zh' ? '中文' : 'English',
-                          onTap: () => _openParamsSheet(context),
+                        const Icon(
+                          Icons.tune_rounded,
+                          size: 13.0,
+                          color: StitchTokens.primary,
                         ),
-                        const SizedBox(width: 6.0),
-                        // 模型配置胶囊
-                        _ParamChip(
-                          icon: Icons.auto_awesome_rounded,
-                          label: state.ttsModel,
-                          onTap: () => _openParamsSheet(context),
+                        const SizedBox(width: 2.0),
+                        const Text(
+                          '微调',
+                          style: TextStyle(
+                            fontSize: 11.0,
+                            color: StitchTokens.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8.0),
-                Text(
-                  '${state.ttsText.length}/2000',
-                  style: const TextStyle(
-                    fontSize: 11.0,
-                    color: StitchTokens.outline,
                   ),
                 ),
               ],

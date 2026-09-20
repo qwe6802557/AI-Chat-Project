@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/storage/secure_storage_service.dart';
@@ -71,15 +72,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
+    // 1. 优先从本地读取已缓存的 UserModel，实现热重载/刷新时 0 毫秒恢复认证态，不闪退到登录页
+    final cachedUser = await _storage.getCachedUser();
+    if (cachedUser != null) {
+      state = state.copyWith(
+        status: AuthStatus.authenticated,
+        user: cachedUser,
+      );
+    } else {
+      state = state.copyWith(status: AuthStatus.authenticated);
+    }
+
+    // 2. 静默校验并更新最新用户资料与积分快照
     try {
       final user = await _repository.getUserProfile();
+      await _storage.saveCachedUser(user);
       state = state.copyWith(
         status: AuthStatus.authenticated,
         user: user,
       );
-    } catch (_) {
-      await _storage.clearAuthCredentials();
-      state = state.copyWith(status: AuthStatus.unauthenticated);
+    } catch (e) {
+      // 3. 只有明确服务器返回 401（未授权/Token无效）时才清除本地凭据
+      if (e is DioException && e.response?.statusCode == 401) {
+        await _storage.clearAuthCredentials();
+        state = state.copyWith(status: AuthStatus.unauthenticated, user: null);
+      } else if (cachedUser != null) {
+        state = state.copyWith(status: AuthStatus.authenticated, user: cachedUser);
+      }
     }
   }
 
@@ -104,6 +123,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: res.user.id,
         username: res.user.username,
       );
+      await _storage.saveCachedUser(res.user);
+      await _storage.saveSavedAccount(username: username, password: password);
 
       state = state.copyWith(
         status: AuthStatus.authenticated,

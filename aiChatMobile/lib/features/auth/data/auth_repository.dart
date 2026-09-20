@@ -84,10 +84,14 @@ class AuthRepository {
   }
 
   Future<UserModel> getUserProfile() async {
-    final response = await _client.dio.get(ApiConstants.userProfile);
+    final response = await _client.dio.get(ApiConstants.userAccount);
     final data = response.data;
     if (data is Map<String, dynamic> && data['code'] == 0 && data['data'] != null) {
-      return UserModel.fromJson(data['data'] as Map<String, dynamic>);
+      final payload = data['data'] as Map<String, dynamic>;
+      final userMap = payload['user'] is Map<String, dynamic>
+          ? payload['user'] as Map<String, dynamic>
+          : payload;
+      return UserModel.fromJson(userMap);
     }
     throw Exception(data['message'] ?? '获取用户信息失败');
   }

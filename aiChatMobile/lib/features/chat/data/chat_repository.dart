@@ -5,6 +5,7 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/network/sse_parser.dart';
 import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
+import '../domain/file_attachment_model.dart';
 
 /// 聊天领域仓储层
 class ChatRepository {
@@ -64,6 +65,26 @@ class ChatRepository {
         final m = item as Map<String, dynamic>;
         final createdAt = DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now();
 
+        // 映射关联附件
+        final rawAttachments = m['attachments'] as List? ?? [];
+        final attachments = rawAttachments.map((att) {
+          final a = att as Map<String, dynamic>;
+          final rawUrl = a['url'] as String? ?? '';
+          final fullUrl = rawUrl.startsWith('http')
+              ? rawUrl
+              : '${ApiConstants.baseUrl}$rawUrl';
+          return AttachmentItem(
+            id: a['id'] as String? ?? '',
+            serverFileId: a['id'] as String?,
+            name: a['name'] as String? ?? 'attachment',
+            sizeBytes: (a['sizeBytes'] as num?)?.toInt() ?? 0,
+            isImage: (a['type'] as String? ?? '').startsWith('image'),
+            mimeType: a['type'] as String?,
+            serverUrl: fullUrl,
+            status: AttachmentUploadStatus.success,
+          );
+        }).toList();
+
         // 映射用户端原消息
         if (m['userMessage'] != null && (m['userMessage'] as String).isNotEmpty) {
           result.add(
@@ -73,6 +94,7 @@ class ChatRepository {
               role: 'user',
               content: m['userMessage'] as String,
               createdAt: createdAt,
+              attachments: attachments,
             ),
           );
         }
@@ -101,6 +123,7 @@ class ChatRepository {
     required String model,
     required String clientRequestId,
     String? sessionId,
+    List<String>? fileIds,
     CancelToken? cancelToken,
   }) async {
     final response = await _client.dio.post<ResponseBody>(
@@ -110,6 +133,7 @@ class ChatRepository {
         'model': model,
         'clientRequestId': clientRequestId,
         if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
+        if (fileIds != null && fileIds.isNotEmpty) 'fileIds': fileIds,
       },
       options: Options(
         responseType: ResponseType.stream,

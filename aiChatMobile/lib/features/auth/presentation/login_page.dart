@@ -30,7 +30,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   void initState() {
     super.initState();
+    _loadSavedAccount();
     _refreshCaptcha();
+  }
+
+  Future<void> _loadSavedAccount() async {
+    try {
+      final storage = ref.read(secureStorageProvider);
+      final saved = await storage.getSavedAccount();
+      if (saved != null && mounted) {
+        setState(() {
+          if (_usernameController.text.isEmpty) {
+            _usernameController.text = saved['username'] ?? '';
+          }
+          if (_passwordController.text.isEmpty) {
+            _passwordController.text = saved['password'] ?? '';
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override

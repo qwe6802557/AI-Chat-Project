@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../../../shared/widgets/glass_card.dart';
 
+import '../../domain/file_attachment_model.dart';
+import 'chat_attachment_preview_bar.dart';
+
 /// 对话底部毛玻璃输入栏与操作条
 class ChatBottomInputBar extends StatelessWidget {
   final TextEditingController textController;
@@ -9,6 +12,10 @@ class ChatBottomInputBar extends StatelessWidget {
   final int creditsRemaining;
   final VoidCallback onSend;
   final VoidCallback onStop;
+  final List<AttachmentItem> attachments;
+  final VoidCallback? onPickImages;
+  final VoidCallback? onPickDocument;
+  final ValueChanged<String>? onRemoveAttachment;
 
   const ChatBottomInputBar({
     super.key,
@@ -17,6 +24,10 @@ class ChatBottomInputBar extends StatelessWidget {
     required this.creditsRemaining,
     required this.onSend,
     required this.onStop,
+    this.attachments = const [],
+    this.onPickImages,
+    this.onPickDocument,
+    this.onRemoveAttachment,
   });
 
   @override
@@ -30,6 +41,12 @@ class ChatBottomInputBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (attachments.isNotEmpty) ...[
+              ChatAttachmentPreviewBar(
+                attachments: attachments,
+                onRemove: onRemoveAttachment ?? (_) {},
+              ),
+            ],
             Row(
               children: [
                 Container(
@@ -60,10 +77,38 @@ class ChatBottomInputBar extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Icon(Icons.attach_file_rounded, size: 22.0, color: StitchTokens.outline),
-                const SizedBox(width: 8.0),
-                const Icon(Icons.image_outlined, size: 22.0, color: StitchTokens.outline),
-                const SizedBox(width: 8.0),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                    onTap: isGenerating ? null : onPickDocument,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.attach_file_rounded,
+                        size: 22.0,
+                        color: isGenerating ? StitchTokens.outlineVariant : StitchTokens.outline,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4.0),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                    onTap: isGenerating ? null : onPickImages,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.image_outlined,
+                        size: 22.0,
+                        color: isGenerating ? StitchTokens.outlineVariant : StitchTokens.outline,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6.0),
                 Expanded(
                   child: TextField(
                     controller: textController,

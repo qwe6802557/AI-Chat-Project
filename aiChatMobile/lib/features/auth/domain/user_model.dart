@@ -20,6 +20,15 @@ class UserCredits {
       reserved: (json['reserved'] as num?)?.toInt() ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'total': total,
+      'consumed': consumed,
+      'remaining': remaining,
+      'reserved': reserved,
+    };
+  }
 }
 
 /// 用户基础资料实体
@@ -51,5 +60,16 @@ class UserModel {
           ? UserCredits.fromJson(json['credits'] as Map<String, dynamic>)
           : const UserCredits(total: 0, consumed: 0, remaining: 0, reserved: 0),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'username': username,
+      'email': email,
+      'phone': phone,
+      'role': role,
+      'credits': credits.toJson(),
+    };
   }
 }

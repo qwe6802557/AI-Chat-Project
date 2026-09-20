@@ -10,7 +10,8 @@ class ApiConstants {
   static const String authRegister = '/auth/register';
   static const String authCaptcha = '/auth/captcha';
   static const String authLogout = '/auth/logout';
-  static const String userProfile = '/user/profile';
+  static const String userAccount = '/user/account';
+  static const String userProfile = '/user/account';
 
   // 对话与流式链路
   static const String chatCreate = '/chat/create';

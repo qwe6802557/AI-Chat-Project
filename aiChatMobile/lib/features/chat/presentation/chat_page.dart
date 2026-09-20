@@ -23,30 +23,54 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // 首次进入会话时立即吸底，并多帧校准 Markdown 动态排版尺寸
+    _scrollToBottom(animate: false, retries: 5);
+  }
+
+  @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
+  /// 智能吸底：包含多帧高度变化重试，彻底解决 Markdown/代码块等懒加载导致滚动停在半路的问题
+  void _scrollToBottom({bool animate = true, int retries = 3}) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (!mounted || !_scrollController.hasClients) return;
+      final maxExtent = _scrollController.position.maxScrollExtent;
+      if (animate) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          maxExtent,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
+      } else {
+        _scrollController.jumpTo(maxExtent);
+      }
+
+      // 如果因富文本排版导致列表高度扩展，下一帧持续校准直到真正到达最底部
+      if (retries > 0) {
+        Future.delayed(const Duration(milliseconds: 60), () {
+          if (mounted && _scrollController.hasClients) {
+            if (_scrollController.position.pixels < _scrollController.position.maxScrollExtent - 2) {
+              _scrollToBottom(animate: animate, retries: retries - 1);
+            }
+          }
+        });
       }
     });
   }
 
   void _handleSendMessage() {
     final text = _textController.text;
-    if (text.trim().isEmpty) return;
+    final pending = ref.read(chatProvider).pendingAttachments;
+    if (text.trim().isEmpty && pending.isEmpty) return;
     _textController.clear();
     ref.read(chatProvider.notifier).sendMessage(text);
-    _scrollToBottom();
+    _scrollToBottom(animate: true, retries: 4);
   }
 
   void _openModelSwitcher() {
@@ -93,11 +117,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
 
-    // 监听消息增量并吸底滚动
+    // 监听会话切换、消息数量变动或流式输出增量并吸底滚动
     ref.listen(chatProvider, (previous, next) {
-      if (previous?.messages.length != next.messages.length ||
-          previous?.messages.lastOrNull?.content != next.messages.lastOrNull?.content) {
-        _scrollToBottom();
+      final sessionChanged = previous?.activeSessionId != next.activeSessionId;
+      final lengthChanged = previous?.messages.length != next.messages.length;
+      final contentChanged = previous?.messages.lastOrNull?.content != next.messages.lastOrNull?.content;
+      final finishedGenerating = (previous?.isGenerating == true) && !next.isGenerating;
+
+      if (sessionChanged) {
+        // 会话切换时无动画快速吸底并多轮校准
+        _scrollToBottom(animate: false, retries: 5);
+      } else if (lengthChanged || contentChanged || finishedGenerating) {
+        _scrollToBottom(animate: true, retries: 3);
       }
     });
 
@@ -145,7 +176,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ? _buildEmptyState()
                   : ListView.builder(
                       controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      padding: const EdgeInsets.only(
+                        left: 16.0,
+                        right: 16.0,
+                        top: 4.0,
+                        bottom: 16.0,
+                      ),
                       itemCount: chatState.messages.length,
                       itemBuilder: (context, index) {
                         final msg = chatState.messages[index];
@@ -159,6 +195,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               textController: _textController,
               isGenerating: chatState.isGenerating,
               creditsRemaining: chatState.creditsRemaining,
+              attachments: chatState.pendingAttachments,
+              onPickImages: () => ref.read(chatProvider.notifier).pickAndUploadImages(),
+              onPickDocument: () => ref.read(chatProvider.notifier).pickDocument(),
+              onRemoveAttachment: (id) => ref.read(chatProvider.notifier).removeAttachment(id),
               onSend: _handleSendMessage,
               onStop: () => ref.read(chatProvider.notifier).stopGeneration(),
             ),

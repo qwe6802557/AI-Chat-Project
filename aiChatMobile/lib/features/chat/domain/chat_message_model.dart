@@ -1,3 +1,5 @@
+import 'file_attachment_model.dart';
+
 enum MessageStatus { sending, streaming, done, error }
 
 /// 对话消息领域实体
@@ -12,6 +14,7 @@ class ChatMessageModel {
   final MessageStatus status;
   final String? errorMessage;
   final DateTime createdAt;
+  final List<AttachmentItem> attachments;
 
   const ChatMessageModel({
     required this.id,
@@ -24,6 +27,7 @@ class ChatMessageModel {
     this.status = MessageStatus.done,
     this.errorMessage,
     required this.createdAt,
+    this.attachments = const [],
   });
 
   bool get isUser => role == 'user';
@@ -40,6 +44,7 @@ class ChatMessageModel {
     MessageStatus? status,
     String? errorMessage,
     DateTime? createdAt,
+    List<AttachmentItem>? attachments,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class ChatMessageModel {
       status: status ?? this.status,
       errorMessage: errorMessage ?? this.errorMessage,
       createdAt: createdAt ?? this.createdAt,
+      attachments: attachments ?? this.attachments,
     );
   }
 }
