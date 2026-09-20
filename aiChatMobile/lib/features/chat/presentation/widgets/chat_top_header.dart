@@ -29,48 +29,61 @@ class ChatTopHeader extends ConsumerWidget {
           Row(
             children: [
               Container(
-                width: 32.0,
-                height: 32.0,
+                width: 34.0,
+                height: 34.0,
                 decoration: BoxDecoration(
-                  color: StitchTokens.surfaceGlassDark,
+                  color: const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+                  border: Border.all(
+                    color: StitchTokens.primaryGlow.withValues(alpha: 0.25),
+                    width: 1.0,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: StitchTokens.primaryGlow,
-                  size: 18.0,
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  'assets/images/logo.png',
+                  fit: BoxFit.contain,
                 ),
               ),
-              const SizedBox(width: 8.0),
+              const SizedBox(width: 9.0),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
                       const Text(
-                        'AI Spark',
+                        'ERJ CHAT',
                         style: TextStyle(
-                          fontSize: 16.0,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
                           color: StitchTokens.onSurface,
                         ),
                       ),
-                      const SizedBox(width: 4.0),
+                      const SizedBox(width: 5.0),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: StitchTokens.surfaceContainer,
+                          color: StitchTokens.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                          border: Border.all(
+                            color: StitchTokens.primary.withValues(alpha: 0.3),
+                            width: 0.8,
+                          ),
                         ),
                         child: const Text(
-                          'PRO',
-                          style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w700),
+                          'AI',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: StitchTokens.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const Text(
-                    'Chat Workbench',
+                    '智能 AI 对话助手',
                     style: TextStyle(fontSize: 11.0, color: StitchTokens.onSurfaceVariant),
                   ),
                 ],

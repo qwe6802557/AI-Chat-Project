@@ -88,23 +88,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        children: const [
-          Icon(
-            Icons.auto_awesome_rounded,
-            size: 48.0,
-            color: StitchTokens.primaryGlowSubtle,
+        children: [
+          Container(
+            width: 56.0,
+            height: 56.0,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
+              border: Border.all(
+                color: StitchTokens.primaryGlow.withValues(alpha: 0.25),
+                width: 1.0,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+            ),
           ),
-          SizedBox(height: 16.0),
-          Text(
-            '向 AI Spark 开启新的探讨',
+          const SizedBox(height: 16.0),
+          const Text(
+            '向 ERJ Chat 开启新的探讨',
             style: TextStyle(
               fontSize: 15.0,
               fontWeight: FontWeight.w600,
               color: StitchTokens.onSurfaceVariant,
             ),
           ),
-          SizedBox(height: 4.0),
-          Text(
+          const SizedBox(height: 4.0),
+          const Text(
             '支持深度思考、多语言代码与 Markdown 输出',
             style: TextStyle(fontSize: 12.0, color: StitchTokens.outline),
           ),

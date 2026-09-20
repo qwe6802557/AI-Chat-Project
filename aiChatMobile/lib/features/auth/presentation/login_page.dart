@@ -154,33 +154,38 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 32.0),
               Center(
                 child: Container(
-                  width: 64.0,
-                  height: 64.0,
+                  width: 72.0,
+                  height: 72.0,
                   decoration: BoxDecoration(
-                    color: StitchTokens.surfaceGlassDark,
+                    color: const Color(0xFF0F172A),
                     borderRadius: BorderRadius.circular(StitchTokens.radiusXl),
                     boxShadow: [
                       BoxShadow(
-                        color: StitchTokens.primaryGlow.withValues(alpha: 0.25),
-                        blurRadius: 20.0,
+                        color: StitchTokens.primaryGlow.withValues(alpha: 0.35),
+                        blurRadius: 24.0,
+                        spreadRadius: 2.0,
                       ),
                     ],
+                    border: Border.all(
+                      color: StitchTokens.primaryGlow.withValues(alpha: 0.3),
+                      width: 1.2,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.auto_awesome_rounded,
-                    color: StitchTokens.primaryGlow,
-                    size: 32.0,
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
-              const SizedBox(height: 20.0),
+              const SizedBox(height: 18.0),
               const Center(
                 child: Text(
-                  'AI Spark',
+                  'ERJ CHAT',
                   style: TextStyle(
                     fontSize: 28.0,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
                     color: StitchTokens.onSurface,
                   ),
                 ),
@@ -188,10 +193,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               const SizedBox(height: 6.0),
               const Center(
                 child: Text(
-                  'Deep Tech Glass Intelligence',
+                  'AI 智能创作平台',
                   style: TextStyle(
                     fontSize: 13.0,
                     color: StitchTokens.onSurfaceVariant,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),

@@ -32,7 +32,7 @@ class AiChatMobileApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title: 'AI Spark - AI Chat',
+      title: 'ERJ Chat',
       debugShowCheckedModeBanner: false,
       theme: StitchTheme.lightTheme,
       routerConfig: router,
