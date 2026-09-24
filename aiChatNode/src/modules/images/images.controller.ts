@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   Query,
   Param,
@@ -74,5 +75,20 @@ export class ImagesController {
   ) {
     const filePath = await this.imagesService.getMediaFilePath(filename);
     return res.sendFile(filePath);
+  }
+
+  /**
+   * 删除生图记录及对应图片资源
+   */
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Delete(':id')
+  @ApiOperation({ summary: '删除指定的生图记录及对应本地图片资源' })
+  @ApiResponse({ status: 200, description: '删除成功' })
+  async deleteImageTask(
+    @CurrentUser('id') userId: string,
+    @Param('id') taskId: string,
+  ) {
+    return this.imagesService.deleteImageTask(userId, taskId);
   }
 }

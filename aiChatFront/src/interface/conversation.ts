@@ -72,6 +72,7 @@ export interface Message {
   usage?: MessageUsageStats
   charge?: MessageChargeSummary
   reasoning?: MessageReasoning
+  durationMs?: number | null
   attachments?: MessageAttachment[]
   error?: string
 }

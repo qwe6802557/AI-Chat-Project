@@ -24,3 +24,11 @@ export function getImageHistoryApi(page: number = 1, pageSize: number = 20) {
     params: { page, pageSize },
   })
 }
+
+/**
+ * 删除指定的生图历史记录及对应图片资源
+ */
+export function deleteImageTaskApi(taskId: string) {
+  return request.delete<never, ResponseData<{ success: boolean; message: string }>>(`/images/${taskId}`)
+}
+

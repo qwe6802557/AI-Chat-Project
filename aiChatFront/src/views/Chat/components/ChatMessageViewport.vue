@@ -91,7 +91,7 @@
               </button>
             </div>
             <div
-              v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage)"
+              v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage || message.durationMs)"
               class="assistant-meta"
             >
               <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
@@ -106,6 +106,9 @@
               </span>
               <span v-else-if="message.model" class="meta-chip">
                 Token 待统计
+              </span>
+              <span v-if="formatDuration(message.durationMs)" class="meta-chip">
+                {{ formatDuration(message.durationMs) }}
               </span>
             </div>
             <div v-if="message.role === 'user'" class="user-message-content">
@@ -356,6 +359,15 @@ watch(() => props.scrollSignal, (nextSignal, previousSignal) => {
   resetUserScrolling()
   scrollToBottom(true)
 })
+
+/**
+ * 格式化模型生成耗时（秒）
+ */
+const formatDuration = (ms?: number | null): string => {
+  if (typeof ms !== 'number' || ms <= 0) return ''
+  const sec = (ms / 1000).toFixed(1)
+  return `耗时 ${sec}s`
+}
 </script>
 
 <style scoped lang="scss">

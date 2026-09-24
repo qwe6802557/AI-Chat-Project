@@ -204,6 +204,7 @@ export function useStreamChat() {
     })
 
     loading.value = true
+    const requestStartTime = Date.now()
     const requestId = createId()
     activeRequestId.value = requestId
     activeStreamContext.value = { conversationId: sessionId, assistantMessageId: null }
@@ -361,6 +362,10 @@ export function useStreamChat() {
             const usage = chunk.usage
             const creditsSnapshot = chunk.creditsSnapshot
             const charge = chunk.charge
+            const durationMs =
+              typeof chunk.durationMs === 'number'
+                ? chunk.durationMs
+                : Math.max(0, Date.now() - requestStartTime)
             const reasoning =
               mapReasoning(chunk.reasoning, 'done') ||
               (latestReasoning
@@ -386,6 +391,7 @@ export function useStreamChat() {
                 usage: mapUsage(usage),
                 charge: mapCharge(charge),
                 reasoning,
+                durationMs,
               })
             } else {
               conversationStore.updateMessageContentById(
@@ -400,6 +406,7 @@ export function useStreamChat() {
                 usage: mapUsage(usage),
                 charge: mapCharge(charge),
                 reasoning,
+                durationMs,
               })
             }
 

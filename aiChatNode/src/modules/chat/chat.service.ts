@@ -282,6 +282,7 @@ export class ChatService {
     usage?: CompletionUsageStats | null;
     actualCredits?: number;
     attachmentIds: string[];
+    durationMs?: number | null;
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
       let targetSessionId = params.sessionId;
@@ -305,6 +306,7 @@ export class ChatService {
         reasoning: params.reasoning || null,
         model: params.model,
         usage: params.usage || null,
+        durationMs: params.durationMs || null,
       });
 
       const savedMessage = await chatMessageRepository.save(chatMessage);
@@ -581,6 +583,7 @@ export class ChatService {
       });
       reservedCharge = reserveResult.charge;
 
+      const requestStartTime = Date.now();
       const completion = await this.aiClientService.createChatCompletion(
         chargeModel.modelId,
         messages,
@@ -589,6 +592,7 @@ export class ChatService {
           maxTokens: createChatDto.maxTokens,
         },
       );
+      const durationMs = Date.now() - requestStartTime;
 
       const finalizedAssistant = this.finalizeAssistantPayload(completion);
       const assistantMessage = finalizedAssistant.content;
@@ -615,6 +619,7 @@ export class ChatService {
         usage: completion.usage,
         actualCredits,
         attachmentIds,
+        durationMs,
       });
 
       reservedSessionId = persistedSessionId;
@@ -627,6 +632,7 @@ export class ChatService {
         reasoning: finalizedAssistant.reasoning,
         model: completion.model,
         usage: completion.usage,
+        durationMs,
         charge,
         creditsSnapshot,
         createdAt: savedMessage.createdAt,
@@ -938,6 +944,7 @@ export class ChatService {
     model: string,
     usage?: CompletionUsageStats,
     attachmentIds?: string[],
+    durationMs?: number | null,
   ) {
     const chargeModel = await this.resolveChatModelConfig(model);
     const actualCredits = this.estimateActualChargeCredits(usage, chargeModel);
@@ -952,6 +959,7 @@ export class ChatService {
       usage: usage || null,
       actualCredits,
       attachmentIds: attachmentIds || [],
+      durationMs: durationMs || null,
     });
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);
