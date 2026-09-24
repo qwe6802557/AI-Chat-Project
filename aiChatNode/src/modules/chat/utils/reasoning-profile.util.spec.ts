@@ -44,6 +44,20 @@ describe('resolveModelReasoningProfile', () => {
       badgeLabel: '支持思考摘要',
     });
   });
+
+  it('marks grok-4.7 on Grok2API as raw reasoning capable', () => {
+    expect(
+      resolveModelReasoningProfile({
+        providerName: 'Grok2API',
+        modelId: 'grok-4.7',
+      }),
+    ).toMatchObject({
+      capability: 'raw',
+      strategy: 'provider_preferred',
+      integration: 'inline_tag',
+      badgeLabel: '支持思考过程',
+    });
+  });
 });
 
 describe('resolveReasoningPanelTitle', () => {

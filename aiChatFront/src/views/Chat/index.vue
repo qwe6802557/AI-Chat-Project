@@ -70,6 +70,7 @@ const PREFERRED_MODEL_ORDER: string[] = [
   'grok-4.3',
   'grok-4.5',
   'grok-4.6',
+  'grok-4.7',
   'grok-build-0.1',
   'grok-composer-2.5-fast',
 ]
