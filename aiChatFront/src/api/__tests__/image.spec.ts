@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import request from '@/utils/request'
-import { generateImageApi, getImageHistoryApi } from '../image'
+import { generateImageApi, getImageHistoryApi, deleteImageTaskApi } from '../image'
 
 vi.mock('@/utils/request', () => ({
   default: {
     post: vi.fn(),
     get: vi.fn(),
+    delete: vi.fn(),
   },
 }))
 
@@ -63,4 +64,14 @@ describe('Image API', () => {
       params: { page: 2, pageSize: 10 },
     })
   })
+
+  it('deleteImageTaskApi calls DELETE /images/:id', async () => {
+    const mockDelete = vi.mocked(request.delete)
+    mockDelete.mockResolvedValueOnce({ code: 0, data: { success: true }, message: 'ok' })
+
+    await deleteImageTaskApi('task-xyz-123')
+
+    expect(mockDelete).toHaveBeenCalledWith('/images/task-xyz-123')
+  })
 })
+

@@ -138,6 +138,7 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
         usage: mapUsage(msg.usage),
         charge: mapCharge(msg.charge),
         reasoning,
+        durationMs: msg.durationMs ?? undefined,
       })
     }
   })

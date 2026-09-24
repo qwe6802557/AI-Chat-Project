@@ -21,8 +21,10 @@
             :is-generating="isGenerating"
             :generating-prompt="generatingPrompt"
             :generating-elapsed-seconds="generatingElapsedSeconds"
+            :deleting-task-id="deletingTaskId"
             @reuse="handleReuseParams"
             @apply-prompt="handleApplyPrompt"
+            @delete="handleDeleteTask"
           />
         </main>
 
@@ -50,7 +52,7 @@ import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from '@/views/Chat/components/Sidebar.vue'
 import ImageGallery from './components/ImageGallery.vue'
 import ImageControlBar from './components/ImageControlBar.vue'
-import { generateImageApi, getImageHistoryApi } from '@/api/image'
+import { generateImageApi, getImageHistoryApi, deleteImageTaskApi } from '@/api/image'
 import { getCurrentUserAccount } from '@/api/user'
 import { useAuthStore, useConversationStore } from '@/stores'
 import type {
@@ -74,6 +76,7 @@ const isGenerating = ref(false)
 const generatingPrompt = ref('')
 const generatingElapsedSeconds = ref(0)
 const unitCreditCost = ref(100)
+const deletingTaskId = ref<string | null>(null)
 
 let timerId: ReturnType<typeof setInterval> | null = null
 let activeAbortController: AbortController | null = null
@@ -130,6 +133,24 @@ const loadHistory = async () => {
     }
   } catch {
     // 静默失败，保持空历史
+  }
+}
+
+/**
+ * 删除指定的生图历史记录及对应图片资源
+ */
+const handleDeleteTask = async (taskId: string) => {
+  deletingTaskId.value = taskId
+  try {
+    const res = await deleteImageTaskApi(taskId)
+    if (res.code === 200 || res.data?.success) {
+      tasks.value = tasks.value.filter((t) => t.id !== taskId)
+      message.success('生图记录及关联图片资源已删除')
+    }
+  } catch (error: any) {
+    message.error(error.message || '删除生图记录失败')
+  } finally {
+    deletingTaskId.value = null
   }
 }
 

@@ -176,6 +176,7 @@ describe('ChatController', () => {
         estimatedTotalCost: 0.03,
       },
       ['file-1'],
+      expect.any(Number),
     );
   });
 });

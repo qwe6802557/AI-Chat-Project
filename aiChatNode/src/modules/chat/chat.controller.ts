@@ -142,6 +142,7 @@ export class ChatController {
 
     createChatDto.userId = currentUserId;
 
+    const streamStartTime = Date.now();
     const abortController = new AbortController();
     let clientClosed = false;
     const onClose = () => {
@@ -297,6 +298,8 @@ export class ChatController {
         return;
       }
 
+      const durationMs = Date.now() - streamStartTime;
+
       if (finalFinishReason || fullMessage) {
         const finalizeResult = await this.chatService.saveStreamMessage(
           userId,
@@ -308,6 +311,7 @@ export class ChatController {
           modelId,
           finalUsage,
           attachmentIds,
+          durationMs,
         );
         chargeFinalized = true;
         finalCharge = finalizeResult.charge;
@@ -324,6 +328,7 @@ export class ChatController {
           reasoning: finalReasoning || null,
           model: modelId,
           usage: finalUsage,
+          durationMs,
           charge: finalCharge,
           creditsSnapshot: finalCreditsSnapshot,
         });

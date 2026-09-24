@@ -55,6 +55,7 @@ export interface BackendChatMessage {
   usage?: UsageStats | null
   charge?: ChatChargeSummary | null
   attachments?: BackendAttachment[]
+  durationMs?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -108,6 +109,7 @@ export interface ChatMessageResponse {
   reasoning?: BackendReasoning | null
   model: string
   usage?: UsageStats | null
+  durationMs?: number | null
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   createdAt: string
@@ -125,6 +127,7 @@ export interface StreamChunk {
   reasoning?: BackendReasoning | null
   model?: string
   usage?: UsageStats
+  durationMs?: number | null
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   error?: string

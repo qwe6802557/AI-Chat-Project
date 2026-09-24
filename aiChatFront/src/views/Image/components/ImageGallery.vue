@@ -103,6 +103,25 @@
                   <span>复用参数</span>
                 </button>
               </a-tooltip>
+
+              <a-popconfirm
+                title="确定要删除该条生图记录及生成的图片资源吗？此操作不可恢复。"
+                ok-text="删除"
+                cancel-text="取消"
+                ok-type="danger"
+                :disabled="props.deletingTaskId === task.id"
+                @confirm="emit('delete', task.id)"
+              >
+                <button
+                  type="button"
+                  class="action-text-btn danger-btn"
+                  :disabled="props.deletingTaskId === task.id"
+                >
+                  <LoadingOutlined v-if="props.deletingTaskId === task.id" />
+                  <DeleteOutlined v-else />
+                  <span>删除记录</span>
+                </button>
+              </a-popconfirm>
             </div>
           </div>
         </div>
@@ -141,6 +160,7 @@ import {
   CopyOutlined,
   RedoOutlined,
   EyeOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getApiBaseUrl } from '@/utils/common'
@@ -155,11 +175,13 @@ const props = defineProps<{
   isGenerating?: boolean
   generatingPrompt?: string
   generatingElapsedSeconds?: number
+  deletingTaskId?: string | null
 }>()
 
 const emit = defineEmits<{
   'reuse': [task: ImageGenerationTask]
   'apply-prompt': [prompt: string]
+  'delete': [taskId: string]
 }>()
 
 const samplePrompts = [
@@ -592,6 +614,18 @@ const handleDownload = async (url: string, prompt: string, index: number) => {
   color: #1890ff;
   border-color: #1890ff;
 }
+
+.action-text-btn.danger-btn:hover:not(:disabled) {
+  color: #ff4d4f;
+  border-color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.06);
+}
+
+.action-text-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 
 /* 空状态 */
 .empty-gallery {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -273,5 +274,60 @@ export class ImagesService {
     } catch {
       throw new NotFoundException('请求的图片不存在');
     }
+  }
+
+  /**
+   * 删除生图记录并物理清理关联的本地图片资源
+   */
+  async deleteImageTask(
+    userId: string,
+    taskId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const task = await this.imageRepo.findOne({
+      where: { id: taskId },
+    });
+
+    if (!task) {
+      throw new NotFoundException('未找到该生图记录');
+    }
+
+    const user = await this.userService.findById(userId);
+    const isAdmin = user?.role === 'admin';
+    if (task.userId !== userId && !isAdmin) {
+      throw new ForbiddenException('无权删除该生图记录');
+    }
+
+    const uploadDir = this.getUploadDir();
+
+    // 1. 根据任务存储的 imageUrls 物理删除磁盘图片
+    if (Array.isArray(task.imageUrls)) {
+      for (const url of task.imageUrls) {
+        const filename = path.basename(url);
+        if (/^[a-zA-Z0-9_-]+\.(png|jpg|jpeg|webp)$/.test(filename)) {
+          const filePath = path.join(uploadDir, filename);
+          await fs.unlink(filePath).catch(() => {});
+        }
+      }
+    }
+
+    // 2. 防御性扫描清理以当前 taskId 开头的残留切片或文件
+    try {
+      const files = await fs.readdir(uploadDir);
+      for (const file of files) {
+        if (file.startsWith(`${taskId}_`)) {
+          await fs.unlink(path.join(uploadDir, file)).catch(() => {});
+        }
+      }
+    } catch {
+      // 忽略目录不存在或权限问题
+    }
+
+    // 3. 从数据库中彻底删除实体
+    await this.imageRepo.remove(task);
+
+    return {
+      success: true,
+      message: '生图记录及关联图片资源已成功删除',
+    };
   }
 }

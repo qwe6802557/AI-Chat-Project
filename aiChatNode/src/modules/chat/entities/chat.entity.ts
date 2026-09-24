@@ -98,6 +98,12 @@ export class ChatMessage {
   } | null;
 
   /**
+   * 响应总耗时（毫秒）
+   */
+  @Column({ type: 'int', nullable: true })
+  durationMs?: number | null;
+
+  /**
    * 创建时间
    */
   @CreateDateColumn()

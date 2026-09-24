@@ -131,4 +131,44 @@ describe('ImagesService', () => {
       }),
     );
   });
+
+  describe('deleteImageTask', () => {
+    it('任务不存在时应抛出 NotFoundException', async () => {
+      imageRepoMock.findOne = jest.fn().mockResolvedValue(null);
+
+      await expect(
+        service.deleteImageTask('user-1', 'non-existent-task'),
+      ).rejects.toThrow('未找到该生图记录');
+    });
+
+    it('非所属人且非管理员尝试删除应抛出 ForbiddenException', async () => {
+      imageRepoMock.findOne = jest.fn().mockResolvedValue({
+        id: 'task-123',
+        userId: 'other-user',
+        imageUrls: ['/images/media/task-123_0.png'],
+      } as ImageGeneration);
+      userServiceMock.findById = jest.fn().mockResolvedValue({
+        id: 'user-1',
+        role: 'user',
+      } as any);
+
+      await expect(
+        service.deleteImageTask('user-1', 'task-123'),
+      ).rejects.toThrow('无权删除该生图记录');
+    });
+
+    it('所属人删除成功应清理实体并返回成功信息', async () => {
+      const mockTask = {
+        id: 'task-123',
+        userId: 'user-1',
+        imageUrls: ['/images/media/task-123_0.png'],
+      } as ImageGeneration;
+      imageRepoMock.findOne = jest.fn().mockResolvedValue(mockTask);
+      imageRepoMock.remove = jest.fn().mockResolvedValue(mockTask);
+
+      const res = await service.deleteImageTask('user-1', 'task-123');
+      expect(imageRepoMock.remove).toHaveBeenCalledWith(mockTask);
+      expect(res.success).toBe(true);
+    });
+  });
 });

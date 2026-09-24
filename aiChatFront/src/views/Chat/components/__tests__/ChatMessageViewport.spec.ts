@@ -132,6 +132,7 @@ describe('ChatMessageViewport', () => {
             content: 'hello',
             timestamp: Date.now(),
             model: 'GLM-5',
+            durationMs: 8520,
             usage: {
               promptTokens: 10,
               completionTokens: 5,
@@ -160,6 +161,7 @@ describe('ChatMessageViewport', () => {
     expect(wrapper.text()).toContain('输入 10 tok')
     expect(wrapper.text()).toContain('输出 5 tok')
     expect(wrapper.text()).toContain('总计 15 tok')
+    expect(wrapper.text()).toContain('耗时 8.5s')
     // 估算成本 chip 已暂时隐藏
     expect(wrapper.text()).not.toContain('估算')
     expect(wrapper.text()).not.toContain('扣费 100 积分')
