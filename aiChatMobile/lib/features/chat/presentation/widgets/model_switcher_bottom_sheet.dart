@@ -73,6 +73,17 @@ const List<ModelInfo> kAvailableChatModels = [
     icon: Icons.auto_awesome_rounded,
   ),
   ModelInfo(
+    id: 'grok-4.7',
+    name: 'grok-4.7',
+    category: '深度推理 (Reasoning)',
+    tag: '超阶旗舰',
+    description: '本机 Grok2API 4.7 深度推理旗舰模型，具备超强复杂推导与多任务思维链',
+    latency: '110ms',
+    contextWindow: '128k',
+    cost: 10,
+    icon: Icons.psychology_alt_rounded,
+  ),
+  ModelInfo(
     id: 'grok-build-0.1',
     name: 'grok-build-0.1',
     category: '代码极速',

@@ -3,7 +3,7 @@ import 'package:ai_chat_mobile/features/chat/presentation/widgets/model_switcher
 
 void main() {
   group('ModelSwitcher Configuration', () {
-    test('模型列表完整包含 6 个对话模型、排序与 PC 端一致并严格排除纯生图模型', () {
+    test('模型列表完整包含 7 个对话模型、排序与 PC 端一致并严格排除纯生图模型', () {
       final modelIds = kAvailableChatModels.map((m) => m.id).toList();
 
       // 与 PC 端 PREFERRED_MODEL_ORDER 严格一致的顺序
@@ -12,6 +12,7 @@ void main() {
         'grok-4.3',
         'grok-4.5',
         'grok-4.6',
+        'grok-4.7',
         'grok-build-0.1',
         'grok-composer-2.5-fast',
       ]);

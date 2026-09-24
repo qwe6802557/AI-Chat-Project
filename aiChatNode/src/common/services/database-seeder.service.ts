@@ -187,17 +187,24 @@ export class DatabaseSeederService implements OnModuleInit {
         isActive: true,
       },
       {
+        modelId: 'grok-4.7',
+        modelName: 'Grok 4.7',
+        description: '本机 Grok2API 4.7 深度推理旗舰模型',
+        sortOrder: 5,
+        isActive: true,
+      },
+      {
         modelId: 'grok-build-0.1',
         modelName: 'Grok Build 0.1',
         description: '本机 Grok2API Build 模型',
-        sortOrder: 5,
+        sortOrder: 6,
         isActive: true,
       },
       {
         modelId: 'grok-composer-2.5-fast',
         modelName: 'Grok Composer 2.5 Fast',
         description: '本机 Grok2API 代码与创作快速模型',
-        sortOrder: 6,
+        sortOrder: 7,
         isActive: true,
       },
     ];

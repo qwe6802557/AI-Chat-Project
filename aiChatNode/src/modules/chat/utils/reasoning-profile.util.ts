@@ -24,6 +24,7 @@ const RAW_REASONING_MODEL_PATTERNS = [
   /reasoner/i,
   /thinking/i,
   /grok-build/i,
+  /^grok-4\.[67]/i,
 ];
 
 const SUMMARY_REASONING_MODEL_PATTERNS = [/^gpt-5/i, /^o3/i, /^o4/i];
