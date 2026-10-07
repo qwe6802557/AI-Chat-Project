@@ -8,6 +8,8 @@ import { AIClientService } from './services/ai-client.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from './adapters/grok2api.adapter';
+import { ZhipuAdapter } from './adapters/zhipu.adapter';
+import { SiliconFlowAdapter } from './adapters/siliconflow.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -34,6 +36,8 @@ import { FilesModule } from '../files/files.module';
     ClaudeAdapter, // Claude 适配器
     ZaiwenAdapter, // 在问适配器
     Grok2APIAdapter, // Grok2API 本地池适配器（OpenAI 兼容）
+    ZhipuAdapter, // 智谱 AI 适配器
+    SiliconFlowAdapter, // 硅基流动适配器
   ],
   exports: [ChatService, ChatSessionService, AIClientService],
 })
