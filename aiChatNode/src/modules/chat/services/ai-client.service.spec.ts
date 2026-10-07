@@ -6,6 +6,8 @@ import type { ConfigService } from '@nestjs/config';
 import type { ClaudeAdapter } from '../adapters/claude.adapter';
 import type { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import type { Grok2APIAdapter } from '../adapters/grok2api.adapter';
+import type { ZhipuAdapter } from '../adapters/zhipu.adapter';
+import type { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
 import type { CompletionChunk } from '../types/completion.types';
 import { AIClientService } from './ai-client.service';
 
@@ -76,6 +78,34 @@ describe('AIClientService', () => {
     createStreamChatCompletion: grok2apiCreateStreamChatCompletionMock,
     healthCheck: grok2apiHealthCheckMock,
   };
+  const zhipuAdapter: Pick<
+    ZhipuAdapter,
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
+  > = {
+    providerName: 'Zhipu',
+    isConfigured: true,
+    createChatCompletion: jest.fn(),
+    createStreamChatCompletion: jest.fn(),
+    healthCheck: jest.fn(),
+  };
+  const siliconFlowAdapter: Pick<
+    SiliconFlowAdapter,
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
+  > = {
+    providerName: 'SiliconFlow',
+    isConfigured: true,
+    createChatCompletion: jest.fn(),
+    createStreamChatCompletion: jest.fn(),
+    healthCheck: jest.fn(),
+  };
   const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
   const aiModelService: Pick<AiModelService, 'findByModelId'> = {
     findByModelId: findByModelIdMock,
@@ -110,6 +140,8 @@ describe('AIClientService', () => {
       claudeAdapter as ClaudeAdapter,
       zaiwenAdapter as ZaiwenAdapter,
       grok2apiAdapter as Grok2APIAdapter,
+      zhipuAdapter as ZhipuAdapter,
+      siliconFlowAdapter as SiliconFlowAdapter,
       aiModelService as AiModelService,
       aiProviderService as AiProviderService,
       redisService as RedisService,

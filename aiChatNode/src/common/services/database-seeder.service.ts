@@ -263,6 +263,95 @@ export class DatabaseSeederService implements OnModuleInit {
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
 
+    // ===== Zhipu (智谱 AI) 供应商及模型种子 =====
+    const zhipuProviderResult = await this.ensureProvider({
+      name: 'Zhipu',
+      description: '智谱 AI 大模型开放平台 (BigModel)',
+      website: 'https://open.bigmodel.cn',
+    });
+    summary[
+      zhipuProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    ] += 1;
+
+    const ZHIPU_CHAT_MODELS = [
+      {
+        modelId: 'glm-4-flash',
+        modelName: 'GLM-4-Flash',
+        description: '智谱 AI 官方永久免费通用大模型，毫秒级快速响应与日常通用问答',
+        sortOrder: 8,
+        isActive: true,
+      },
+    ];
+
+    for (const model of ZHIPU_CHAT_MODELS) {
+      const result = await this.ensureModel({
+        providerId: zhipuProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 128000,
+        maxOutput: 4096,
+        availability: 99.9,
+        tps: 60,
+        description: model.description,
+        billingMode: DEFAULT_CHAT_BILLING_MODE,
+        creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: 'chat',
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
+    // ===== SiliconFlow (硅基流动) 供应商及模型种子 =====
+    const siliconFlowProviderResult = await this.ensureProvider({
+      name: 'SiliconFlow',
+      description: '硅基流动 SiliconCloud 开源模型服务',
+      website: 'https://cloud.siliconflow.cn',
+    });
+    summary[
+      siliconFlowProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    ] += 1;
+
+    const SILICONFLOW_CHAT_MODELS = [
+      {
+        modelId: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
+        modelName: 'DeepSeek-R1-Distill (7B)',
+        description: '硅基流动 DeepSeek-R1 蒸馏模型，具备强大深度思考与思维链推导能力',
+        sortOrder: 9,
+        isActive: true,
+      },
+      {
+        modelId: 'Qwen/Qwen2.5-Coder-7B-Instruct',
+        modelName: 'Qwen2.5-Coder (7B)',
+        description: '硅基流动通义千问代码特化模型，专注算法编写、架构设计与工程调试',
+        sortOrder: 10,
+        isActive: true,
+      },
+    ];
+
+    for (const model of SILICONFLOW_CHAT_MODELS) {
+      const result = await this.ensureModel({
+        providerId: siliconFlowProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 128000,
+        maxOutput: 4096,
+        availability: 99.9,
+        tps: 50,
+        description: model.description,
+        billingMode: DEFAULT_CHAT_BILLING_MODE,
+        creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: 'chat',
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
     // 同步数据库中所有已存在的聊天模型为固定 10 积分按次计费
     try {
       const allModels = await this.aiModelService.findAll();

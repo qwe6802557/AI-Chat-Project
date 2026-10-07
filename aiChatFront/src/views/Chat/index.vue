@@ -67,6 +67,9 @@ interface ChatModelOption {
 
 const PREFERRED_MODEL_ORDER: string[] = [
   'grok-chat-fast',
+  'glm-4-flash',
+  'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
+  'Qwen/Qwen2.5-Coder-7B-Instruct',
   'grok-4.3',
   'grok-4.5',
   'grok-4.6',
@@ -260,7 +263,7 @@ const loadModelOptions = async () => {
         return a.modelId.localeCompare(b.modelId, 'en')
       })
       .map((model) => ({
-        label: model.modelId,
+        label: model.modelName || model.modelId,
         value: model.modelId,
         inputPrice: Number(model.inputPrice ?? 0),
         outputPrice: Number(model.outputPrice ?? 0),

@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { ClaudeAdapter } from '../adapters/claude.adapter';
 import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from '../adapters/grok2api.adapter';
+import { ZhipuAdapter } from '../adapters/zhipu.adapter';
+import { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModelService } from '../../ai-provider/ai-model.service';
 import { AiProviderService } from '../../ai-provider/ai-provider.service';
@@ -53,6 +55,8 @@ export class AIClientService {
     private readonly claudeAdapter: ClaudeAdapter,
     private readonly zaiwenAdapter: ZaiwenAdapter,
     private readonly grok2apiAdapter: Grok2APIAdapter,
+    private readonly zhipuAdapter: ZhipuAdapter,
+    private readonly siliconFlowAdapter: SiliconFlowAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
@@ -340,6 +344,21 @@ export class AIClientService {
       normalizedProviderName.includes('grok')
     ) {
       return this.grok2apiAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('zhipu') ||
+      normalizedProviderName.includes('智谱')
+    ) {
+      return this.zhipuAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('siliconflow') ||
+      normalizedProviderName.includes('silicon') ||
+      normalizedProviderName.includes('硅基流动')
+    ) {
+      return this.siliconFlowAdapter;
     }
 
     throw new BadRequestException(`暂不支持供应商 ${providerName}`);

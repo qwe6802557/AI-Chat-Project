@@ -58,6 +58,39 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message = message[0] || '服务器内部错误';
     }
 
+    // OpenAI 兼容网关 (/v1/...) 遵循原生 OpenAI 异常规范：保持真实 HTTP 状态码与 error 对象结构
+    if (request?.url?.startsWith('/v1')) {
+      let openAiMessage = typeof message === 'string' ? message : 'Internal server error';
+      let errorType = status === HttpStatus.UNAUTHORIZED ? 'invalid_request_error' : 'api_error';
+      let errorCode = status === HttpStatus.UNAUTHORIZED ? 'invalid_api_key' : 'internal_error';
+
+      if (exception instanceof HttpException) {
+        const exceptionResponse = exception.getResponse();
+        if (isRecord(exceptionResponse) && isRecord(exceptionResponse.error)) {
+          const errObj = exceptionResponse.error;
+          openAiMessage = typeof errObj.message === 'string' ? errObj.message : openAiMessage;
+          errorType = typeof errObj.type === 'string' ? errObj.type : errorType;
+          errorCode = typeof errObj.code === 'string' ? errObj.code : errorCode;
+        } else if (isRecord(exceptionResponse) && typeof exceptionResponse.message === 'string') {
+          openAiMessage = exceptionResponse.message;
+        }
+      }
+
+      this.logger.error(
+        `[OpenAI Gateway Error] ${request.method} ${request.url} - ${status} - ${openAiMessage}`,
+        exception instanceof Error ? exception.stack : '',
+      );
+
+      return response.status(status).json({
+        error: {
+          message: openAiMessage,
+          type: errorType,
+          param: null,
+          code: errorCode,
+        },
+      });
+    }
+
     // 记录错误日志
     this.logger.error(
       `${request.method} ${request.url} - ${status} - ${message}`,

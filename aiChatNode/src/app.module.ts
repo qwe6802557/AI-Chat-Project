@@ -11,6 +11,7 @@ import { FilesModule } from './modules/files/files.module';
 import { CreditsModule } from './modules/credits/credits.module';
 import { ImagesModule } from './modules/images/images.module';
 import { VoiceModule } from './modules/voice/voice.module';
+import { OpenaiGatewayModule } from './modules/openai-gateway/openai-gateway.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import databaseConfig from './config/database.config';
@@ -49,6 +50,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     AiProviderModule,
     ImagesModule,
     VoiceModule,
+    OpenaiGatewayModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

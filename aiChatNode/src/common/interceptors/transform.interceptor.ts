@@ -17,9 +17,16 @@ export class TransformInterceptor<T>
   implements NestInterceptor<T, ResponseDto<T>>
 {
   intercept(
-    _context: ExecutionContext,
+    context: ExecutionContext,
     next: CallHandler,
-  ): Observable<ResponseDto<T>> {
+  ): Observable<any> {
+    const http = context.switchToHttp();
+    const req = http.getRequest();
+    // OpenAI 兼容网关 (/v1/...) 保持原生标准数据结构，不进行 ResponseDto 封装
+    if (req?.url?.startsWith('/v1')) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
       map((data: T | ResponseDto<T>): ResponseDto<T> => {
         // 如果返回的数据已经是 ResponseDto 格式 直接返回

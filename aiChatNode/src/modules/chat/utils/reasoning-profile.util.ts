@@ -25,6 +25,9 @@ const RAW_REASONING_MODEL_PATTERNS = [
   /thinking/i,
   /grok-build/i,
   /^grok-4\.[67]/i,
+  /deepseek-r1/i,
+  /-r1-/i,
+  /-r1$/i,
 ];
 
 const SUMMARY_REASONING_MODEL_PATTERNS = [/^gpt-5/i, /^o3/i, /^o4/i];
@@ -102,6 +105,55 @@ export const resolveModelReasoningProfile = (params: {
   }
 
   if (normalizedProviderName.includes('claude')) {
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
+    };
+  }
+
+  if (
+    normalizedProviderName.includes('siliconflow') ||
+    normalizedProviderName.includes('silicon') ||
+    normalizedProviderName.includes('硅基流动')
+  ) {
+    if (matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS)) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'inline_tag',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
+    };
+  }
+
+  if (
+    normalizedProviderName.includes('zhipu') ||
+    normalizedProviderName.includes('智谱')
+  ) {
+    if (matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS)) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'inline_tag',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
     return {
       capability: 'none',
       strategy: 'summary_preferred',

@@ -54,12 +54,16 @@ class ModelInfoCard extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            model.name,
-                            style: TextStyle(
-                              fontSize: 15.0,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                              color: StitchTokens.onSurface,
+                          Flexible(
+                            child: Text(
+                              model.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15.0,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                color: StitchTokens.onSurface,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 6.0),
