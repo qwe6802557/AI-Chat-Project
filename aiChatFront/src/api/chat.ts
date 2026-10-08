@@ -147,6 +147,7 @@ export function sendStreamMessage(
       let latestCreditsSnapshot: StreamChunk['creditsSnapshot'] | undefined
       let latestCharge: StreamChunk['charge'] | undefined
       let latestReasoning: StreamChunk['reasoning'] | undefined
+      let latestSources: StreamChunk['sources'] | undefined
 
       while (true) {
         if (abortController.signal.aborted) {
@@ -196,6 +197,10 @@ export function sendStreamMessage(
                 latestReasoning = chunk.reasoning
               }
 
+              if (chunk.sources) {
+                latestSources = chunk.sources
+              }
+
               if (chunk.type === 'answer_delta' && chunk.delta) {
                 fullMessage += chunk.delta
               }
@@ -212,6 +217,7 @@ export function sendStreamMessage(
                   charge: chunk.charge || latestCharge,
                   creditsSnapshot: chunk.creditsSnapshot || latestCreditsSnapshot,
                   reasoning: chunk.reasoning || latestReasoning,
+                  sources: chunk.sources || latestSources,
                 })
                 return
               }
@@ -232,6 +238,7 @@ export function sendStreamMessage(
           creditsSnapshot: latestCreditsSnapshot,
           charge: latestCharge,
           reasoning: latestReasoning,
+          sources: latestSources,
           finish_reason: null,
         })
       }

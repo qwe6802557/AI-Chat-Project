@@ -139,6 +139,7 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
         charge: mapCharge(msg.charge),
         reasoning,
         durationMs: msg.durationMs ?? undefined,
+        sources: msg.sources || undefined,
       })
     }
   })
@@ -209,6 +210,8 @@ export const useConversationStore = defineStore('conversation', () => {
               usage: m.usage,
               charge: m.charge,
               reasoning: m.reasoning,
+              durationMs: m.durationMs,
+              sources: m.sources,
               attachments: m.attachments?.map((att) => ({
                 type: att.type,
                 name: att.name,

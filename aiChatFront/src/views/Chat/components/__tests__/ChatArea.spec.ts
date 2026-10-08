@@ -46,6 +46,11 @@ const globalStubs = {
   FilePreview: {
     template: '<div class="file-preview-stub" />',
   },
+  WebSearchToggle: {
+    props: ['enabled', 'disabled'],
+    emits: ['update:enabled'],
+    template: '<button class="web-search-toggle-stub" :disabled="disabled" @click="$emit(\'update:enabled\', !enabled)">联网搜索</button>',
+  },
   'a-textarea': {
     props: ['value'],
     emits: ['update:value', 'keydown', 'paste'],
@@ -91,7 +96,7 @@ describe('ChatArea', () => {
     })
 
     await wrapper.find('textarea').setValue('你好')
-    await wrapper.findAll('button').at(-1)!.trigger('click')
+    await wrapper.find('button.submit-btn').trigger('click')
 
     const sendEvent = wrapper.emitted('send-message')
     expect(sendEvent?.[0]).toEqual(['你好', undefined])
@@ -123,7 +128,7 @@ describe('ChatArea', () => {
       },
     })
 
-    await wrapper.findAll('button').at(-1)!.trigger('click')
+    await wrapper.find('button.submit-btn').trigger('click')
 
     const sendEvent = wrapper.emitted('send-message')
     expect(sendEvent?.[0]?.[0]).toBe('')
@@ -179,7 +184,28 @@ describe('ChatArea', () => {
 
     await wrapper.find('textarea').setValue('你好')
 
-    expect(wrapper.findAll('button').at(-1)?.attributes('disabled')).toBeDefined()
+    expect(wrapper.find('button.submit-btn').attributes('disabled')).toBeDefined()
+  })
+
+  it('emits webSearch option when WebSearchToggle is enabled', async () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: false,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    await wrapper.find('textarea').setValue('检索最新消息')
+    await wrapper.find('.web-search-toggle-stub').trigger('click')
+    await wrapper.find('button.submit-btn').trigger('click')
+
+    const sendEvent = wrapper.emitted('send-message')
+    expect(sendEvent?.[0]).toEqual(['检索最新消息', { webSearch: true }])
   })
 
   it('renders stop button when loading and emits stop-generation on click', async () => {

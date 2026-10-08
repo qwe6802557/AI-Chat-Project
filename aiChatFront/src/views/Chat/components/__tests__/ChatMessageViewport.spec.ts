@@ -217,4 +217,31 @@ describe('ChatMessageViewport', () => {
     await wrapper.find('.error-retry-btn').trigger('click')
     expect(wrapper.emitted('retry-message')?.[0]).toEqual(['assistant-error-1'])
   })
+
+  it('renders SearchSourceGallery when assistant message has sources or searching status', () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [
+          {
+            id: 'assistant-sources-1',
+            role: 'assistant',
+            content: '根据检索结果...',
+            timestamp: Date.now(),
+            streaming: false,
+            sources: [
+              { id: 1, title: '测试来源', url: 'https://test.com', snippet: '内容' },
+            ],
+            searchStatus: 'done',
+          },
+        ],
+        loading: false,
+      },
+      shallow: true,
+      global: {
+        stubs: ['a-avatar', 'a-image', 'a-image-preview-group', 'MarkdownMessage', 'ChatReasoningPanel', 'SearchSourceGallery'],
+      },
+    })
+
+    expect(wrapper.findComponent({ name: 'SearchSourceGallery' }).exists()).toBe(true)
+  })
 })

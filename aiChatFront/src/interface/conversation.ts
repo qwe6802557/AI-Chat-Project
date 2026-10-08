@@ -1,3 +1,5 @@
+import type { SearchSource } from './chat'
+
 export type AttachmentType = 'image' | 'pdf' | 'document'
 
 export interface MessageUsageStats {
@@ -73,6 +75,9 @@ export interface Message {
   charge?: MessageChargeSummary
   reasoning?: MessageReasoning
   durationMs?: number | null
+  sources?: SearchSource[]
+  searchStatus?: 'searching' | 'done'
+  searchQuery?: string
   attachments?: MessageAttachment[]
   error?: string
 }

@@ -10,10 +10,15 @@ import { ChatSessionService } from './chat-session.service';
 import { FilesService } from '../files/files.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
+import { WebSearchService } from '../web-search/web-search.service';
 import { DEFAULT_CHAT_BILLING_MODE, DEFAULT_CHAT_MODEL_CREDIT_COST } from '../credits/types/credits.types';
 
 describe('ChatService - Billing & Credits', () => {
   let service: ChatService;
+
+  const mockWebSearchService = {
+    search: jest.fn().mockResolvedValue({ query: '', sources: [], contextPrompt: '' }),
+  };
 
   const mockAiClientService = {
     createChatCompletion: jest.fn(),
@@ -80,6 +85,7 @@ describe('ChatService - Billing & Credits', () => {
         { provide: FilesService, useValue: mockFilesService },
         { provide: AiModelService, useValue: mockAiModelService },
         { provide: CreditsService, useValue: mockCreditsService },
+        { provide: WebSearchService, useValue: mockWebSearchService },
       ],
     }).compile();
 

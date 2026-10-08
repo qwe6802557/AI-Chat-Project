@@ -95,6 +95,11 @@
               <span>上传图片</span>
             </div>
 
+            <WebSearchToggle
+              v-model:enabled="webSearchEnabled"
+              :disabled="loading"
+            />
+
             <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
               {{ selectedModelReasoningBadgeLabel }}
             </span>
@@ -131,13 +136,13 @@ import {
   CloudUploadOutlined,
   PictureOutlined,
   ArrowUpOutlined,
-  LoadingOutlined,
   ThunderboltOutlined,
   ThunderboltFilled,
 } from '@ant-design/icons-vue'
 import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
+import WebSearchToggle from './WebSearchToggle.vue'
 import type { Message } from '@/interface/conversation'
 
 defineOptions({
@@ -187,6 +192,7 @@ const emit = defineEmits<{
     options?: {
       fileIds?: string[]
       serverFiles?: { id: string; url: string; name: string; type: string }[]
+      webSearch?: boolean
     }
   ]
   'stop-generation': []
@@ -194,6 +200,7 @@ const emit = defineEmits<{
 }>()
 
 const inputMessage = ref('')
+const webSearchEnabled = ref(false)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const scrollSignal = ref(0)
 
@@ -239,7 +246,11 @@ const handleModelChange = (value: string) => {
 }
 
 const handlePromptClick = (prompt: string) => {
-  emit('send-message', prompt)
+  if (webSearchEnabled.value) {
+    emit('send-message', prompt, { webSearch: true })
+  } else {
+    emit('send-message', prompt)
+  }
 }
 
 const handleButtonClick = () => {
@@ -271,6 +282,7 @@ const handleSend = () => {
   let sendOptions: {
     fileIds?: string[]
     serverFiles?: { id: string; url: string; name: string; type: string }[]
+    webSearch?: boolean
   } | undefined
 
   if (hasFiles.value) {
@@ -282,6 +294,13 @@ const handleSend = () => {
         fileIds,
         serverFiles,
       }
+    }
+  }
+
+  if (webSearchEnabled.value) {
+    sendOptions = {
+      ...(sendOptions || {}),
+      webSearch: true,
     }
   }
 
