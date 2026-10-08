@@ -35,6 +35,8 @@ import {
   extractAssistantContent,
   type ExtractedAssistantReasoning,
 } from './utils/assistant-content.util';
+import { WebSearchService } from '../web-search/web-search.service';
+import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
 
 export interface SessionMessageAttachmentDto {
   id: string;
@@ -56,11 +58,13 @@ export type SessionMessageDto = Pick<
   | 'model'
   | 'usage'
   | 'reasoning'
+  | 'sources'
   | 'createdAt'
   | 'updatedAt'
 > & {
   attachments: SessionMessageAttachmentDto[];
   charge?: ChatCreditChargeSummary | null;
+  sources?: SearchSource[] | null;
 };
 
 interface PersistedChatMessageResult {
@@ -113,6 +117,7 @@ export class ChatService {
     private readonly filesService: FilesService,
     private readonly aiModelService: AiModelService,
     private readonly creditsService: CreditsService,
+    private readonly webSearchService: WebSearchService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -283,6 +288,7 @@ export class ChatService {
     actualCredits?: number;
     attachmentIds: string[];
     durationMs?: number | null;
+    sources?: SearchSource[] | null;
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
       let targetSessionId = params.sessionId;
@@ -307,6 +313,7 @@ export class ChatService {
         model: params.model,
         usage: params.usage || null,
         durationMs: params.durationMs || null,
+        sources: params.sources || null,
       });
 
       const savedMessage = await chatMessageRepository.save(chatMessage);
@@ -870,6 +877,17 @@ export class ChatService {
       content: userContent,
     });
 
+    let searchResult: WebSearchResult | null = null;
+    if (createChatDto.webSearch) {
+      searchResult = await this.webSearchService.search(createChatDto.message);
+      if (searchResult.sources.length > 0) {
+        messages.push({
+          role: 'system',
+          content: searchResult.contextPrompt,
+        });
+      }
+    }
+
     // 记录文件信息
     if (fileDataForAI.length > 0) {
       this.logger.log(
@@ -913,6 +931,7 @@ export class ChatService {
         modelId: chargeModel.modelId,
         clientRequestId,
         attachmentIds,
+        searchResult,
       };
     } catch (error) {
       if (hasReservedCharge) {
@@ -945,6 +964,7 @@ export class ChatService {
     usage?: CompletionUsageStats,
     attachmentIds?: string[],
     durationMs?: number | null,
+    sources?: SearchSource[] | null,
   ) {
     const chargeModel = await this.resolveChatModelConfig(model);
     const actualCredits = this.estimateActualChargeCredits(usage, chargeModel);
@@ -960,6 +980,7 @@ export class ChatService {
       actualCredits,
       attachmentIds: attachmentIds || [],
       durationMs: durationMs || null,
+      sources: sources || null,
     });
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);

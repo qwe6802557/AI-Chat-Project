@@ -58,6 +58,12 @@
             </a-avatar>
           </div>
           <div class="message-content">
+            <SearchSourceGallery
+              v-if="message.role === 'assistant' && (message.sources?.length || message.searchStatus === 'searching')"
+              :sources="message.sources || []"
+              :search-status="message.searchStatus"
+              :search-query="message.searchQuery"
+            />
             <ChatReasoningPanel
               v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
               :message-id="message.id"
@@ -193,6 +199,7 @@ import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import MarkdownMessage from './MarkdownMessage.vue'
 import ChatReasoningPanel from './ChatReasoningPanel.vue'
+import SearchSourceGallery from './SearchSourceGallery.vue'
 import type { Message } from '@/interface/conversation'
 
 defineOptions({

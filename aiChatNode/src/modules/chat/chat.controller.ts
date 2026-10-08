@@ -181,6 +181,25 @@ export class ChatController {
       attachmentIds = streamContext.attachmentIds;
       hasActiveCharge = true;
 
+      if (streamContext.searchResult && !res.writableEnded) {
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'search_start',
+            sessionId,
+            query: streamContext.searchResult.query,
+          })}\n\n`,
+        );
+        if (streamContext.searchResult.sources.length > 0) {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'search_sources',
+              sessionId,
+              sources: streamContext.searchResult.sources,
+            })}\n\n`,
+          );
+        }
+      }
+
       let fullMessage = '';
       let finalFinishReason: string | null = null;
       let finalUsage: CompletionUsageStats | undefined;
@@ -312,6 +331,7 @@ export class ChatController {
           finalUsage,
           attachmentIds,
           durationMs,
+          streamContext.searchResult?.sources || null,
         );
         chargeFinalized = true;
         finalCharge = finalizeResult.charge;
@@ -331,6 +351,7 @@ export class ChatController {
           durationMs,
           charge: finalCharge,
           creditsSnapshot: finalCreditsSnapshot,
+          sources: streamContext.searchResult?.sources || null,
         });
         res.write(`data: ${finalData}\n\n`);
       }

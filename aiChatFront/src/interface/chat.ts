@@ -42,6 +42,18 @@ export interface BackendReasoning {
 }
 
 /**
+ * 联网检索来源
+ */
+export interface SearchSource {
+  id: number
+  title: string
+  url: string
+  snippet: string
+  icon?: string
+  sitename?: string
+}
+
+/**
  * 聊天消息
  */
 export interface BackendChatMessage {
@@ -56,6 +68,7 @@ export interface BackendChatMessage {
   charge?: ChatChargeSummary | null
   attachments?: BackendAttachment[]
   durationMs?: number | null
+  sources?: SearchSource[] | null
   createdAt: string
   updatedAt: string
 }
@@ -97,6 +110,7 @@ export interface SendMessageParams {
   temperature?: number
   maxTokens?: number
   fileIds?: string[]
+  webSearch?: boolean
 }
 
 /**
@@ -110,6 +124,7 @@ export interface ChatMessageResponse {
   model: string
   usage?: UsageStats | null
   durationMs?: number | null
+  sources?: SearchSource[] | null
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   createdAt: string
@@ -119,7 +134,7 @@ export interface ChatMessageResponse {
  * 流式聊天数据块
  */
 export interface StreamChunk {
-  type?: 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
+  type?: 'search_start' | 'search_sources' | 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
   delta?: string
   finish_reason: string | null
   sessionId?: string
@@ -128,6 +143,8 @@ export interface StreamChunk {
   model?: string
   usage?: UsageStats
   durationMs?: number | null
+  query?: string
+  sources?: SearchSource[]
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   error?: string

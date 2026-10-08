@@ -12,6 +12,7 @@ import {
 import { User } from '../../user/entities/user.entity';
 import { ChatSession } from './chat-session.entity';
 import { ChatAttachment } from './chat-attachment.entity';
+import type { SearchSource } from '../../web-search/types/web-search.types';
 
 /**
  * 聊天记录实体
@@ -102,6 +103,12 @@ export class ChatMessage {
    */
   @Column({ type: 'int', nullable: true })
   durationMs?: number | null;
+
+  /**
+   * 联网搜索参考来源
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  sources?: SearchSource[] | null;
 
   /**
    * 创建时间

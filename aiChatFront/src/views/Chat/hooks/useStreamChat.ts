@@ -1,8 +1,8 @@
 import { ref, onBeforeUnmount, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { sendStreamMessage } from '@/api/chat'
-import type { StreamChunk, StreamRequestController } from '@/interface/chat'
-import { useConversationStore } from '@/stores'
+import type { SearchSource, StreamChunk, StreamRequestController } from '@/interface/chat'
+import { useConversationStore } from '@/stores/conversation'
 import { useAuthStore } from '@/stores/auth'
 import logger from '@/utils/logger'
 import { generateUUID } from '@/utils/common'
@@ -154,6 +154,7 @@ export function useStreamChat() {
       fileIds?: string[]
       serverFiles?: ServerFileInfo[]
       model?: string
+      webSearch?: boolean
     },
   ) => {
     cancelCurrentStream()
@@ -162,6 +163,7 @@ export function useStreamChat() {
       fileIds,
       serverFiles,
       model: selectedModelId = 'grok-chat-fast',
+      webSearch = false,
     } = options || {}
 
     if (!userId) {
@@ -214,6 +216,7 @@ export function useStreamChat() {
     let pendingReasoningDelta = ''
     let flushRafId: number | null = null
     let latestReasoning: MessageReasoning | undefined
+    let latestSources: SearchSource[] | undefined
 
     const ensureAssistantMessage = (): string => {
       if (assistantMessageId) {
@@ -288,12 +291,30 @@ export function useStreamChat() {
           message: content || '请分析这些文件',
           model: selectedModelId,
           fileIds: hasFileIds ? fileIds : undefined,
+          webSearch,
         },
         {
           onChunk: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
             switch (chunk.type) {
+              case 'search_start': {
+                const messageId = ensureAssistantMessage()
+                conversationStore.patchMessageById(sessionId, messageId, {
+                  searchStatus: 'searching',
+                  searchQuery: chunk.query,
+                })
+                return
+              }
+              case 'search_sources': {
+                const messageId = ensureAssistantMessage()
+                latestSources = chunk.sources
+                conversationStore.patchMessageById(sessionId, messageId, {
+                  searchStatus: 'done',
+                  sources: chunk.sources,
+                })
+                return
+              }
               case 'reasoning_start': {
                 const messageId = ensureAssistantMessage()
                 latestReasoning = mapReasoning(
@@ -375,6 +396,9 @@ export function useStreamChat() {
                   }
                 : undefined)
 
+            const finalSources = chunk.sources || latestSources
+            const finalSearchStatus = finalSources?.length ? 'done' : undefined
+
             if (!assistantMessageId) {
               assistantMessageId = createId()
               if (activeStreamContext.value?.conversationId === sessionId) {
@@ -392,6 +416,8 @@ export function useStreamChat() {
                 charge: mapCharge(charge),
                 reasoning,
                 durationMs,
+                sources: finalSources,
+                searchStatus: finalSearchStatus,
               })
             } else {
               conversationStore.updateMessageContentById(
@@ -407,6 +433,8 @@ export function useStreamChat() {
                 charge: mapCharge(charge),
                 reasoning,
                 durationMs,
+                sources: finalSources,
+                searchStatus: finalSearchStatus,
               })
             }
 
@@ -490,6 +518,9 @@ export function useStreamChat() {
     }
     if (!userMessage) return
 
+    const failedMsg = messages[failedIndex]
+    const hadWebSearch = Boolean(failedMsg?.sources?.length || failedMsg?.searchQuery)
+
     // 删除当前失败的助手消息
     conversationStore.deleteMessageById(sessionId, failedMessageId)
 
@@ -501,6 +532,7 @@ export function useStreamChat() {
 
     await sendMessage(userId, userMessage.content, {
       model: userMessage.model || undefined,
+      webSearch: hadWebSearch,
     })
   }
 

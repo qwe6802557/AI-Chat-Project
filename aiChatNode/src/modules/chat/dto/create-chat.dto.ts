@@ -215,4 +215,17 @@ export class CreateChatDto {
   @IsArray({ message: 'fileIds必须是数组' })
   @IsUUID('4', { each: true, message: 'fileIds 中包含非法 UUID' })
   fileIds?: string[];
+
+  /**
+   * 是否开启联网搜索
+   */
+  @ApiProperty({
+    description: '是否开启联网搜索',
+    example: false,
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'webSearch 必须是布尔值' })
+  webSearch?: boolean;
 }
