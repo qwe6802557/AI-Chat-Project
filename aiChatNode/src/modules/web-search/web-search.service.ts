@@ -67,9 +67,24 @@ export class WebSearchService {
   }
 
   /**
+   * 识别查询的时效性敏感度
+   */
+  private detectFreshness(query: string): 'oneDay' | 'oneWeek' | 'oneMonth' | 'noLimit' {
+    const dayKeywords = ['今天', '今日', '最新', '实时', '现在', '刚刚', '24小时', '头条', '新闻', '早报', '晚报'];
+    const weekKeywords = ['本周', '这周', '几天', '近期'];
+    const monthKeywords = ['本月', '这个月'];
+
+    if (dayKeywords.some((k) => query.includes(k))) return 'oneDay';
+    if (weekKeywords.some((k) => query.includes(k))) return 'oneWeek';
+    if (monthKeywords.some((k) => query.includes(k))) return 'oneMonth';
+    return 'noLimit';
+  }
+
+  /**
    * 通过博查 Bocha API 进行实时搜索
    */
   private async searchViaBocha(query: string, apiKey: string): Promise<SearchSource[]> {
+    const freshness = this.detectFreshness(query);
     const response = await fetch('https://api.bochaai.com/v1/web-search', {
       method: 'POST',
       headers: {
@@ -78,7 +93,7 @@ export class WebSearchService {
       },
       body: JSON.stringify({
         query,
-        freshness: 'noLimit',
+        freshness,
         summary: true,
         count: 5,
       }),
@@ -113,6 +128,7 @@ export class WebSearchService {
       return '';
     }
 
+    const currentDate = new Date().toISOString().split('T')[0];
     const formattedSources = sources
       .map(
         (source) =>
@@ -120,7 +136,7 @@ export class WebSearchService {
       )
       .join('\n\n');
 
-    return `\n\n[联网检索结果]\n${formattedSources}\n\n[回答规范]\n请依据上述检索结果回答问题。在引用具体事实、数据或观点时，必须在对应句子后方标注序号引用，例如 [1] 或 [1][2]。若检索结果未包含足够信息，请如实说明。`;
+    return `【时间基准】：当前现实世界日期为 ${currentDate}。\n\n[联网检索结果]\n${formattedSources}\n\n[回答规范]\n你已获得上述最新的实时联网检索数据。请优先结合上述客观检索事实与现实基准时间，直接、全面地回答用户的问题。在引用具体事实、数据或观点时，必须在对应句子后方标注序号引用，例如 [1] 或 [1][2]。严禁回答“无法直接访问互联网”或“无法提供最新信息”，因为你已经获得了完整的实时检索结果。`;
   }
 
   /**

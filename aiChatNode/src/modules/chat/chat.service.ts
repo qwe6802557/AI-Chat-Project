@@ -552,16 +552,33 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
-    // 构建当前用户消息内容（支持多模态）
+    let searchResult: WebSearchResult | null = null;
+    if (createChatDto.webSearch) {
+      searchResult = await this.webSearchService.search(createChatDto.message);
+    }
+
+    // 构建当前用户消息内容（支持多模态及联网检索增强）
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
       fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
+    let finalUserContent: string | MultimodalContent[] = userContent;
+    if (searchResult?.sources?.length) {
+      if (typeof finalUserContent === 'string') {
+        finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
+      } else {
+        finalUserContent = [
+          { type: 'text', text: `${searchResult.contextPrompt}\n\n【用户提问】：` },
+          ...finalUserContent,
+        ];
+      }
+    }
+
     // 添加当前用户消息
     messages.push({
       role: 'user',
-      content: userContent,
+      content: finalUserContent,
     });
 
     // 记录文件信息
@@ -627,6 +644,7 @@ export class ChatService {
         actualCredits,
         attachmentIds,
         durationMs,
+        sources: searchResult?.sources || null,
       });
 
       reservedSessionId = persistedSessionId;
@@ -865,28 +883,34 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
-    // 构建当前用户消息内容-支持多模态
+    let searchResult: WebSearchResult | null = null;
+    if (createChatDto.webSearch) {
+      searchResult = await this.webSearchService.search(createChatDto.message);
+    }
+
+    // 构建当前用户消息内容-支持多模态及联网检索增强
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
       fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
+    let finalUserContent: string | MultimodalContent[] = userContent;
+    if (searchResult?.sources?.length) {
+      if (typeof finalUserContent === 'string') {
+        finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
+      } else {
+        finalUserContent = [
+          { type: 'text', text: `${searchResult.contextPrompt}\n\n【用户提问】：` },
+          ...finalUserContent,
+        ];
+      }
+    }
+
     // 添加当前用户消息
     messages.push({
       role: 'user',
-      content: userContent,
+      content: finalUserContent,
     });
-
-    let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch) {
-      searchResult = await this.webSearchService.search(createChatDto.message);
-      if (searchResult.sources.length > 0) {
-        messages.push({
-          role: 'system',
-          content: searchResult.contextPrompt,
-        });
-      }
-    }
 
     // 记录文件信息
     if (fileDataForAI.length > 0) {
