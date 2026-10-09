@@ -3,6 +3,7 @@ import '../../../../core/theme/stitch_tokens.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../domain/chat_message_model.dart';
 import 'chat_reasoning_card.dart';
+import 'chat_search_source_gallery.dart';
 
 /// AI 助手消息气泡组件
 class ChatAssistantMessageBubble extends StatelessWidget {
@@ -105,6 +106,11 @@ class ChatAssistantMessageBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (msg.searchStatus != null || msg.sources.isNotEmpty)
+                  ChatSearchSourceGallery(
+                    sources: msg.sources,
+                    searchStatus: msg.searchStatus,
+                  ),
                 if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty)
                   ChatReasoningCard(msg: msg),
                 if (msg.status == MessageStatus.error)

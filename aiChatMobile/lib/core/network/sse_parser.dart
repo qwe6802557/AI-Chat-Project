@@ -3,27 +3,38 @@ import 'dart:convert';
 
 /// SSE 流式数据块
 class SseChunk {
+  final String? type;
   final String? delta;
   final String? reasoningDelta;
   final String? finishReason;
   final String? error;
   final String? sessionId;
+  final String? searchQuery;
+  final List<Map<String, dynamic>>? rawSources;
 
   const SseChunk({
+    this.type,
     this.delta,
     this.reasoningDelta,
     this.finishReason,
     this.error,
     this.sessionId,
+    this.searchQuery,
+    this.rawSources,
   });
 
   factory SseChunk.fromJson(Map<String, dynamic> json) {
     return SseChunk(
+      type: json['type'] as String?,
       delta: json['delta'] as String?,
       reasoningDelta: json['reasoning_delta'] as String?,
       finishReason: json['finish_reason'] as String?,
       error: (json['error'] ?? json['message']) as String?,
       sessionId: json['sessionId'] as String?,
+      searchQuery: json['query'] as String?,
+      rawSources: (json['sources'] as List?)
+          ?.whereType<Map<String, dynamic>>()
+          .toList(),
     );
   }
 }

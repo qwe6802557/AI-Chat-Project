@@ -7,6 +7,8 @@ import '../../../shared/widgets/site_icp_footer.dart';
 import '../../../shared/widgets/cyber_button.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../chat/providers/chat_provider.dart';
+import '../../upgrade/presentation/upgrade_dialog.dart';
+import '../../upgrade/services/upgrade_service.dart';
 
 /// Stitch 个人中心与账户设置页
 class ProfilePage extends ConsumerWidget {
@@ -120,6 +122,68 @@ class ProfilePage extends ConsumerWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16.0),
+              GlassCard(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '应用版本与更新',
+                      style: TextStyle(
+                        fontSize: 15.0,
+                        fontWeight: FontWeight.w600,
+                        color: StitchTokens.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 12.0),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ERJ Chat 移动客户端',
+                              style: TextStyle(
+                                fontSize: 14.0,
+                                fontWeight: FontWeight.w600,
+                                color: StitchTokens.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: 2.0),
+                            Text(
+                              'v1.0.0 (Build 1) 生产正式版',
+                              style: TextStyle(
+                                fontSize: 12.0,
+                                color: StitchTokens.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => _handleCheckUpdate(context),
+                          icon: const Icon(Icons.sync_rounded, size: 16.0),
+                          label: const Text('检查更新'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: StitchTokens.primary,
+                            side: BorderSide(
+                              color: StitchTokens.primary.withValues(alpha: 0.4),
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12.0,
+                              vertical: 8.0,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24.0),
               CyberButton(
                 variant: CyberButtonVariant.stop,
@@ -168,5 +232,36 @@ class ProfilePage extends ConsumerWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _handleCheckUpdate(BuildContext context) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(
+        content: Text('正在连接服务器检查更新...'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    final info = await UpgradeService().checkUpdate(currentVersion: '1.0.0');
+    if (!context.mounted) return;
+
+    if (info != null && info.hasUpdate) {
+      await UpgradeDialog.show(context, info);
+    } else if (info != null) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: Text('当前已是最新版本 (v${info.currentVersion})'),
+          backgroundColor: StitchTokens.primary,
+        ),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('检查更新失败，请检查网络连接'),
+          backgroundColor: StitchTokens.crimsonStop,
+        ),
+      );
+    }
   }
 }

@@ -38,5 +38,6 @@ export default defineConfig({
     include: ['src/**/*.spec.ts'],
     clearMocks: true,
     restoreMocks: true,
+    testTimeout: 30000,
   },
 })

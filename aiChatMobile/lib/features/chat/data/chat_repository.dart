@@ -99,8 +99,14 @@ class ChatRepository {
           );
         }
 
-        // 映射助手回复
+        // 映射助手回复与联网搜索来源
         if (m['aiMessage'] != null && (m['aiMessage'] as String).isNotEmpty) {
+          final rawSources = m['sources'] as List? ?? [];
+          final sources = rawSources
+              .whereType<Map<String, dynamic>>()
+              .map((s) => SearchSourceModel.fromJson(s))
+              .toList();
+
           result.add(
             ChatMessageModel(
               id: '${m['id']}_assistant',
@@ -109,6 +115,8 @@ class ChatRepository {
               content: m['aiMessage'] as String,
               model: m['model'] as String?,
               createdAt: createdAt,
+              sources: sources,
+              searchStatus: sources.isNotEmpty ? 'done' : null,
             ),
           );
         }
@@ -124,6 +132,7 @@ class ChatRepository {
     required String clientRequestId,
     String? sessionId,
     List<String>? fileIds,
+    bool webSearch = false,
     CancelToken? cancelToken,
   }) async {
     final response = await _client.dio.post<ResponseBody>(
@@ -134,6 +143,7 @@ class ChatRepository {
         'clientRequestId': clientRequestId,
         if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
         if (fileIds != null && fileIds.isNotEmpty) 'fileIds': fileIds,
+        if (webSearch) 'webSearch': true,
       },
       options: Options(
         responseType: ResponseType.stream,
