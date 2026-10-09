@@ -70,10 +70,12 @@ coverage/
 *.tgz
 *.zip
 *.tar.gz
+*.apk
 
-# ===== Electron 相关 =====
+# ===== Electron 与移动端打包发布目录 =====
 out/
 release/
+releases/
 
 # ===== 本地按需环境控制脚本 =====
 start-dev.bat
@@ -82,6 +84,7 @@ start-env.bat
 stop-env.bat
 start-mobile.bat
 start-mobile.ps1
+deploy-prod.ps1
 scripts/
 
 # ===== 部署与生产环境敏感配置 =====

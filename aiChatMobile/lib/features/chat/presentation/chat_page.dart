@@ -9,6 +9,8 @@ import 'widgets/chat_sticky_model_bar.dart';
 import 'widgets/chat_top_header.dart';
 import 'widgets/chat_user_message_bubble.dart';
 import 'widgets/model_switcher_bottom_sheet.dart';
+import '../../upgrade/presentation/upgrade_dialog.dart';
+import '../../upgrade/services/upgrade_service.dart';
 
 /// Stitch AI 智能对话工作台主页面
 class ChatPage extends ConsumerStatefulWidget {
@@ -27,6 +29,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.initState();
     // 首次进入会话时立即吸底，并多帧校准 Markdown 动态排版尺寸
     _scrollToBottom(animate: false, retries: 5);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkVersionSilently();
+    });
+  }
+
+  Future<void> _checkVersionSilently() async {
+    final info = await UpgradeService().checkUpdate(currentVersion: '1.0.0');
+    if (!mounted || info == null || !info.hasUpdate) return;
+    await UpgradeDialog.show(context, info);
   }
 
   @override
@@ -208,6 +219,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               isGenerating: chatState.isGenerating,
               creditsRemaining: chatState.creditsRemaining,
               attachments: chatState.pendingAttachments,
+              isWebSearchEnabled: chatState.isWebSearchEnabled,
+              onToggleWebSearch: () => ref.read(chatProvider.notifier).toggleWebSearch(),
               onPickImages: () => ref.read(chatProvider.notifier).pickAndUploadImages(),
               onPickDocument: () => ref.read(chatProvider.notifier).pickDocument(),
               onRemoveAttachment: (id) => ref.read(chatProvider.notifier).removeAttachment(id),

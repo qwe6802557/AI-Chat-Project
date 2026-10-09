@@ -45,6 +45,13 @@
     </div>
 
     <div class="nav-right">
+      <a-tooltip title="下载 Android 手机端 APK (联网搜索/极速对话)">
+        <a class="mobile-download-btn" href="/downloads/aichat-latest.apk" target="_blank" download>
+          <MobileOutlined />
+          <span>下载手机端</span>
+        </a>
+      </a-tooltip>
+
       <div v-if="creditsRemaining !== undefined" class="credits-badge">
         <ThunderboltFilled class="credits-icon" />
         <span>{{ creditsRemaining }} 积分</span>
@@ -63,6 +70,10 @@
             <a-menu-item key="account" @click="handleOpenAccount">
               <UserOutlined />
               <span style="margin-left: 8px;">个人账户</span>
+            </a-menu-item>
+            <a-menu-item key="mobile" @click="handleDownloadMobile">
+              <MobileOutlined />
+              <span style="margin-left: 8px;">下载手机端</span>
             </a-menu-item>
             <a-menu-item key="clear" class="danger-menu-item" @click="handleClearConversations">
               <DeleteOutlined />
@@ -102,6 +113,7 @@ import {
   QuestionCircleOutlined,
   LogoutOutlined,
   ThunderboltFilled,
+  MobileOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
@@ -185,6 +197,10 @@ const handleClearConversations = () => {
       }
     },
   })
+}
+
+const handleDownloadMobile = () => {
+  window.open('/downloads/aichat-latest.apk', '_blank')
 }
 
 const handleLogout = () => {

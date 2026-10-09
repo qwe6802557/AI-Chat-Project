@@ -24,6 +24,7 @@ class ChatState {
   final int creditsRemaining;
   final String? errorMessage;
   final List<AttachmentItem> pendingAttachments;
+  final bool isWebSearchEnabled;
 
   const ChatState({
     this.activeSessionId,
@@ -34,6 +35,7 @@ class ChatState {
     this.creditsRemaining = 1000,
     this.errorMessage,
     this.pendingAttachments = const [],
+    this.isWebSearchEnabled = false,
   });
 
   ChatState copyWith({
@@ -45,6 +47,7 @@ class ChatState {
     int? creditsRemaining,
     String? errorMessage,
     List<AttachmentItem>? pendingAttachments,
+    bool? isWebSearchEnabled,
   }) {
     return ChatState(
       activeSessionId: activeSessionId ?? this.activeSessionId,
@@ -55,6 +58,7 @@ class ChatState {
       creditsRemaining: creditsRemaining ?? this.creditsRemaining,
       errorMessage: errorMessage,
       pendingAttachments: pendingAttachments ?? this.pendingAttachments,
+      isWebSearchEnabled: isWebSearchEnabled ?? this.isWebSearchEnabled,
     );
   }
 }
@@ -92,6 +96,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   void setModel(String model) {
     state = state.copyWith(selectedModel: model);
+  }
+
+  void toggleWebSearch() {
+    state = state.copyWith(isWebSearchEnabled: !state.isWebSearchEnabled);
   }
 
   Future<void> pickAndUploadImages() async {
@@ -347,6 +355,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
       model: state.selectedModel,
       status: MessageStatus.streaming,
       createdAt: DateTime.now(),
+      searchStatus: state.isWebSearchEnabled ? 'searching' : null,
     );
 
     state = state.copyWith(
@@ -360,6 +369,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final stopwatch = Stopwatch()..start();
     final contentBuffer = StringBuffer();
     final reasoningBuffer = StringBuffer();
+    String? currentSearchStatus = state.isWebSearchEnabled ? 'searching' : null;
+    List<SearchSourceModel>? currentSources;
 
     try {
       final stream = await _repository.sendStreamMessage(
@@ -368,11 +379,23 @@ class ChatNotifier extends StateNotifier<ChatState> {
         clientRequestId: clientRequestId,
         sessionId: state.activeSessionId,
         fileIds: fileIds,
+        webSearch: state.isWebSearchEnabled,
         cancelToken: _cancelToken,
       );
 
       _streamSubscription = stream.listen(
         (chunk) {
+          if (chunk.type == 'search_start') {
+            currentSearchStatus = 'searching';
+          } else if (chunk.type == 'search_sources' || (chunk.type == 'done' && chunk.rawSources != null)) {
+            if (chunk.rawSources != null && chunk.rawSources!.isNotEmpty) {
+              currentSources = chunk.rawSources!
+                  .map((s) => SearchSourceModel.fromJson(s))
+                  .toList();
+            }
+            currentSearchStatus = 'done';
+          }
+
           if (chunk.sessionId != null && state.activeSessionId == null) {
             state = state.copyWith(activeSessionId: chunk.sessionId);
           }
@@ -397,6 +420,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
                 reasoningContent: reasoningBuffer.isNotEmpty ? reasoningBuffer.toString() : null,
                 reasoningDurationSeconds: stopwatch.elapsed.inSeconds,
                 status: chunk.finishReason != null ? MessageStatus.done : MessageStatus.streaming,
+                searchStatus: currentSearchStatus,
+                sources: currentSources ?? msg.sources,
               );
             }
             return msg;
@@ -435,7 +460,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
       creditsRemaining: state.creditsRemaining - ApiConstants.chatMessageCost,
       messages: state.messages.map((msg) {
         if (msg.id == assistantMessageId) {
-          return msg.copyWith(status: MessageStatus.done);
+          return msg.copyWith(
+            status: MessageStatus.done,
+            searchStatus: msg.sources.isNotEmpty ? 'done' : null,
+          );
         }
         return msg;
       }).toList(),

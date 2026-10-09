@@ -16,6 +16,8 @@ class ChatBottomInputBar extends StatelessWidget {
   final VoidCallback? onPickImages;
   final VoidCallback? onPickDocument;
   final ValueChanged<String>? onRemoveAttachment;
+  final bool isWebSearchEnabled;
+  final VoidCallback? onToggleWebSearch;
 
   const ChatBottomInputBar({
     super.key,
@@ -28,7 +30,69 @@ class ChatBottomInputBar extends StatelessWidget {
     this.onPickImages,
     this.onPickDocument,
     this.onRemoveAttachment,
+    this.isWebSearchEnabled = false,
+    this.onToggleWebSearch,
   });
+
+  Widget _buildWebSearchPill() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+        onTap: isGenerating ? null : onToggleWebSearch,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
+          decoration: BoxDecoration(
+            color: isWebSearchEnabled ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+            border: Border.all(
+              color: isWebSearchEnabled ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+            ),
+            boxShadow: isWebSearchEnabled
+                ? const [
+                    BoxShadow(
+                      color: Color.fromRGBO(29, 78, 216, 0.08),
+                      blurRadius: 4.0,
+                      offset: Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.language_rounded,
+                size: 13.0,
+                color: isWebSearchEnabled ? StitchTokens.primaryContainer : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 4.0),
+              Text(
+                '联网搜索',
+                style: TextStyle(
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w500,
+                  color: isWebSearchEnabled ? StitchTokens.primary : const Color(0xFF475467),
+                ),
+              ),
+              if (isWebSearchEnabled) ...[
+                const SizedBox(width: 4.0),
+                Container(
+                  width: 5.0,
+                  height: 5.0,
+                  decoration: const BoxDecoration(
+                    color: StitchTokens.primaryContainer,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +112,7 @@ class ChatBottomInputBar extends StatelessWidget {
               ),
             ],
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
@@ -71,6 +136,7 @@ class ChatBottomInputBar extends StatelessWidget {
                     ],
                   ),
                 ),
+                _buildWebSearchPill(),
               ],
             ),
             const SizedBox(height: 8.0),

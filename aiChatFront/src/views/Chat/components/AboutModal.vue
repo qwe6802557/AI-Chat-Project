@@ -31,6 +31,10 @@
           <template #icon><SyncOutlined /></template>
           检查更新
         </a-button>
+        <a-button class="download-mobile-btn" @click="handleDownloadMobile">
+          <template #icon><MobileOutlined /></template>
+          下载手机客户端 (Android)
+        </a-button>
         <a-button class="visit-repo-btn" @click="handleVisitRepo">
           <template #icon><LinkOutlined /></template>
           访问项目地址
@@ -51,7 +55,8 @@ import { message } from 'ant-design-vue'
 import {
   MessageOutlined,
   SyncOutlined,
-  LinkOutlined
+  LinkOutlined,
+  MobileOutlined
 } from '@ant-design/icons-vue'
 import SiteIcpFooter from '@/components/SiteIcpFooter.vue'
 
