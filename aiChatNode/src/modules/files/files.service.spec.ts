@@ -23,8 +23,15 @@ class MockStreamResponse extends PassThrough {
 
 describe('FilesService', () => {
   const findOneMock = jest.fn();
+  const findMock = jest.fn();
+  const createMock = jest.fn((dto) => ({ id: 'doc-1', ...dto }));
+  const saveMock = jest.fn(async (entity) => entity);
+
   const attachmentRepository = {
     findOne: findOneMock,
+    find: findMock,
+    create: createMock,
+    save: saveMock,
   } as unknown as Repository<ChatAttachment>;
 
   const configService = {
@@ -143,5 +150,89 @@ describe('FilesService', () => {
     expect(
       () => new FilesService(attachmentRepository, productionConfigService),
     ).toThrow('生产环境必须配置 FILE_URL_SIGN_SECRET');
+  });
+
+  it('identifies supported images, PDFs, Word docs, and code/text files accurately', () => {
+    expect(FilesService.resolveUploadFileKind('image/png', 'a.png')).toBe(
+      'image',
+    );
+    expect(
+      FilesService.resolveUploadFileKind('application/pdf', 'spec.pdf'),
+    ).toBe('pdf');
+    expect(
+      FilesService.resolveUploadFileKind(
+        'application/octet-stream',
+        'report.docx',
+      ),
+    ).toBe('docx');
+    expect(
+      FilesService.resolveUploadFileKind('video/mp2t', 'service.ts'),
+    ).toBe('text');
+    expect(
+      FilesService.resolveUploadFileKind('application/octet-stream', 'note.md'),
+    ).toBe('text');
+    expect(
+      FilesService.isSupportedUploadFile(
+        'application/x-msdownload',
+        'virus.exe',
+      ),
+    ).toBe(false);
+  });
+
+  it('truncates extracted text exceeding 30,000 characters by preserving head and tail', () => {
+    const longText = 'A'.repeat(25000) + 'B'.repeat(10000);
+    const result = service.truncateExtractedText(longText);
+
+    expect(result.charCount).toBe(35000);
+    expect(result.truncated).toBe(true);
+    expect(result.text).toContain('中间已省略 5000 字符');
+    expect(result.text.startsWith('A'.repeat(100))).toBe(true);
+    expect(result.text.endsWith('B'.repeat(100))).toBe(true);
+  });
+
+  it('saves uploaded markdown/code documents and caches extractedText and charCount', async () => {
+    const content = '# 架构设计文档\n这是核心实现逻辑。';
+    const file = {
+      originalname: 'architecture.md',
+      mimetype: 'text/markdown',
+      size: Buffer.byteLength(content),
+      buffer: Buffer.from(content, 'utf8'),
+    } as Express.Multer.File;
+
+    const results = await service.saveUploadedImages('user-1', [file]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.category).toBe('document');
+    expect(results[0]?.charCount).toBe(content.length);
+    expect(results[0]?.extractedText).toBe(content);
+    expect(results[0]?.truncated).toBe(false);
+  });
+
+  it('returns cached extractedText for document attachments in getImageDataForAIByIds', async () => {
+    findMock.mockResolvedValueOnce([
+      {
+        id: 'doc-1',
+        userId: 'user-1',
+        messageId: null,
+        originalName: 'main.ts',
+        storageMime: 'text/plain; charset=utf-8',
+        storagePath: 'chat/2026/10/main.ts',
+        extractedText: 'export const answer = 42;',
+        charCount: 25,
+      },
+    ]);
+
+    const prepared = await service.getImageDataForAIByIds('user-1', ['doc-1']);
+
+    expect(prepared.attachmentIds).toEqual(['doc-1']);
+    expect(prepared.fileDataForAI).toEqual([
+      {
+        base64: '',
+        type: 'text/plain; charset=utf-8',
+        name: 'main.ts',
+        extractedText: 'export const answer = 42;',
+        charCount: 25,
+      },
+    ]);
   });
 });

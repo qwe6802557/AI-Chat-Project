@@ -17,6 +17,11 @@ export interface ServerFileInfo {
   url: string
   name: string
   type: string
+  category?: AttachmentType
+  sizeBytes?: number
+  charCount?: number | null
+  extractedText?: string | null
+  truncated?: boolean
 }
 
 /**
@@ -34,6 +39,9 @@ export interface UploadedFile {
   error?: string
   serverId?: string
   serverUrl?: string
+  charCount?: number | null
+  extractedText?: string | null
+  truncated?: boolean
 }
 
 /**
@@ -43,6 +51,7 @@ export interface UseFileUploadOptions {
   maxSize?: number
   maxCount?: number
   allowedTypes?: string[]
+  allowedExtensions?: string[]
   autoCompress?: boolean
   compressThreshold?: number
   compressQuality?: number

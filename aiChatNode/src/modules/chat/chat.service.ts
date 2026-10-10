@@ -46,6 +46,9 @@ export interface SessionMessageAttachmentDto {
   sizeBytes: number;
   width?: number | null;
   height?: number | null;
+  category?: 'image' | 'pdf' | 'document';
+  charCount?: number | null;
+  extractedText?: string | null;
 }
 
 export type SessionMessageDto = Pick<
@@ -92,7 +95,6 @@ interface ResolvedChatModelConfig {
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
-  // 预占阶段只能做启发式估算；图片输入额外留出保守的 token 预算，避免低估。
   private readonly IMAGE_INPUT_TOKEN_BUDGET = 1500;
   private readonly DEFAULT_OUTPUT_TOKEN_BUDGET = 4096;
 
@@ -104,6 +106,7 @@ export class ChatService {
     'image/png',
     'image/gif',
     'image/webp',
+    'image/bmp',
   ];
 
   constructor(
@@ -368,68 +371,77 @@ export class ChatService {
   }
 
   /**
-   * 构建多模态消息内容
-   * @param textContent 文本内容
-   * @param files 文件列表
-   * @returns 纯文本或多模态内容数组
+   * 构建多模态与文档增强消息内容
    */
   private buildMultimodalContent(
     textContent: string,
     files?: FileDataDto[],
   ): string | MultimodalContent[] {
-    // 没有文件，返回纯文本
     if (!files || files.length === 0) {
       return textContent;
     }
 
-    const contentParts: MultimodalContent[] = [];
+    const imageParts: MultimodalContent[] = [];
+    const documentBlocks: string[] = [];
 
-    // 处理文件
     for (const file of files) {
       if (this.SUPPORTED_IMAGE_TYPES.includes(file.type)) {
-        // 图片：使用 image_url 格式
-        contentParts.push({
-          type: 'image_url',
-          image_url: {
-            url: file.base64, // Base64 数据 URL
-            detail: 'auto', // 自动选择细节级别
-          },
-        });
-        this.logger.debug(`添加图片: ${file.name} (${file.type})`);
-      } else if (file.type === 'application/pdf') {
-        // PDF：尝试作为图片发送（Claude 支持 PDF）
-        contentParts.push({
+        imageParts.push({
           type: 'image_url',
           image_url: {
             url: file.base64,
             detail: 'auto',
           },
         });
-        this.logger.debug(`添加 PDF: ${file.name}`);
-      } else {
-        // 其他文档：作为文本描述添加
-        contentParts.push({
-          type: 'text',
-          text: `[附件: ${file.name} (${file.type})]`,
-        });
-        this.logger.debug(`添加文档描述: ${file.name}`);
+        this.logger.debug(`添加图片附件: ${file.name} (${file.type})`);
+      } else if (file.extractedText && file.extractedText.trim()) {
+        const charCount = file.charCount ?? file.extractedText.length;
+        documentBlocks.push(
+          `【附件文档：${file.name}（共 ${charCount} 字符）】\n\`\`\`\n${file.extractedText}\n\`\`\``,
+        );
+        this.logger.debug(
+          `注入文档内容: ${file.name} (${charCount} 字符)`,
+        );
       }
     }
 
-    // 添加文本内容
-    if (textContent && textContent.trim()) {
+    const userPrompt = textContent?.trim() || '请分析上述附件内容';
+    const combinedText =
+      documentBlocks.length > 0
+        ? `${documentBlocks.join('\n\n')}\n\n【用户提问】：\n${userPrompt}`
+        : textContent;
+
+    if (imageParts.length === 0) {
+      return combinedText;
+    }
+
+    const contentParts: MultimodalContent[] = [...imageParts];
+    if (combinedText && combinedText.trim()) {
       contentParts.push({
         type: 'text',
-        text: textContent,
+        text: combinedText,
       });
     }
 
-    // 如果只有文本-返回纯文本格式
-    if (contentParts.length === 1 && contentParts[0].type === 'text') {
-      return (contentParts[0] as { type: 'text'; text: string }).text;
+    return contentParts;
+  }
+
+  /**
+   * 将历史消息中关联的已解析文档内容挂载至历史用户提问，支持同会话多轮追问
+   */
+  private formatHistoryUserMessage(msg: ChatRecord): string {
+    const docBlocks = (msg.attachments || [])
+      .filter((att) => Boolean(att.extractedText?.trim()))
+      .map((att) => {
+        const count = att.charCount ?? att.extractedText!.length;
+        return `【附件文档：${att.originalName}（共 ${count} 字符）】\n\`\`\`\n${att.extractedText}\n\`\`\``;
+      });
+
+    if (docBlocks.length === 0) {
+      return msg.userMessage;
     }
 
-    return contentParts;
+    return `${docBlocks.join('\n\n')}\n\n【用户提问】：\n${msg.userMessage}`;
   }
 
   /**
@@ -503,7 +515,6 @@ export class ChatService {
 
     this.ensureNoInlineFiles(createChatDto.files);
 
-    // 验证用户是否存在
     const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException('用户不存在');
@@ -511,7 +522,6 @@ export class ChatService {
 
     const sessionId = createChatDto.sessionId;
     if (sessionId) {
-      // 验证会话是否存在
       await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
@@ -519,17 +529,14 @@ export class ChatService {
       createChatDto.clientRequestId,
     );
 
-    // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
         userId,
         fileIds: createChatDto.fileIds,
       });
 
-    // 构建消息数组
     const messages: ChatMessage[] = [];
 
-    // 没有提供历史消息-从数据库加载该会话的历史消息
     if (
       sessionId &&
       (!createChatDto.history || createChatDto.history.length === 0)
@@ -544,7 +551,7 @@ export class ChatService {
           ? msg.aiMessage
           : extractAssistantContent(msg.aiMessage || '').answer;
         messages.push(
-          { role: 'user', content: msg.userMessage },
+          { role: 'user', content: this.formatHistoryUserMessage(msg) },
           { role: 'assistant', content: assistantAnswer },
         );
       });
@@ -557,7 +564,6 @@ export class ChatService {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
-    // 构建当前用户消息内容（支持多模态及联网检索增强）
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
       fileDataForAI.length > 0 ? fileDataForAI : undefined,
@@ -575,13 +581,11 @@ export class ChatService {
       }
     }
 
-    // 添加当前用户消息
     messages.push({
       role: 'user',
       content: finalUserContent,
     });
 
-    // 记录文件信息
     if (fileDataForAI.length > 0) {
       this.logger.log(
         `包含 ${fileDataForAI.length} 个附件: ${fileDataForAI.map((f) => f.name).join(', ')}`,
@@ -690,7 +694,7 @@ export class ChatService {
   }
 
   /**
-   * 获取指定会话的聊天历史-新
+   * 获取指定会话的聊天历史（包含关联附件以支持文档多轮追问）
    */
   async getSessionHistory(
     userId: string,
@@ -703,9 +707,9 @@ export class ChatService {
       where: { sessionId, userId },
       order: { createdAt: 'DESC' },
       take: limit,
+      relations: ['attachments'],
     });
 
-    // 转为正序-便于前端/Prompt直接使用
     return messages.reverse();
   }
 
@@ -729,7 +733,6 @@ export class ChatService {
     pageSize: number;
     totalPages: number;
   }> {
-    // 验证会话是否存在
     await this.chatSessionService.findByIdForUser(sessionId, userId);
 
     const skip = (page - 1) * pageSize;
@@ -739,10 +742,9 @@ export class ChatService {
       order: { createdAt: order === 'desc' ? 'DESC' : 'ASC' },
       skip,
       take: pageSize,
-      relations: ['attachments'], // 加载附件关联
+      relations: ['attachments'],
     });
 
-    // 如果是倒序查询-反转数组使消息按时间正序显示
     const orderedMessages = order === 'desc' ? messages.reverse() : messages;
 
     const messageIds = orderedMessages.map((message) => message.id);
@@ -773,7 +775,6 @@ export class ChatService {
       });
     }
 
-    // 转换附件格式
     const messagesWithAttachments = orderedMessages.map((msg) => ({
       ...(() => {
         if (msg.reasoning) {
@@ -800,6 +801,12 @@ export class ChatService {
         sizeBytes: att.sizeBytes,
         width: att.width,
         height: att.height,
+        category: FilesService.resolveAttachmentCategory(
+          att.storageMime,
+          att.originalName,
+        ),
+        charCount: att.charCount ?? null,
+        extractedText: att.extractedText ?? null,
       })),
     }));
 
@@ -829,13 +836,11 @@ export class ChatService {
 
     this.ensureNoInlineFiles(createChatDto.files);
 
-    // 验证用户是否存在
     const user = await this.userService.findById(userId);
     if (!user) {
       throw new NotFoundException('用户不存在');
     }
 
-    // 没有提供sessionId-则创建新会话
     let sessionId = createChatDto.sessionId;
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
@@ -845,7 +850,6 @@ export class ChatService {
       });
       sessionId = newSession.id;
     } else {
-      // 验证会话是否存在
       await this.chatSessionService.findByIdForUser(sessionId, userId);
     }
 
@@ -853,17 +857,14 @@ export class ChatService {
       createChatDto.clientRequestId,
     );
 
-    // 处理附件：统一处理 fileIds 和 files（base64）
     const { attachmentIds, fileDataForAI } =
       await this.filesService.prepareChatAttachments({
         userId,
         fileIds: createChatDto.fileIds,
       });
 
-    // 构建消息数组
     const messages: ChatMessage[] = [];
 
-    // 没有提供历史消息-从数据库加载该会话的历史消息
     if (!createChatDto.history || createChatDto.history.length === 0) {
       const historyMessages = await this.getSessionHistory(
         userId,
@@ -875,7 +876,7 @@ export class ChatService {
           ? msg.aiMessage
           : extractAssistantContent(msg.aiMessage || '').answer;
         messages.push(
-          { role: 'user', content: msg.userMessage },
+          { role: 'user', content: this.formatHistoryUserMessage(msg) },
           { role: 'assistant', content: assistantAnswer },
         );
       });
@@ -888,7 +889,6 @@ export class ChatService {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
-    // 构建当前用户消息内容-支持多模态及联网检索增强
     const userContent = this.buildMultimodalContent(
       createChatDto.message,
       fileDataForAI.length > 0 ? fileDataForAI : undefined,

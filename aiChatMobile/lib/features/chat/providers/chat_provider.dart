@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
@@ -105,9 +104,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
   Future<void> pickAndUploadImages() async {
     if (state.isGenerating) return;
 
-    final currentImages = state.pendingAttachments.where((a) => a.isImage).length;
-    if (currentImages >= 4) {
-      state = state.copyWith(errorMessage: '最多只能同时添加 4 张图片附件');
+    final currentTotal = state.pendingAttachments.length;
+    if (currentTotal >= 4) {
+      state = state.copyWith(errorMessage: '最多只能同时添加 4 个附件');
       return;
     }
 
@@ -122,14 +121,14 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
       final validFiles = <PlatformFile>[];
       for (final f in result.files) {
-        if (f.size > 5 * 1024 * 1024) {
-          state = state.copyWith(errorMessage: '图片 ${f.name} 超过 5MB 限制');
+        if (f.size > 10 * 1024 * 1024) {
+          state = state.copyWith(errorMessage: '图片 ${f.name} 超过 10MB 限制');
           continue;
         }
         validFiles.add(f);
       }
 
-      final availableSlots = 4 - currentImages;
+      final availableSlots = 4 - currentTotal;
       final filesToUpload = validFiles.take(availableSlots).toList();
       if (filesToUpload.isEmpty) return;
 
@@ -162,7 +161,6 @@ class ChatNotifier extends StateNotifier<ChatState> {
         errorMessage: null,
       );
 
-      // 执行后台预上传
       try {
         final uploadPayloads = newItems.map((item) {
           return UploadFileInput(
@@ -213,56 +211,115 @@ class ChatNotifier extends StateNotifier<ChatState> {
   Future<void> pickDocument() async {
     if (state.isGenerating) return;
 
+    final currentTotal = state.pendingAttachments.length;
+    if (currentTotal >= 4) {
+      state = state.copyWith(errorMessage: '最多只能同时添加 4 个附件');
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
+        allowMultiple: true,
         allowedExtensions: [
-          'txt', 'md', 'json', 'yaml', 'yml', 'py', 'js', 'ts', 'dart',
-          'html', 'css', 'sql', 'xml', 'log', 'csv', 'env', 'sh'
+          'pdf', 'docx', 'txt', 'md', 'markdown', 'csv', 'json', 'xml',
+          'yaml', 'yml', 'log', 'ts', 'tsx', 'js', 'jsx', 'vue', 'py',
+          'dart', 'java', 'go', 'rs', 'c', 'cpp', 'h', 'sql', 'sh',
+          'html', 'css', 'scss', 'env'
         ],
         withData: true,
       );
 
       if (result == null || result.files.isEmpty) return;
-      final file = result.files.first;
 
-      if (file.size > 2 * 1024 * 1024) {
-        state = state.copyWith(errorMessage: '文本附件不能超过 2MB');
-        return;
+      final validFiles = <PlatformFile>[];
+      for (final f in result.files) {
+        if (f.size > 10 * 1024 * 1024) {
+          state = state.copyWith(errorMessage: '文档 ${f.name} 超过 10MB 限制');
+          continue;
+        }
+        validFiles.add(f);
       }
 
-      Uint8List? fileBytes = file.bytes;
-      String? filePath;
-      if (!kIsWeb) {
-        filePath = file.path;
-      }
+      final availableSlots = 4 - currentTotal;
+      final filesToUpload = validFiles.take(availableSlots).toList();
+      if (filesToUpload.isEmpty) return;
 
-      String content = '';
-      if (fileBytes != null) {
-        content = utf8.decode(fileBytes, allowMalformed: true);
-      } else if (!kIsWeb && filePath != null) {
-        content = await File(filePath).readAsString();
-      } else {
-        throw Exception('无法读取文件内容');
-      }
+      final newItems = <AttachmentItem>[];
+      for (final f in filesToUpload) {
+        Uint8List? fileBytes = f.bytes;
+        String? filePath;
+        if (!kIsWeb) {
+          filePath = f.path;
+          if (fileBytes == null && filePath != null) {
+            fileBytes = await File(filePath).readAsBytes();
+          }
+        }
 
-      final item = AttachmentItem(
-        id: const Uuid().v4(),
-        localPath: filePath,
-        bytes: fileBytes,
-        name: file.name,
-        sizeBytes: file.size,
-        isImage: false,
-        textContent: content,
-        status: AttachmentUploadStatus.success,
-      );
+        newItems.add(
+          AttachmentItem(
+            id: const Uuid().v4(),
+            localPath: filePath,
+            bytes: fileBytes,
+            name: f.name,
+            sizeBytes: f.size,
+            isImage: false,
+            status: AttachmentUploadStatus.uploading,
+          ),
+        );
+      }
 
       state = state.copyWith(
-        pendingAttachments: [...state.pendingAttachments, item],
+        pendingAttachments: [...state.pendingAttachments, ...newItems],
         errorMessage: null,
       );
+
+      try {
+        final uploadPayloads = newItems.map((item) {
+          return UploadFileInput(
+            name: item.name,
+            bytes: item.bytes,
+            filePath: item.localPath,
+          );
+        }).toList();
+
+        final uploadResults = await _fileUploadRepo.uploadImages(uploadPayloads);
+        if (uploadResults.isEmpty) {
+          throw Exception('服务器未返回有效文档解析数据');
+        }
+
+        final updatedList = List<AttachmentItem>.from(state.pendingAttachments);
+        for (var i = 0; i < newItems.length && i < uploadResults.length; i++) {
+          final targetIndex = updatedList.indexWhere((item) => item.id == newItems[i].id);
+          if (targetIndex != -1) {
+            updatedList[targetIndex] = updatedList[targetIndex].copyWith(
+              serverFileId: uploadResults[i].id,
+              serverUrl: uploadResults[i].url,
+              mimeType: uploadResults[i].mime,
+              charCount: uploadResults[i].charCount,
+              textContent: uploadResults[i].extractedText,
+              status: AttachmentUploadStatus.success,
+            );
+          }
+        }
+        state = state.copyWith(pendingAttachments: updatedList);
+      } catch (e) {
+        final updatedList = state.pendingAttachments.map((item) {
+          if (newItems.any((ni) => ni.id == item.id)) {
+            return item.copyWith(
+              status: AttachmentUploadStatus.error,
+              errorMessage: e.toString().replaceAll('Exception: ', ''),
+            );
+          }
+          return item;
+        }).toList();
+        state = state.copyWith(
+          pendingAttachments: updatedList,
+          errorMessage: '文档上传解析失败: ${e.toString().replaceAll('Exception: ', '')}',
+        );
+      }
     } catch (e) {
-      state = state.copyWith(errorMessage: '读取文本文件失败: $e');
+      state = state.copyWith(errorMessage: '选取文档失败: $e');
     }
   }
 
@@ -304,34 +361,32 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final trimmed = text.trim();
     if ((trimmed.isEmpty && attachmentsToSend.isEmpty) || state.isGenerating) return;
 
-    // 检查积分门槛 (单次 10 积分)
     if (state.creditsRemaining < ApiConstants.chatMessageCost) {
       state = state.copyWith(errorMessage: '积分余额不足，单次对话需消耗 10 积分');
       return;
     }
 
-    // 检查是否存在正在上传中的图片
     final hasPendingUpload = attachmentsToSend.any(
-      (a) => a.isImage && a.status == AttachmentUploadStatus.uploading,
+      (a) => a.status == AttachmentUploadStatus.uploading,
     );
     if (hasPendingUpload) {
-      state = state.copyWith(errorMessage: '图片正在上传中，请稍候再发送');
+      state = state.copyWith(errorMessage: '附件正在上传解析中，请稍候再发送');
       return;
     }
 
     final fileIds = attachmentsToSend
-        .where((a) => a.isImage && a.serverFileId != null)
+        .where((a) => a.serverFileId != null)
         .map((a) => a.serverFileId!)
         .toList();
 
-    // 若用户未手动输入文字，针对图片或文档提供基础提示词以通过后端非空校验
     final effectiveText = trimmed.isNotEmpty
         ? trimmed
-        : (attachmentsToSend.any((a) => a.isImage) ? '请分析我发送的图片' : '请查看附件内容');
+        : (attachmentsToSend.any((a) => a.isImage) ? '请分析我发送的图片' : '请阅读并分析我上传的文档内容');
 
-    // 整合文档附件到 Prompt
     final promptBuffer = StringBuffer(effectiveText);
-    for (final doc in attachmentsToSend.where((a) => !a.isImage && a.textContent != null)) {
+    for (final doc in attachmentsToSend.where(
+      (a) => !a.isImage && a.serverFileId == null && a.textContent != null,
+    )) {
       promptBuffer.write('\n\n[附件: ${doc.name}]\n```\n${doc.textContent}\n```');
     }
     final fullMessage = promptBuffer.toString();

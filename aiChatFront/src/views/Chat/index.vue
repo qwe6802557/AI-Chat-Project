@@ -53,6 +53,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { getActiveModels } from '@/api/model'
 import { getCurrentUserAccount } from '@/api/user'
 import { isAuthFailureError } from '@/utils/request'
+import type { ServerFileInfo } from '@/interface/upload'
 
 interface ChatModelOption {
   label: string
@@ -190,7 +191,7 @@ const handleSendMessage = async (
   content: string,
   options?: {
     fileIds?: string[]
-    serverFiles?: { id: string; url: string; name: string; type: string }[]
+    serverFiles?: ServerFileInfo[]
     webSearch?: boolean
   }
 ) => {

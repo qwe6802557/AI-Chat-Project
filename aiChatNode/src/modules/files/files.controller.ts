@@ -30,10 +30,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   /**
-   * 上传图片（用于聊天附件）
-   * - 最多 4 张
-   * - 单张 <= 5MB
-   * - 服务端会重编码 + 限制最长边 <= 2048
+   * 上传聊天附件（支持图片、PDF、Word、文本与代码文件）
    */
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -41,11 +38,11 @@ export class FilesController {
   @ApiOperation({
     summary: '上传聊天附件',
     description:
-      '上传聊天图片附件。上传成功后请在聊天接口中通过 fileIds 引用，不再建议直接传 base64 文件。',
+      '上传聊天图片或文档附件（PDF/DOCX/TXT/MD/代码等）。上传成功后请在聊天接口中通过 fileIds 引用。',
   })
   @ApiResponse({
     status: 200,
-    description: '上传成功，返回带签名的附件访问 URL',
+    description: '上传成功，返回带签名的附件访问 URL 及文档解析统计',
   })
   @UseInterceptors(
     FilesInterceptor('files', FilesService.MAX_FILES, {
@@ -55,11 +52,13 @@ export class FilesController {
         fileSize: FilesService.MAX_FILE_SIZE_BYTES,
       },
       fileFilter: (_req, file, cb) => {
-        const allowedTypes: readonly string[] =
-          FilesService.ALLOWED_IMAGE_MIME_TYPES;
-        if (!allowedTypes.includes(file.mimetype)) {
+        if (
+          !FilesService.isSupportedUploadFile(file.mimetype, file.originalname)
+        ) {
           return cb(
-            new BadRequestException(`不支持的文件类型: ${file.mimetype}`),
+            new BadRequestException(
+              `不支持的文件类型: ${file.originalname} (${file.mimetype})`,
+            ),
             false,
           );
         }
@@ -72,7 +71,7 @@ export class FilesController {
     @CurrentUser('id') userId?: string,
   ) {
     if (!files || files.length === 0) {
-      throw new BadRequestException('请至少上传 1 张图片');
+      throw new BadRequestException('请至少上传 1 个文件');
     }
     return this.filesService.saveUploadedImages(userId, files);
   }

@@ -10,7 +10,7 @@
         <div class="drag-content">
           <CloudUploadOutlined class="drag-icon" />
           <p>释放以上传文件</p>
-          <span>支持 JPG、PNG、GIF、WebP、BMP 图片</span>
+          <span>支持图片、PDF、Word (.docx)、Markdown、TXT、CSV、JSON 与代码文件</span>
         </div>
       </div>
     </transition>
@@ -47,7 +47,7 @@
           <a-textarea
             v-model:value="inputMessage"
             class="message-input prompt-textarea"
-            placeholder="发送消息，或拖拽/粘贴图片..."
+            placeholder="发送消息，或拖拽/粘贴图片与文档..."
             :auto-size="{ minRows: 2, maxRows: 6 }"
             :disabled="loading"
             @keydown.enter.exact.prevent="handleSend"
@@ -87,12 +87,12 @@
               role="button"
               tabindex="0"
               :class="{ disabled: loading }"
-              title="上传图片"
+              title="上传文件"
               @click="triggerFileInput"
               @keydown.enter="triggerFileInput"
             >
-              <PictureOutlined class="upload-icon" />
-              <span>上传图片</span>
+              <PaperClipOutlined class="upload-icon" />
+              <span>上传文件</span>
             </div>
 
             <WebSearchToggle
@@ -134,7 +134,7 @@ import { ref, computed } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   CloudUploadOutlined,
-  PictureOutlined,
+  PaperClipOutlined,
   ArrowUpOutlined,
   ThunderboltOutlined,
   ThunderboltFilled,
@@ -144,6 +144,7 @@ import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import WebSearchToggle from './WebSearchToggle.vue'
 import type { Message } from '@/interface/conversation'
+import type { ServerFileInfo } from '@/interface/upload'
 
 defineOptions({
   name: 'ChatAreaComponent',
@@ -191,7 +192,7 @@ const emit = defineEmits<{
     content: string,
     options?: {
       fileIds?: string[]
-      serverFiles?: { id: string; url: string; name: string; type: string }[]
+      serverFiles?: ServerFileInfo[]
       webSearch?: boolean
     }
   ]
@@ -281,7 +282,7 @@ const handleSend = () => {
 
   let sendOptions: {
     fileIds?: string[]
-    serverFiles?: { id: string; url: string; name: string; type: string }[]
+    serverFiles?: ServerFileInfo[]
     webSearch?: boolean
   } | undefined
 

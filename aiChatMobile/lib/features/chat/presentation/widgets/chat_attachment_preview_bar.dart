@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/file_attachment_model.dart';
+import 'chat_document_preview_sheet.dart';
 import 'chat_image_lightbox.dart';
 
 /// 对话输入框上方的待发送附件与图片预览条
@@ -79,7 +80,6 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
               child: imageWidget,
             ),
           ),
-          // 上传中遮罩与微型进度指示
           if (item.status == AttachmentUploadStatus.uploading)
             Positioned.fill(
               child: Container(
@@ -99,7 +99,6 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
                 ),
               ),
             ),
-          // 上传成功绿色角标
           if (item.status == AttachmentUploadStatus.success)
             Positioned(
               left: 3.0,
@@ -113,7 +112,6 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
                 child: const Icon(Icons.check, size: 10.0, color: Colors.white),
               ),
             ),
-          // 上传失败警告
           if (item.status == AttachmentUploadStatus.error)
             Positioned(
               left: 3.0,
@@ -127,7 +125,6 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
                 child: const Icon(Icons.error_outline_rounded, size: 10.0, color: Colors.white),
               ),
             ),
-          // 移除按钮
           Positioned(
             top: -6.0,
             right: -6.0,
@@ -149,85 +146,112 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
     );
   }
 
-  Widget _buildDocumentItem(AttachmentItem item) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          constraints: const BoxConstraints(maxWidth: 150.0),
-          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
-          decoration: BoxDecoration(
-            color: StitchTokens.surfaceGlassDark,
-            borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-            border: Border.all(
-              color: StitchTokens.outlineVariant.withValues(alpha: 0.6),
-              width: 1.0,
+  Widget _buildDocumentItem(BuildContext context, AttachmentItem item) {
+    final subtitle = item.status == AttachmentUploadStatus.uploading
+        ? '${item.formattedSize} · 解析中...'
+        : item.formattedMeta;
+
+    return GestureDetector(
+      onTap: () {
+        if (item.status == AttachmentUploadStatus.success) {
+          ChatDocumentPreviewSheet.show(context, item);
+        }
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            constraints: const BoxConstraints(maxWidth: 210.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              color: StitchTokens.surfaceGlassDark,
+              borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+              border: Border.all(
+                color: item.status == AttachmentUploadStatus.error
+                    ? StitchTokens.crimsonStop
+                    : StitchTokens.outlineVariant.withValues(alpha: 0.6),
+                width: 1.0,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34.0,
+                  height: 34.0,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: StitchTokens.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                  ),
+                  child: item.status == AttachmentUploadStatus.uploading
+                      ? const SizedBox(
+                          width: 16.0,
+                          height: 16.0,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.0,
+                            valueColor: AlwaysStoppedAnimation<Color>(StitchTokens.primary),
+                          ),
+                        )
+                      : Text(
+                          item.badgeLabel,
+                          style: const TextStyle(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w700,
+                            color: StitchTokens.primary,
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 8.0),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.name,
+                        style: const TextStyle(
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w600,
+                          color: StitchTokens.onSurface,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2.0),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 10.0,
+                          color: StitchTokens.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 32.0,
-                height: 32.0,
-                decoration: BoxDecoration(
-                  color: StitchTokens.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+          Positioned(
+            top: -6.0,
+            right: -6.0,
+            child: GestureDetector(
+              onTap: () => onRemove(item.id),
+              child: Container(
+                width: 18.0,
+                height: 18.0,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF475569),
+                  shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.description_rounded,
-                  size: 18.0,
-                  color: StitchTokens.primary,
-                ),
+                child: const Icon(Icons.close_rounded, size: 12.0, color: Colors.white),
               ),
-              const SizedBox(width: 8.0),
-              Flexible(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 12.0,
-                        fontWeight: FontWeight.w600,
-                        color: StitchTokens.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2.0),
-                    Text(
-                      item.formattedSize,
-                      style: const TextStyle(
-                        fontSize: 10.0,
-                        color: StitchTokens.outline,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 移除按钮
-        Positioned(
-          top: -6.0,
-          right: -6.0,
-          child: GestureDetector(
-            onTap: () => onRemove(item.id),
-            child: Container(
-              width: 18.0,
-              height: 18.0,
-              decoration: const BoxDecoration(
-                color: Color(0xFF475569),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.close_rounded, size: 12.0, color: Colors.white),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -246,7 +270,7 @@ class ChatAttachmentPreviewBar extends StatelessWidget {
           final item = attachments[index];
           return item.isImage
               ? _buildImageItem(context, item)
-              : _buildDocumentItem(item);
+              : _buildDocumentItem(context, item);
         },
       ),
     );

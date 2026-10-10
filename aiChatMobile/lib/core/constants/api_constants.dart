@@ -2,8 +2,11 @@
 class ApiConstants {
   ApiConstants._();
 
-  // 生产环境 API 服务基址
-  static const String baseUrl = 'https://aichat.yanggenbwebsite.site';
+  // API 服务基址（支持通过 --dart-define=API_BASE_URL 覆盖本地调试地址）
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://aichat.yanggenbwebsite.site',
+  );
 
   // 认证链路端点
   static const String authLogin = '/auth/login';

@@ -528,30 +528,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.1.0"
-  jni:
-    dependency: transitive
-    description:
-      name: jni
-      sha256: f038e58b4dc2c9037f50e233175086337e0b305e356d28211bf55f21c504cbd3
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "1.0.3"
-  jni_flutter:
-    dependency: transitive
-    description:
-      name: jni_flutter
-      sha256: b2310cdd4c18c65c081ab141a41efa94aa26c65431803703ece51996f174f351
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "1.0.3"
-  jni_util:
-    dependency: transitive
-    description:
-      name: jni_util
-      sha256: "1ba86da04a5f2bf18fde2edb235587e70c5b0fc5bd4ba955f46b00942c3fc35f"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "1.0.0"
   js:
     dependency: transitive
     description:
@@ -689,13 +665,13 @@ packages:
     source: hosted
     version: "2.1.6"
   path_provider_android:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: path_provider_android
-      sha256: "69cbd515a62b94d32a7944f086b2f82b4ac40a1d45bebfc00813a430ab2dabcd"
+      sha256: "4adf4fd5423ec60a29506c76581bc05854c55e3a0b72d35bb28d661c9686edf2"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.3.1"
+    version: "2.2.15"
   path_provider_foundation:
     dependency: transitive
     description:
@@ -809,13 +785,13 @@ packages:
     source: hosted
     version: "0.7.2"
   record_platform_interface:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
       name: record_platform_interface
-      sha256: "8e56cbe06c6984137fb86132ff03459f29938d927496d9b2d0962e2d6345d488"
+      sha256: "8a575828733d4c3cb5983c914696f40db8667eab3538d4c41c50cbb79e722ef4"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.6.0"
+    version: "1.2.0"
   record_use:
     dependency: transitive
     description:
@@ -840,6 +816,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.0.7"
+  restart_app:
+    dependency: "direct main"
+    description:
+      name: restart_app
+      sha256: b7ab4ec8e35ac5a716939bb3aee10c56d24e8b5c4798682b7aacb523f67c9367
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "1.10.1"
   riverpod:
     dependency: transitive
     description:
@@ -944,6 +928,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.0.0"
+  shorebird_code_push:
+    dependency: "direct main"
+    description:
+      name: shorebird_code_push
+      sha256: "32df9946782c6ca95d7065c7f2156df74675e931b816d0dc391a3d8f8917930f"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "2.0.7"
   sky_engine:
     dependency: transitive
     description: flutter
