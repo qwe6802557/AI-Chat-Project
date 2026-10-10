@@ -7,47 +7,129 @@ import type { UploadedFile, UseFileUploadOptions, ServerFileInfo } from '@/inter
 
 export type { UploadedFile, UseFileUploadOptions } from '@/interface/upload'
 
-// 当前聊天上传能力：仅支持图片
+// 支持上传的图片 MIME 类型
 export const IMAGE_UPLOAD_MIME_TYPES = [
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'image/bmp',
- ] as const
+] as const
 
-export const IMAGE_UPLOAD_ACCEPT = IMAGE_UPLOAD_MIME_TYPES.join(',')
+// 支持上传的文档与代码 MIME 类型
+export const DOCUMENT_UPLOAD_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'application/json',
+  'application/xml',
+  'text/xml',
+  'application/x-yaml',
+  'text/yaml',
+  'text/html',
+  'text/css',
+  'text/javascript',
+  'application/javascript',
+  'application/typescript',
+] as const
 
-// 文件类型映射
-const FILE_TYPE_MAP: Record<string, UploadedFile['type']> = {
-  'image/jpeg': 'image',
-  'image/png': 'image',
-  'image/gif': 'image',
-  'image/webp': 'image',
-  'image/bmp': 'image',
+// 支持上传的文档与代码扩展名
+export const DOCUMENT_UPLOAD_EXTENSIONS = [
+  '.pdf',
+  '.docx',
+  '.txt',
+  '.md',
+  '.markdown',
+  '.csv',
+  '.json',
+  '.xml',
+  '.yaml',
+  '.yml',
+  '.log',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.vue',
+  '.py',
+  '.dart',
+  '.java',
+  '.go',
+  '.rs',
+  '.c',
+  '.cpp',
+  '.h',
+  '.sql',
+  '.sh',
+  '.html',
+  '.css',
+  '.scss',
+  '.env',
+] as const
+
+export const CHAT_UPLOAD_ACCEPT = [
+  ...IMAGE_UPLOAD_MIME_TYPES,
+  ...DOCUMENT_UPLOAD_EXTENSIONS,
+].join(',')
+
+export const IMAGE_UPLOAD_ACCEPT = CHAT_UPLOAD_ACCEPT
+
+/**
+ * 提取小写文件扩展名（包含点号）
+ */
+export function getFileExtension(filename: string): string {
+  const lastDotIndex = filename.lastIndexOf('.')
+  return lastDotIndex >= 0 ? filename.slice(lastDotIndex).toLowerCase() : ''
 }
 
-// 文件类型友好名称
-const IMAGE_TYPE_NAMES: Record<string, string> = {
-  'image/jpeg': 'JPG 图片',
-  'image/png': 'PNG 图片',
-  'image/gif': 'GIF 图片',
-  'image/webp': 'WebP 图片',
-  'image/bmp': 'BMP 图片',
+/**
+ * 根据文件名与 MIME 推断附件展示类型
+ */
+export function resolveAttachmentType(
+  file: Pick<File, 'name' | 'type'>
+): UploadedFile['type'] {
+  const mime = (file.type || '').toLowerCase()
+  const ext = getFileExtension(file.name || '')
+
+  if (IMAGE_UPLOAD_MIME_TYPES.includes(mime as (typeof IMAGE_UPLOAD_MIME_TYPES)[number])) {
+    return 'image'
+  }
+  if (mime === 'application/pdf' || ext === '.pdf') {
+    return 'pdf'
+  }
+  return 'document'
+}
+
+/**
+ * 获取附件角标简称（如 PDF / DOCX / MD / TS）
+ */
+export function getAttachmentBadgeLabel(name: string, type?: string): string {
+  const ext = getFileExtension(name).replace(/^\./, '').toUpperCase()
+  if (ext) {
+    if (ext === 'MARKDOWN') return 'MD'
+    return ext.slice(0, 6)
+  }
+  if (type === 'pdf' || type === 'application/pdf') {
+    return 'PDF'
+  }
+  return 'DOC'
 }
 
 /**
  * 文件上传 Hook
  *
- * @description 处理文件上传、验证、压缩，添加时自动上传到服务器
+ * @description 处理图片与多格式文档上传、验证、压缩，添加时自动上传到服务器
  */
 export function useFileUpload(options: UseFileUploadOptions = {}) {
   const {
-    maxSize = 5 * 1024 * 1024, // 5MB（匹配后端限制）
-    maxCount = 4,              // 最多4张（匹配后端限制）
-    allowedTypes = [...IMAGE_UPLOAD_MIME_TYPES],
+    maxSize = 10 * 1024 * 1024,
+    maxCount = 4,
+    allowedTypes = [...IMAGE_UPLOAD_MIME_TYPES, ...DOCUMENT_UPLOAD_MIME_TYPES],
+    allowedExtensions = [...DOCUMENT_UPLOAD_EXTENSIONS],
     autoCompress = true,
-    compressThreshold = 2 * 1024 * 1024, // 2MB 开始压缩
+    compressThreshold = 2 * 1024 * 1024,
     compressQuality = 0.8
   } = options
 
@@ -85,27 +167,27 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * 验证文件
    */
   const validateFile = (file: File): { valid: boolean; error?: string } => {
-    // 检查文件数量
     if (files.value.length >= maxCount) {
       return { valid: false, error: `最多只能上传 ${maxCount} 个文件` }
     }
 
-    // 检查文件类型
-    if (!allowedTypes.includes(file.type)) {
-      const allowedNames = allowedTypes
-        .map(t => IMAGE_TYPE_NAMES[t] || t)
-        .filter((v, i, a) => a.indexOf(v) === i) // 去重
-        .join('、')
-      return { valid: false, error: `当前仅支持上传图片，仅支持：${allowedNames}` }
+    const mime = (file.type || '').toLowerCase()
+    const ext = getFileExtension(file.name || '')
+    const isAllowedMime = Boolean(mime) && allowedTypes.includes(mime)
+    const isAllowedExt = Boolean(ext) && allowedExtensions.includes(ext)
+
+    if (!isAllowedMime && !isAllowedExt) {
+      return {
+        valid: false,
+        error: '不支持的文件格式，支持图片、PDF、Word (.docx)、Markdown、TXT、CSV、JSON 及常见代码文件'
+      }
     }
 
-    // 检查文件大小
     if (file.size > maxSize) {
       const maxSizeMB = Math.round(maxSize / 1024 / 1024)
       return { valid: false, error: `文件大小不能超过 ${maxSizeMB}MB` }
     }
 
-    // 检查是否重复
     const isDuplicate = files.value.some(
       f => f.name === file.name && f.size === file.size
     )
@@ -201,18 +283,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * @param fileId 文件的本地 ID（用于在 files.value 中查找响应式对象）
    */
   const uploadSingleFile = async (fileId: string): Promise<boolean> => {
-    // 通过 ID 在 files.value 中查找-确保获取响应式代理对象
     const fileItem = files.value.find(f => f.id === fileId)
     if (!fileItem) {
       logger.warn('[uploadSingleFile] 找不到文件:', fileId)
-      return false
-    }
-
-    // 只上传图片类型
-    if (fileItem.type !== 'image') {
-      // 非图片类型暂不支持服务器上传，标记为错误
-      fileItem.status = 'error'
-      fileItem.error = '暂不支持该文件类型上传'
       return false
     }
 
@@ -220,7 +293,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     logger.debug('[uploadSingleFile] 开始上传:', fileItem.name)
 
     try {
-      // 使用 toRaw 获取原始 File 对象，避免 Vue Proxy 导致 instanceof 检查失败
       const rawFile = toRaw(fileItem.file)
       logger.debug('[uploadSingleFile] rawFile instanceof File:', rawFile instanceof File)
       const response = await uploadFiles([rawFile])
@@ -236,9 +308,17 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         }
         fileItem.status = 'uploaded'
         fileItem.serverId = serverFile.id
-        // 拼接完整 URL，确保预览时可以正确加载
         const baseURL = getApiBaseUrl()
         fileItem.serverUrl = `${baseURL}${serverFile.url}`
+        if (serverFile.category) {
+          fileItem.type = serverFile.category
+        }
+        if (typeof serverFile.sizeBytes === 'number' && serverFile.sizeBytes > 0) {
+          fileItem.size = serverFile.sizeBytes
+        }
+        fileItem.charCount = serverFile.charCount ?? null
+        fileItem.extractedText = serverFile.extractedText ?? null
+        fileItem.truncated = serverFile.truncated ?? false
         logger.debug('[uploadSingleFile] 上传成功:', fileItem.name, serverFile.id)
         return true
       } else {
@@ -260,17 +340,14 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * 处理单个文件（本地处理 + 自动上传）
    */
   const processFile = async (file: File): Promise<UploadedFile | null> => {
-    // 验证
     const validation = validateFile(file)
     if (!validation.valid) {
       message.warning(validation.error)
       return null
     }
 
-    // 确定文件类型
-    const fileType = FILE_TYPE_MAP[file.type] || 'document'
+    const fileType = resolveAttachmentType(file)
 
-    // 创建文件对象
     const uploadedFile: UploadedFile = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       file,
@@ -281,11 +358,9 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
       status: 'processing'
     }
 
-    // 先添加到列表（显示处理中状态）
     files.value.push(uploadedFile)
 
     try {
-      // 主链路不再先生成 base64；图片在需要时压缩成新的 File 后直接上传
       if (fileType === 'image' && autoCompress && file.size > compressThreshold) {
         logger.debug(`[processFile] 压缩图片: ${file.name}, 原始大小: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
         const processedFile = await compressImage(file, compressQuality)
@@ -293,8 +368,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         logger.debug(`[processFile] 压缩后大小: ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`)
       }
 
-      // 本地处理完成后，立即上传到服务器
-      // 传递 fileId 而不是对象，确保在 uploadSingleFile 中通过 files.value 获取响应式代理
       await uploadSingleFile(uploadedFile.id)
 
       return uploadedFile
@@ -312,16 +385,13 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
   const addFiles = async (fileList: FileList | File[]): Promise<void> => {
     const fileArray = Array.from(fileList)
 
-    // 检查总数量
     if (files.value.length + fileArray.length > maxCount) {
       message.warning(`最多只能上传 ${maxCount} 个文件`)
-      // 只处理允许数量的文件
       fileArray.splice(maxCount - files.value.length)
     }
 
     if (fileArray.length === 0) return
 
-    // 并行处理文件（包含上传）
     await Promise.all(fileArray.map(processFile))
   }
 
@@ -333,7 +403,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
     if (index !== -1) {
       const file = files.value[index]
       if (file) {
-        // 释放预览 URL
         if (file.preview && file.type === 'image') {
           URL.revokeObjectURL(file.preview)
         }
@@ -346,7 +415,6 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
    * 清空所有文件
    */
   const clearFiles = (): void => {
-    // 释放所有预览 URL
     files.value.forEach(f => {
       if (f.preview && f.type === 'image') {
         URL.revokeObjectURL(f.preview)
@@ -374,7 +442,12 @@ export function useFileUpload(options: UseFileUploadOptions = {}) {
         id: f.serverId!,
         url: f.serverUrl!,
         name: f.name,
-        type: f.file.type
+        type: f.file.type || f.type,
+        category: f.type,
+        sizeBytes: f.size,
+        charCount: f.charCount ?? null,
+        extractedText: f.extractedText ?? null,
+        truncated: f.truncated ?? false,
       }))
   }
 

@@ -10,7 +10,7 @@ import '../../features/explore/presentation/explore_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../shared/widgets/floating_glass_nav_bar.dart';
 
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// 路由监听器：桥接 Riverpod 认证状态与 GoRouter 的 refreshListenable 机制
@@ -35,7 +35,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
 
   return GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     refreshListenable: notifier,
     initialLocation: '/chat',
     redirect: (context, state) {

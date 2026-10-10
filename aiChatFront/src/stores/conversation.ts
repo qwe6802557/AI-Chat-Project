@@ -38,7 +38,11 @@ const isBlobUrl = (value: string | undefined): boolean => {
   return typeof value === 'string' && value.startsWith('blob:')
 }
 
-const mapMimeToAttachmentType = (mimeType: string): MessageAttachment['type'] => {
+const mapMimeToAttachmentType = (
+  mimeType: string,
+  category?: MessageAttachment['type']
+): MessageAttachment['type'] => {
+  if (category) return category
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType === 'application/pdf') return 'pdf'
   return 'document'
@@ -109,10 +113,13 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
     let attachments: MessageAttachment[] | undefined
     if (msg.attachments && msg.attachments.length > 0) {
       attachments = msg.attachments.map(att => ({
-        type: mapMimeToAttachmentType(att.type),
+        type: mapMimeToAttachmentType(att.type, att.category),
         name: att.name,
         preview: `${baseURL}${att.url}`,
-        url: `${baseURL}${att.url}`
+        url: `${baseURL}${att.url}`,
+        sizeBytes: att.sizeBytes,
+        charCount: att.charCount ?? null,
+        extractedText: att.extractedText ?? null,
       }))
     }
 
@@ -217,6 +224,8 @@ export const useConversationStore = defineStore('conversation', () => {
                 name: att.name,
                 url: att.url,
                 preview: isBlobUrl(att.preview) ? '' : att.preview,
+                sizeBytes: att.sizeBytes,
+                charCount: att.charCount ?? null,
               })),
             })),
           }

@@ -29,10 +29,13 @@ const mapFileTypeToAttachmentType = (mimeType: string): MessageAttachment['type'
  */
 const convertServerFilesToAttachments = (serverFiles: ServerFileInfo[]): MessageAttachment[] => {
   return serverFiles.map(file => ({
-    type: mapFileTypeToAttachmentType(file.type),
+    type: file.category || mapFileTypeToAttachmentType(file.type),
     name: file.name,
     url: file.url,
     preview: file.url,
+    sizeBytes: file.sizeBytes,
+    charCount: file.charCount ?? null,
+    extractedText: file.extractedText ?? null,
   }))
 }
 

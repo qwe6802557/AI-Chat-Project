@@ -19,20 +19,26 @@ class UploadFileInput {
   });
 }
 
-/// 上传图片服务端返回实体
+/// 上传文件或图片服务端返回实体
 class UploadedImageResult {
   final String id;
   final String url;
   final String name;
   final String mime;
+  final String? category;
   final int sizeBytes;
+  final int? charCount;
+  final String? extractedText;
 
   const UploadedImageResult({
     required this.id,
     required this.url,
     required this.name,
     required this.mime,
+    this.category,
     required this.sizeBytes,
+    this.charCount,
+    this.extractedText,
   });
 
   factory UploadedImageResult.fromJson(Map<String, dynamic> json) {
@@ -46,7 +52,10 @@ class UploadedImageResult {
       url: fullUrl,
       name: json['name'] as String? ?? '',
       mime: json['mime'] as String? ?? '',
+      category: json['category'] as String?,
       sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+      charCount: (json['charCount'] as num?)?.toInt(),
+      extractedText: json['extractedText'] as String?,
     );
   }
 }

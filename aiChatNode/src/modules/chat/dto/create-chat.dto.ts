@@ -41,6 +41,14 @@ export class FileDataDto {
   @IsNotEmpty({ message: '文件名不能为空' })
   @IsString({ message: '文件名必须是字符串' })
   name: string;
+
+  @IsOptional()
+  @IsString()
+  extractedText?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  charCount?: number | null;
 }
 
 export class CreateChatDto {

@@ -170,4 +170,67 @@ describe('ChatService - Billing & Credits', () => {
       expect(config.modelId).toBe('grok-chat-fast');
     });
   });
+
+  describe('Document Context Injection & Multi-turn History', () => {
+    it('returns plain string with structured document block when only documents are attached', () => {
+      const content = (service as any).buildMultimodalContent('请总结核心要点', [
+        {
+          base64: '',
+          type: 'application/pdf',
+          name: 'report.pdf',
+          extractedText: '第一部分：系统架构演进。',
+          charCount: 12,
+        },
+      ]);
+
+      expect(typeof content).toBe('string');
+      expect(content).toContain('【附件文档：report.pdf（共 12 字符）】');
+      expect(content).toContain('第一部分：系统架构演进。');
+      expect(content).toContain('【用户提问】：\n请总结核心要点');
+    });
+
+    it('returns multimodal array when both image and document are attached', () => {
+      const content = (service as any).buildMultimodalContent('对比图与文档', [
+        {
+          base64: 'data:image/webp;base64,AAAA',
+          type: 'image/webp',
+          name: 'chart.webp',
+        },
+        {
+          base64: '',
+          type: 'text/markdown; charset=utf-8',
+          name: 'notes.md',
+          extractedText: '营收增长 50%',
+          charCount: 7,
+        },
+      ]);
+
+      expect(Array.isArray(content)).toBe(true);
+      expect(content).toHaveLength(2);
+      expect(content[0]).toEqual({
+        type: 'image_url',
+        image_url: { url: 'data:image/webp;base64,AAAA', detail: 'auto' },
+      });
+      expect(content[1].type).toBe('text');
+      expect(content[1].text).toContain('【附件文档：notes.md（共 7 字符）】');
+      expect(content[1].text).toContain('营收增长 50%');
+    });
+
+    it('mounts historical document attachments automatically in formatHistoryUserMessage', () => {
+      const formatted = (service as any).formatHistoryUserMessage({
+        userMessage: '分析这份代码',
+        attachments: [
+          {
+            originalName: 'app.ts',
+            extractedText: 'console.log("hello")',
+            charCount: 20,
+          },
+        ],
+      });
+
+      expect(formatted).toContain('【附件文档：app.ts（共 20 字符）】');
+      expect(formatted).toContain('console.log("hello")');
+      expect(formatted).toContain('【用户提问】：\n分析这份代码');
+    });
+  });
 });

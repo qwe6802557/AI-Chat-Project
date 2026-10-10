@@ -95,6 +95,18 @@ export class ChatAttachment {
   @Column({ type: 'int', nullable: true })
   height?: number | null;
 
+  /**
+   * 文档提取文本内容（用于 PDF/Word/代码/文本附件持久化与多轮问答）
+   */
+  @Column({ type: 'text', nullable: true })
+  extractedText?: string | null;
+
+  /**
+   * 文档原始提取字符数
+   */
+  @Column({ type: 'int', nullable: true })
+  charCount?: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -5,8 +5,8 @@
         v-for="file in files"
         :key="file.id"
         :class="['file-preview-item', file.status, file.type]"
+        @click="handleItemClick(file)"
       >
-        <!-- 图片预览 -->
         <template v-if="file.type === 'image'">
           <a-image
             v-if="file.preview"
@@ -27,36 +27,36 @@
           </div>
         </template>
 
-        <!-- PDF 预览 -->
-        <template v-else-if="file.type === 'pdf'">
-          <div class="file-icon pdf">
-            <FilePdfOutlined />
-          </div>
-        </template>
-
-        <!-- 文档预览 -->
         <template v-else>
-          <div class="file-icon document">
-            <FileTextOutlined />
+          <div class="doc-card-badge" :class="getBadgeClass(file)">
+            {{ getBadgeLabel(file) }}
+          </div>
+          <div class="doc-card-body">
+            <div class="file-name" :title="file.name">
+              {{ file.name }}
+            </div>
+            <div class="file-meta">
+              <span>{{ formatSize(file.size) }}</span>
+              <template v-if="file.status === 'uploaded' && formatCharCount(file)">
+                <span class="meta-dot">·</span>
+                <span class="parsed-tag">{{ formatCharCount(file) }}</span>
+              </template>
+              <template v-else-if="file.status === 'uploading' || file.status === 'processing'">
+                <span class="meta-dot">·</span>
+                <span>解析中...</span>
+              </template>
+            </div>
           </div>
         </template>
 
-        <!-- 文件名 -->
-        <div v-if="file.type !== 'image'" class="file-name" :title="file.name">
-          {{ truncateFileName(file.name) }}
-        </div>
-
-        <!-- 处理/上传中遮罩 -->
         <div v-if="file.status === 'processing' || file.status === 'uploading'" class="processing-overlay">
           <LoadingOutlined spin />
         </div>
 
-        <!-- 错误遮罩 -->
         <div v-if="file.status === 'error'" class="error-overlay" :title="file.error">
           <ExclamationCircleOutlined />
         </div>
 
-        <!-- 删除按钮 -->
         <button
           v-if="!readonly"
           class="remove-btn"
@@ -68,27 +68,31 @@
       </div>
     </div>
 
-    <!-- 文件统计信息 -->
     <div v-if="showStats && files.length > 0" class="file-stats">
       <span>{{ files.length }} 个文件</span>
       <span class="divider">·</span>
       <span>{{ formatSize(totalSize) }}</span>
     </div>
+
+    <DocumentPreviewModal
+      :open="Boolean(activePreviewDoc)"
+      :document="activePreviewDoc"
+      @close="activePreviewDoc = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   CloseOutlined,
   LoadingOutlined,
   FileImageOutlined,
-  FilePdfOutlined,
-  FileTextOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons-vue'
 import type { UploadedFile } from '@/interface/upload'
-import { formatFileSize } from '@/hooks/useFileUpload'
+import { formatFileSize, getAttachmentBadgeLabel } from '@/hooks/useFileUpload'
+import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 
 interface Props {
   files: UploadedFile[]
@@ -105,37 +109,50 @@ const emit = defineEmits<{
   'remove': [id: string]
 }>()
 
-// 计算总大小
+const activePreviewDoc = ref<PreviewableDocument | null>(null)
+
 const totalSize = computed(() =>
   props.files.reduce((sum, f) => sum + f.size, 0)
 )
 
-// 格式化大小
 const formatSize = (bytes: number): string => {
   return formatFileSize(bytes)
 }
 
-// 截断文件名
-const truncateFileName = (name: string, maxLength: number = 12): string => {
-  if (name.length <= maxLength) return name
-
-  const ext = name.lastIndexOf('.')
-  if (ext === -1) {
-    return name.slice(0, maxLength - 3) + '...'
-  }
-
-  const extension = name.slice(ext)
-  const baseName = name.slice(0, ext)
-  const availableLength = maxLength - extension.length - 3
-
-  if (availableLength <= 0) {
-    return name.slice(0, maxLength - 3) + '...'
-  }
-
-  return baseName.slice(0, availableLength) + '...' + extension
+const getBadgeLabel = (file: UploadedFile): string => {
+  return getAttachmentBadgeLabel(file.name, file.type)
 }
 
-// 移除文件
+const getBadgeClass = (file: UploadedFile): string => {
+  const label = getBadgeLabel(file).toLowerCase()
+  if (label === 'pdf') return 'is-pdf'
+  if (label === 'docx' || label === 'doc') return 'is-word'
+  if (label === 'csv' || label === 'json') return 'is-data'
+  return 'is-code'
+}
+
+const formatCharCount = (file: UploadedFile): string => {
+  if (typeof file.charCount === 'number' && file.charCount > 0) {
+    return `已解析 ${file.charCount.toLocaleString()} 字`
+  }
+  if (file.extractedText) {
+    return `已解析 ${file.extractedText.length.toLocaleString()} 字`
+  }
+  return ''
+}
+
+const handleItemClick = (file: UploadedFile) => {
+  if (file.type === 'image' || file.status !== 'uploaded') return
+  activePreviewDoc.value = {
+    name: file.name,
+    type: file.type,
+    url: file.serverUrl,
+    sizeBytes: file.size,
+    charCount: file.charCount,
+    extractedText: file.extractedText,
+  }
+}
+
 const handleRemove = (id: string) => {
   emit('remove', id)
 }
@@ -144,19 +161,17 @@ const handleRemove = (id: string) => {
 <style scoped lang="scss">
 $color-bg-primary: #FFFFFF;
 $color-bg-hover: rgba(0, 0, 0, 0.04);
-$color-border: rgba(0, 0, 0, 0.1);
-$color-border-light: rgba(0, 0, 0, 0.06);
-$color-text-primary: #000000;
-$color-text-secondary: rgba(0, 0, 0, 0.6);
+$color-border: rgba(0, 0, 0, 0.12);
+$color-border-light: rgba(0, 0, 0, 0.07);
+$color-text-primary: #18181b;
+$color-text-secondary: #71717a;
 $color-error: #ff4d4f;
-$color-pdf: #ff5722;
-$color-doc: #2196f3;
 
 $spacing-xs: 4px;
 $spacing-sm: 8px;
 $spacing-md: 12px;
 
-$radius-sm: 8px;
+$radius-sm: 10px;
 $radius-md: 12px;
 
 .file-preview-container {
@@ -174,8 +189,6 @@ $radius-md: 12px;
 
 .file-preview-item {
   position: relative;
-  width: 72px;
-  height: 72px;
   border-radius: $radius-sm;
   overflow: hidden;
   background: $color-bg-primary;
@@ -185,16 +198,17 @@ $radius-md: 12px;
 
   &:hover {
     border-color: $color-border;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 
     .remove-btn {
       opacity: 1;
     }
   }
 
-  // 图片类型
   &.image {
-    // a-image 组件容器
+    width: 72px;
+    height: 72px;
+
     :deep(.ant-image) {
       width: 100%;
       height: 100%;
@@ -225,82 +239,119 @@ $radius-md: 12px;
     }
   }
 
-  // PDF和文档类型
   &.pdf,
   &.document {
+    min-width: 196px;
+    max-width: 268px;
+    height: 58px;
+    padding: 8px 28px 8px 10px;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: $spacing-xs;
+    gap: 10px;
 
-    .file-icon {
-      font-size: 28px;
-      margin-bottom: $spacing-xs;
+    .doc-card-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      flex-shrink: 0;
+      background: #eff6ff;
+      color: #2563eb;
 
-      &.pdf {
-        color: $color-pdf;
+      &.is-pdf {
+        background: #fef2f2;
+        color: #dc2626;
       }
 
-      &.document {
-        color: $color-doc;
+      &.is-word {
+        background: #eff6ff;
+        color: #1d4ed8;
       }
+
+      &.is-data {
+        background: #ecfdf5;
+        color: #059669;
+      }
+
+      &.is-code {
+        background: #f5f3ff;
+        color: #6d28d9;
+      }
+    }
+
+    .doc-card-body {
+      min-width: 0;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
     }
 
     .file-name {
-      font-size: 10px;
-      color: $color-text-secondary;
-      text-align: center;
-      line-height: 1.2;
-      max-width: 100%;
+      font-size: 13px;
+      font-weight: 500;
+      color: $color-text-primary;
+      line-height: 1.3;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      padding: 0 2px;
+    }
+
+    .file-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: $color-text-secondary;
+      white-space: nowrap;
+
+      .parsed-tag {
+        color: #2563eb;
+        font-weight: 500;
+      }
     }
   }
 
-  // 处理中状态
-  &.processing {
+  &.processing,
+  &.uploading {
     .processing-overlay {
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(255, 255, 255, 0.8);
+      inset: 0;
+      background: rgba(255, 255, 255, 0.78);
       display: flex;
       align-items: center;
       justify-content: center;
       color: $color-text-secondary;
-      font-size: 20px;
+      font-size: 18px;
     }
   }
 
-  // 错误状态
   &.error {
     border-color: $color-error;
 
     .error-overlay {
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      inset: 0;
       background: rgba(255, 77, 79, 0.1);
       display: flex;
       align-items: center;
       justify-content: center;
       color: $color-error;
-      font-size: 20px;
+      font-size: 18px;
     }
   }
 }
 
 .remove-btn {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: 4px;
+  right: 4px;
   width: 18px;
   height: 18px;
   border-radius: 50%;

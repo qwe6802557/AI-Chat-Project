@@ -59,6 +59,9 @@ export interface MessageAttachment {
   preview: string
   base64?: string
   url?: string
+  sizeBytes?: number
+  charCount?: number | null
+  extractedText?: string | null
 }
 
 /**

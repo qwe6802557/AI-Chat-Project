@@ -8,8 +8,12 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Response } from 'express';
 import sharp from 'sharp';
+import pdfParse from 'pdf-parse';
+import * as mammoth from 'mammoth';
 import { ChatAttachment } from '../chat/entities/chat-attachment.entity';
 import type { FileDataDto } from '../chat/dto';
+
+export type AttachmentCategory = 'image' | 'pdf' | 'document';
 
 export interface UploadedImageResult {
   id: string;
@@ -19,24 +23,73 @@ export interface UploadedImageResult {
   sizeBytes: number;
   width?: number | null;
   height?: number | null;
+  category: AttachmentCategory;
+  charCount?: number | null;
+  extractedText?: string | null;
+  truncated?: boolean;
 }
 
 type AllowedImageMimeType =
   | 'image/jpeg'
   | 'image/png'
   | 'image/webp'
-  | 'image/gif';
+  | 'image/gif'
+  | 'image/bmp';
+
+export type UploadFileKind = 'image' | 'pdf' | 'docx' | 'text';
 
 @Injectable()
 export class FilesService {
   static readonly MAX_FILES = 4;
-  static readonly MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+  static readonly MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
   static readonly MAX_IMAGE_DIMENSION = 2048;
+  static readonly MAX_EXTRACTED_TEXT_CHARS = 30000;
+  static readonly TRUNCATE_HEAD_CHARS = 24000;
+  static readonly TRUNCATE_TAIL_CHARS = 6000;
+
   static readonly ALLOWED_IMAGE_MIME_TYPES = [
     'image/jpeg',
     'image/png',
     'image/webp',
     'image/gif',
+    'image/bmp',
+  ] as const;
+
+  static readonly ALLOWED_TEXT_EXTENSIONS = [
+    '.txt',
+    '.md',
+    '.markdown',
+    '.csv',
+    '.json',
+    '.xml',
+    '.yaml',
+    '.yml',
+    '.log',
+    '.ts',
+    '.tsx',
+    '.js',
+    '.jsx',
+    '.vue',
+    '.py',
+    '.dart',
+    '.java',
+    '.go',
+    '.rs',
+    '.c',
+    '.cpp',
+    '.h',
+    '.sql',
+    '.sh',
+    '.html',
+    '.css',
+    '.scss',
+    '.env',
+  ] as const;
+
+  static readonly ALLOWED_DOCUMENT_EXTENSIONS = [
+    '.pdf',
+    '.docx',
+    ...FilesService.ALLOWED_TEXT_EXTENSIONS,
   ] as const;
 
   private readonly logger = new Logger(FilesService.name);
@@ -47,6 +100,71 @@ export class FilesService {
     private readonly configService: ConfigService,
   ) {
     this.validateFileAccessConfig();
+  }
+
+  static resolveUploadFileKind(
+    mimetype: string,
+    originalName: string,
+  ): UploadFileKind | null {
+    const normalizedMime = (mimetype || '').toLowerCase().trim();
+    const ext = path.extname(originalName || '').toLowerCase();
+
+    if (
+      (FilesService.ALLOWED_IMAGE_MIME_TYPES as readonly string[]).includes(
+        normalizedMime,
+      )
+    ) {
+      return 'image';
+    }
+
+    if (ext === '.pdf' || normalizedMime === 'application/pdf') {
+      return 'pdf';
+    }
+
+    if (
+      ext === '.docx' ||
+      normalizedMime ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ) {
+      return 'docx';
+    }
+
+    if (
+      (FilesService.ALLOWED_TEXT_EXTENSIONS as readonly string[]).includes(
+        ext,
+      ) ||
+      normalizedMime.startsWith('text/') ||
+      normalizedMime === 'application/json' ||
+      normalizedMime === 'application/xml' ||
+      normalizedMime === 'application/javascript' ||
+      normalizedMime === 'application/typescript'
+    ) {
+      return 'text';
+    }
+
+    return null;
+  }
+
+  static isSupportedUploadFile(
+    mimetype: string,
+    originalName: string,
+  ): boolean {
+    return FilesService.resolveUploadFileKind(mimetype, originalName) !== null;
+  }
+
+  static resolveAttachmentCategory(
+    storageMime: string,
+    originalName?: string,
+  ): AttachmentCategory {
+    const mime = (storageMime || '').toLowerCase();
+    const ext = path.extname(originalName || '').toLowerCase();
+    if (mime.startsWith('image/')) {
+      return 'image';
+    }
+    if (mime === 'application/pdf' || ext === '.pdf') {
+      return 'pdf';
+    }
+    return 'document';
   }
 
   private getAttachmentRepository(
@@ -61,6 +179,20 @@ export class FilesService {
     return (
       FilesService.ALLOWED_IMAGE_MIME_TYPES as readonly string[]
     ).includes(mime);
+  }
+
+  private normalizeOriginalFilename(rawName: string): string {
+    if (!rawName) return 'unnamed';
+    const isLatin1Range = [...rawName].every(
+      (ch) => (ch.codePointAt(0) ?? 0) <= 0xff,
+    );
+    if (!isLatin1Range) return rawName;
+
+    const decoded = Buffer.from(rawName, 'latin1').toString('utf8');
+    if (!decoded.includes('\ufffd') && decoded !== rawName) {
+      return decoded;
+    }
+    return rawName;
   }
 
   private getUploadRoot(): string {
@@ -110,9 +242,10 @@ export class FilesService {
     const now = new Date();
     const year = String(now.getFullYear());
     const month = String(now.getMonth() + 1).padStart(2, '0');
-    const fileName = `${randomUUID()}.${extension}`;
+    const cleanExt = extension.replace(/^\./, '') || 'bin';
+    const fileName = `${randomUUID()}.${cleanExt}`;
 
-    const storagePath = `chat/${year}/${month}/${fileName}`; // 统一使用 /
+    const storagePath = `chat/${year}/${month}/${fileName}`;
     const absoluteDir = path.join(this.getUploadRoot(), 'chat', year, month);
     const absolutePath = path.join(absoluteDir, fileName);
 
@@ -199,6 +332,125 @@ export class FilesService {
       sizeBytes: entity.sizeBytes,
       width: entity.width,
       height: entity.height,
+      category: FilesService.resolveAttachmentCategory(
+        entity.storageMime,
+        entity.originalName,
+      ),
+      charCount: entity.charCount ?? null,
+      extractedText: entity.extractedText ?? null,
+      truncated: Boolean(
+        entity.charCount &&
+          entity.charCount > FilesService.MAX_EXTRACTED_TEXT_CHARS,
+      ),
+    };
+  }
+
+  /**
+   * 清洗并按 30,000 字符上限执行首尾智能截断
+   */
+  truncateExtractedText(rawText: string): {
+    text: string;
+    charCount: number;
+    truncated: boolean;
+  } {
+    const cleaned = (rawText || '')
+      .replace(/\u0000/g, '')
+      .replace(/\r\n/g, '\n')
+      .trim();
+
+    if (!cleaned) {
+      throw new BadRequestException(
+        '无法从该文档中提取有效文本内容（如纯扫描件 PDF 请转为图片上传）',
+      );
+    }
+
+    const charCount = cleaned.length;
+    if (charCount <= FilesService.MAX_EXTRACTED_TEXT_CHARS) {
+      return {
+        text: cleaned,
+        charCount,
+        truncated: false,
+      };
+    }
+
+    const head = cleaned.slice(0, FilesService.TRUNCATE_HEAD_CHARS);
+    const tail = cleaned.slice(-FilesService.TRUNCATE_TAIL_CHARS);
+    const omittedCount = charCount - FilesService.MAX_EXTRACTED_TEXT_CHARS;
+
+    return {
+      text: `${head}\n\n...[文档过长，中间已省略 ${omittedCount} 字符，仅保留首尾核心内容]...\n\n${tail}`,
+      charCount,
+      truncated: true,
+    };
+  }
+
+  /**
+   * 提取 PDF / DOCX / 纯文本与代码文件的内容
+   */
+  async extractDocumentText(
+    buffer: Buffer,
+    kind: Exclude<UploadFileKind, 'image'>,
+    originalName: string,
+  ): Promise<{
+    text: string;
+    charCount: number;
+    truncated: boolean;
+    storageMime: string;
+    extension: string;
+  }> {
+    const ext = path.extname(originalName || '').toLowerCase();
+
+    if (kind === 'pdf') {
+      try {
+        const parsed = await pdfParse(buffer);
+        const truncated = this.truncateExtractedText(parsed.text || '');
+        return {
+          ...truncated,
+          storageMime: 'application/pdf',
+          extension: 'pdf',
+        };
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        throw new BadRequestException(`PDF 文档解析失败: ${originalName}`);
+      }
+    }
+
+    if (kind === 'docx') {
+      try {
+        const parsed = await mammoth.extractRawText({ buffer });
+        const truncated = this.truncateExtractedText(parsed.value || '');
+        return {
+          ...truncated,
+          storageMime:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          extension: 'docx',
+        };
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        throw new BadRequestException(`Word 文档解析失败: ${originalName}`);
+      }
+    }
+
+    const rawText = buffer.toString('utf8');
+    const truncated = this.truncateExtractedText(rawText);
+    const normalizedExt = ext ? ext.slice(1) : 'txt';
+    const storageMime =
+      ext === '.md' || ext === '.markdown'
+        ? 'text/markdown; charset=utf-8'
+        : ext === '.json'
+          ? 'application/json; charset=utf-8'
+          : ext === '.csv'
+            ? 'text/csv; charset=utf-8'
+            : 'text/plain; charset=utf-8';
+
+    return {
+      ...truncated,
+      storageMime,
+      extension: normalizedExt,
     };
   }
 
@@ -286,7 +538,7 @@ export class FilesService {
 
     if (buffer.length > FilesService.MAX_FILE_SIZE_BYTES) {
       throw new BadRequestException(
-        `图片大小不能超过 ${Math.round(FilesService.MAX_FILE_SIZE_BYTES / 1024 / 1024)}MB`,
+        `文件大小不能超过 ${Math.round(FilesService.MAX_FILE_SIZE_BYTES / 1024 / 1024)}MB`,
       );
     }
 
@@ -298,7 +550,7 @@ export class FilesService {
   }
 
   /**
-   * 保存上传的图片并写入 DB（messageId/sessionId 暂不绑定）
+   * 保存上传的聊天附件（支持图片与多格式文档）并写入数据库
    */
   async saveUploadedImages(
     userId: string | undefined,
@@ -309,55 +561,94 @@ export class FilesService {
     }
 
     if (!files || files.length === 0) {
-      throw new BadRequestException('请至少上传 1 张图片');
+      throw new BadRequestException('请至少上传 1 个文件');
     }
 
     if (files.length > FilesService.MAX_FILES) {
       throw new BadRequestException(
-        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+        `最多只能上传 ${FilesService.MAX_FILES} 个文件`,
       );
     }
 
     const results: UploadedImageResult[] = [];
 
     for (const file of files) {
-      if (!this.isAllowedImageMimeType(file.mimetype)) {
-        throw new BadRequestException(`不支持的文件类型: ${file.mimetype}`);
+      const normalizedName = this.normalizeOriginalFilename(file.originalname);
+      const kind = FilesService.resolveUploadFileKind(
+        file.mimetype,
+        normalizedName,
+      );
+
+      if (!kind) {
+        throw new BadRequestException(
+          `不支持的文件类型: ${normalizedName} (${file.mimetype})`,
+        );
       }
 
       if (file.size > FilesService.MAX_FILE_SIZE_BYTES) {
         throw new BadRequestException(
-          `图片大小不能超过 ${Math.round(FilesService.MAX_FILE_SIZE_BYTES / 1024 / 1024)}MB`,
+          `文件大小不能超过 ${Math.round(FilesService.MAX_FILE_SIZE_BYTES / 1024 / 1024)}MB`,
         );
       }
 
-      const processed = await this.processImageBuffer(file);
-      const { storagePath, absoluteDir, absolutePath } =
-        this.buildStoragePath('webp');
+      if (kind === 'image') {
+        const processed = await this.processImageBuffer(file);
+        const { storagePath, absoluteDir, absolutePath } =
+          this.buildStoragePath('webp');
 
-      await fs.mkdir(absoluteDir, { recursive: true });
-      await fs.writeFile(absolutePath, processed.buffer, { flag: 'wx' });
+        await fs.mkdir(absoluteDir, { recursive: true });
+        await fs.writeFile(absolutePath, processed.buffer, { flag: 'wx' });
 
-      const entity = this.attachmentRepository.create({
-        userId,
-        originalName: file.originalname,
-        originalMime: file.mimetype,
-        storageMime: processed.mime,
-        storagePath,
-        sizeBytes: processed.buffer.length,
-        width: processed.width,
-        height: processed.height,
-      });
+        const entity = this.attachmentRepository.create({
+          userId,
+          originalName: normalizedName,
+          originalMime: file.mimetype,
+          storageMime: processed.mime,
+          storagePath,
+          sizeBytes: processed.buffer.length,
+          width: processed.width,
+          height: processed.height,
+          extractedText: null,
+          charCount: null,
+        });
 
-      const saved = await this.attachmentRepository.save(entity);
-      results.push(this.toPublicResult(saved));
+        const saved = await this.attachmentRepository.save(entity);
+        results.push(this.toPublicResult(saved));
+      } else {
+        const extracted = await this.extractDocumentText(
+          file.buffer,
+          kind,
+          normalizedName,
+        );
+        const { storagePath, absoluteDir, absolutePath } =
+          this.buildStoragePath(extracted.extension);
+
+        await fs.mkdir(absoluteDir, { recursive: true });
+        await fs.writeFile(absolutePath, file.buffer, { flag: 'wx' });
+
+        const entity = this.attachmentRepository.create({
+          userId,
+          originalName: normalizedName,
+          originalMime: file.mimetype || extracted.storageMime,
+          storageMime: extracted.storageMime,
+          storagePath,
+          sizeBytes: file.buffer.length,
+          width: null,
+          height: null,
+          extractedText: extracted.text,
+          charCount: extracted.charCount,
+        });
+
+        const saved = await this.attachmentRepository.save(entity);
+        results.push(this.toPublicResult(saved));
+      }
     }
 
     return results;
   }
 
   /**
-   * 兼容旧版：从聊天接口传入的 base64 文件（files）创建附件并返回“用于 AI 的压缩后 dataURL”
+   * 兼容旧版：从聊天接口传入的 base64 文件创建附件
    */
   async createImageAttachmentsFromChatFiles(
     userId: string,
@@ -369,7 +660,7 @@ export class FilesService {
 
     if (files.length > FilesService.MAX_FILES) {
       throw new BadRequestException(
-        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+        `最多只能上传 ${FilesService.MAX_FILES} 个文件`,
       );
     }
 
@@ -379,7 +670,6 @@ export class FilesService {
     for (const file of files) {
       const { mime, buffer } = this.parseDataUrl(file.base64);
 
-      // 双重校验：DTO 的 type 必须与 dataURL 一致
       if (file.type && file.type !== mime) {
         throw new BadRequestException(
           `文件类型不一致: type=${file.type}, dataUrl=${mime}`,
@@ -407,7 +697,6 @@ export class FilesService {
       const saved = await this.attachmentRepository.save(entity);
       attachmentIds.push(saved.id);
 
-      // 返回给 AI 的压缩后 dataURL
       fileDataForAI.push({
         base64: this.bufferToDataUrl(processed.buffer, processed.mime),
         type: processed.mime,
@@ -419,7 +708,7 @@ export class FilesService {
   }
 
   /**
-   * 从已上传的 fileIds 读取文件并转成 AI 可用的 dataURL
+   * 从已上传的 fileIds 读取附件（图片转为 dataURL，文档直接读取缓存的提取文本）
    */
   async getImageDataForAIByIds(
     userId: string,
@@ -431,7 +720,7 @@ export class FilesService {
 
     if (fileIds.length > FilesService.MAX_FILES) {
       throw new BadRequestException(
-        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+        `最多只能上传 ${FilesService.MAX_FILES} 个文件`,
       );
     }
 
@@ -443,33 +732,40 @@ export class FilesService {
       throw new BadRequestException('部分附件不存在或无权限访问');
     }
 
-    // 禁止复用已绑定到消息的附件（避免串消息/越权）
     const used = attachments.find((a) => a.messageId);
     if (used) {
       throw new BadRequestException('附件已被使用，请重新上传');
     }
 
-    // 按传入顺序返回
     const byId = new Map(attachments.map((a) => [a.id, a]));
     const ordered = fileIds.map((id) => byId.get(id)!);
 
     const fileDataForAI: FileDataDto[] = [];
     for (const att of ordered) {
-      const absolutePath = this.resolveAbsolutePath(att.storagePath);
-      const buf = await fs.readFile(absolutePath);
-      fileDataForAI.push({
-        base64: this.bufferToDataUrl(buf, att.storageMime),
-        type: att.storageMime,
-        name: att.originalName,
-      });
+      if (this.isAllowedImageMimeType(att.storageMime)) {
+        const absolutePath = this.resolveAbsolutePath(att.storagePath);
+        const buf = await fs.readFile(absolutePath);
+        fileDataForAI.push({
+          base64: this.bufferToDataUrl(buf, att.storageMime),
+          type: att.storageMime,
+          name: att.originalName,
+        });
+      } else {
+        fileDataForAI.push({
+          base64: '',
+          type: att.storageMime,
+          name: att.originalName,
+          extractedText: att.extractedText || '',
+          charCount: att.charCount ?? null,
+        });
+      }
     }
 
     return { attachmentIds: ordered.map((a) => a.id), fileDataForAI };
   }
 
   /**
-   * 统一入口：兼容 fileIds + files（base64），并返回 AI 用 dataURL + 待绑定附件 id
-   * 主聊天链路已收敛为 fileIds，这里仅保留兼容能力。
+   * 统一入口：准备聊天附件供大模型消费
    */
   async prepareChatAttachments(params: {
     userId: string;
@@ -481,7 +777,7 @@ export class FilesService {
 
     if (fileIds.length + inlineFiles.length > FilesService.MAX_FILES) {
       throw new BadRequestException(
-        `最多只能上传 ${FilesService.MAX_FILES} 张图片`,
+        `最多只能上传 ${FilesService.MAX_FILES} 个文件`,
       );
     }
 

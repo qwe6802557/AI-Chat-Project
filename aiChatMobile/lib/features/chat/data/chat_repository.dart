@@ -81,6 +81,8 @@ class ChatRepository {
             isImage: (a['type'] as String? ?? '').startsWith('image'),
             mimeType: a['type'] as String?,
             serverUrl: fullUrl,
+            charCount: (a['charCount'] as num?)?.toInt(),
+            textContent: a['extractedText'] as String?,
             status: AttachmentUploadStatus.success,
           );
         }).toList();

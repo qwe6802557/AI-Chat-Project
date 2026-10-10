@@ -206,7 +206,14 @@ describe('ChatMessageViewport', () => {
         loading: false,
       },
       global: {
-        stubs: ['a-avatar', 'a-image', 'a-image-preview-group', 'MarkdownMessage', 'ChatReasoningPanel'],
+        stubs: [
+          'a-avatar',
+          'a-image',
+          'a-image-preview-group',
+          'MarkdownMessage',
+          'ChatReasoningPanel',
+          'DocumentPreviewModal',
+        ],
       },
     })
 
@@ -243,5 +250,46 @@ describe('ChatMessageViewport', () => {
     })
 
     expect(wrapper.findComponent({ name: 'SearchSourceGallery' }).exists()).toBe(true)
+  })
+
+  it('renders document attachment pill cards with format badge and parsed character count', () => {
+    const wrapper = mount(ChatMessageViewport, {
+      props: {
+        messages: [
+          {
+            id: 'user-doc-1',
+            role: 'user',
+            content: '请总结这份架构文档',
+            timestamp: Date.now(),
+            attachments: [
+              {
+                type: 'pdf',
+                name: 'architecture-spec.pdf',
+                preview: 'http://localhost:3000/files/pdf-1',
+                url: 'http://localhost:3000/files/pdf-1',
+                sizeBytes: 2048,
+                charCount: 1580,
+                extractedText: '架构设计正文...',
+              },
+            ],
+          },
+        ],
+        loading: false,
+      },
+      global: {
+        stubs: {
+          'a-avatar': true,
+          'a-image': true,
+          'a-image-preview-group': { template: '<div><slot /></div>' },
+          DocumentPreviewModal: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('.attachment-file').exists()).toBe(true)
+    expect(wrapper.find('.doc-badge').text()).toBe('PDF')
+    expect(wrapper.text()).toContain('architecture-spec.pdf')
+    expect(wrapper.text()).toContain('2 KB')
+    expect(wrapper.text()).toContain('已解析 1,580 字')
   })
 })

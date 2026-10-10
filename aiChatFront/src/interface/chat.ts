@@ -8,9 +8,12 @@ export interface BackendAttachment {
   url: string
   name: string
   type: string
+  category?: 'image' | 'pdf' | 'document'
   sizeBytes: number
   width?: number | null
   height?: number | null
+  charCount?: number | null
+  extractedText?: string | null
 }
 
 /**
@@ -241,7 +244,11 @@ export interface UploadedFileResponse {
   url: string
   name: string
   mime: string
+  category?: 'image' | 'pdf' | 'document'
   sizeBytes: number
   width?: number | null
   height?: number | null
+  charCount?: number | null
+  extractedText?: string | null
+  truncated?: boolean
 }

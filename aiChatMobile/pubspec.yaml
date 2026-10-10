@@ -41,6 +41,8 @@ dependencies:
   file_picker: ^8.1.6
   path_provider: ^2.1.5
   cross_file: ^0.3.5+5
+  shorebird_code_push: ^2.0.7
+  restart_app: ^1.10.1
 
 dev_dependencies:
   flutter_test:
@@ -49,7 +51,12 @@ dev_dependencies:
   build_runner: ^2.4.13
   riverpod_generator: ^2.6.2
 
+dependency_overrides:
+  path_provider_android: 2.2.15
+  record_platform_interface: 1.2.0
+
 flutter:
   uses-material-design: true
   assets:
     - assets/images/
+    - shorebird.yaml

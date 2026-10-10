@@ -133,10 +133,23 @@
                           <span>预览</span>
                         </template>
                       </a-image>
-                      <div v-else class="attachment-file">
-                        <FilePdfOutlined v-if="att.type === 'pdf'" class="file-icon pdf" />
-                        <FileTextOutlined v-else class="file-icon doc" />
-                        <span class="file-name">{{ att.name }}</span>
+                      <div
+                        v-else
+                        class="attachment-file"
+                        role="button"
+                        tabindex="0"
+                        @click="openDocumentPreview(att)"
+                        @keydown.enter="openDocumentPreview(att)"
+                      >
+                        <div class="doc-badge" :class="getAttachmentBadgeClass(att)">
+                          {{ getAttachmentBadge(att) }}
+                        </div>
+                        <div class="doc-info">
+                          <span class="file-name" :title="att.name">{{ att.name }}</span>
+                          <div v-if="formatAttachmentMeta(att)" class="file-submeta">
+                            {{ formatAttachmentMeta(att) }}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </template>
@@ -176,6 +189,12 @@
         </button>
       </transition>
     </div>
+
+    <DocumentPreviewModal
+      :open="Boolean(activePreviewDoc)"
+      :document="activePreviewDoc"
+      @close="activePreviewDoc = null"
+    />
   </div>
 </template>
 
@@ -189,18 +208,18 @@ import {
   RobotOutlined,
   DownOutlined,
   LoadingOutlined,
-  FilePdfOutlined,
-  FileTextOutlined,
   ExclamationCircleFilled,
   ReloadOutlined,
 } from '@ant-design/icons-vue'
 import { useScrollManager } from '@/hooks/useScrollManager'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import { formatFileSize, getAttachmentBadgeLabel } from '@/hooks/useFileUpload'
 import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import MarkdownMessage from './MarkdownMessage.vue'
 import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
-import type { Message } from '@/interface/conversation'
+import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
+import type { Message, MessageAttachment } from '@/interface/conversation'
 
 defineOptions({
   name: 'ChatMessageViewport',
@@ -366,6 +385,44 @@ watch(() => props.scrollSignal, (nextSignal, previousSignal) => {
   resetUserScrolling()
   scrollToBottom(true)
 })
+
+const activePreviewDoc = ref<PreviewableDocument | null>(null)
+
+const getAttachmentBadge = (att: MessageAttachment): string => {
+  return getAttachmentBadgeLabel(att.name, att.type)
+}
+
+const getAttachmentBadgeClass = (att: MessageAttachment): string => {
+  const label = getAttachmentBadge(att).toLowerCase()
+  if (label === 'pdf') return 'is-pdf'
+  if (label === 'docx' || label === 'doc') return 'is-word'
+  if (label === 'csv' || label === 'json') return 'is-data'
+  return 'is-code'
+}
+
+const formatAttachmentMeta = (att: MessageAttachment): string => {
+  const parts: string[] = []
+  if (typeof att.sizeBytes === 'number' && att.sizeBytes > 0) {
+    parts.push(formatFileSize(att.sizeBytes))
+  }
+  if (typeof att.charCount === 'number' && att.charCount > 0) {
+    parts.push(`已解析 ${att.charCount.toLocaleString()} 字`)
+  } else if (att.extractedText) {
+    parts.push(`已解析 ${att.extractedText.length.toLocaleString()} 字`)
+  }
+  return parts.join(' · ')
+}
+
+const openDocumentPreview = (att: MessageAttachment) => {
+  activePreviewDoc.value = {
+    name: att.name,
+    type: att.type,
+    url: att.url || att.preview,
+    sizeBytes: att.sizeBytes,
+    charCount: att.charCount,
+    extractedText: att.extractedText,
+  }
+}
 
 /**
  * 格式化模型生成耗时（秒）
@@ -620,30 +677,79 @@ $avatar-size: 32px;
             .attachment-file {
               display: flex;
               align-items: center;
-              gap: $spacing-xs;
-              padding: $spacing-sm $spacing-md;
-              background: rgba(0, 0, 0, 0.04);
-              border-radius: $radius-sm;
+              gap: 10px;
+              min-width: 196px;
+              max-width: 280px;
+              padding: 8px 12px;
+              background: #ffffff;
+              border: 1px solid rgba(15, 23, 42, 0.08);
+              border-radius: 10px;
+              cursor: pointer;
+              transition: all 0.2s ease;
 
-              .file-icon {
-                font-size: 20px;
+              &:hover {
+                border-color: rgba(37, 99, 235, 0.35);
+                box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+              }
 
-                &.pdf {
-                  color: #ff5722;
+              .doc-badge {
+                width: 34px;
+                height: 34px;
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.03em;
+                flex-shrink: 0;
+                background: #eff6ff;
+                color: #2563eb;
+
+                &.is-pdf {
+                  background: #fef2f2;
+                  color: #dc2626;
                 }
 
-                &.doc {
-                  color: #2196f3;
+                &.is-word {
+                  background: #eff6ff;
+                  color: #1d4ed8;
+                }
+
+                &.is-data {
+                  background: #ecfdf5;
+                  color: #059669;
+                }
+
+                &.is-code {
+                  background: #f5f3ff;
+                  color: #6d28d9;
                 }
               }
 
+              .doc-info {
+                min-width: 0;
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+              }
+
               .file-name {
-                font-size: $font-size-sm;
-                color: $color-text-secondary;
-                max-width: 150px;
+                font-size: 13px;
+                font-weight: 500;
+                color: #18181b;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
+              }
+
+              .file-submeta {
+                font-size: 11px;
+                color: #64748b;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
               }
             }
           }

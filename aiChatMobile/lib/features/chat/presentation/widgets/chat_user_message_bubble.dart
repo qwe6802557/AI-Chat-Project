@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/chat_message_model.dart';
 import '../../domain/file_attachment_model.dart';
+import 'chat_document_preview_sheet.dart';
 import 'chat_image_lightbox.dart';
 
 /// 用户消息气泡组件（支持多模态图片自适应网格、全屏手势缩放灯箱与文档附件）
@@ -95,40 +96,63 @@ class ChatUserMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildDocumentList(List<AttachmentItem> documents) {
+  Widget _buildDocumentList(BuildContext context, List<AttachmentItem> documents) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: documents.map((doc) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 6.0),
-          padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.description_rounded, size: 16.0, color: Colors.white),
-              const SizedBox(width: 6.0),
-              Flexible(
-                child: Text(
-                  doc.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12.0,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
+        return GestureDetector(
+          onTap: () => ChatDocumentPreviewSheet.show(context, doc),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 3.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                  child: Text(
+                    doc.badgeLabel,
+                    style: const TextStyle(
+                      fontSize: 10.0,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6.0),
-              Text(
-                doc.formattedSize,
-                style: const TextStyle(fontSize: 10.0, color: Colors.white70),
-              ),
-            ],
+                const SizedBox(width: 8.0),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        doc.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.0,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 2.0),
+                      Text(
+                        doc.formattedMeta,
+                        style: const TextStyle(fontSize: 10.0, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -175,7 +199,7 @@ class ChatUserMessageBubble extends StatelessWidget {
                     if (documents.isNotEmpty || hasText) const SizedBox(height: 8.0),
                   ],
                   if (documents.isNotEmpty) ...[
-                    _buildDocumentList(documents),
+                    _buildDocumentList(context, documents),
                     if (hasText) const SizedBox(height: 8.0),
                   ],
                   if (hasText)
