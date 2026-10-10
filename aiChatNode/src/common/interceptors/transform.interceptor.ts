@@ -34,6 +34,15 @@ export class TransformInterceptor<T>
           return data;
         }
 
+        // 如果是客户端版本检查接口，同时平铺顶层字段以兼容旧版本客户端直读模式
+        if (
+          req?.url?.includes('/app/version') &&
+          typeof data === 'object' &&
+          data !== null
+        ) {
+          return Object.assign({}, ResponseDto.success(data), data);
+        }
+
         // 否则包装成统一格式
         return ResponseDto.success(data);
       }),

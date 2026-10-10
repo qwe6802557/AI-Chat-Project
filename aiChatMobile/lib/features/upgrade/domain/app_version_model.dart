@@ -24,7 +24,10 @@ class AppVersionInfo {
     required this.publishedAt,
   });
 
-  factory AppVersionInfo.fromJson(Map<String, dynamic> json) {
+  factory AppVersionInfo.fromJson(Map<String, dynamic> rawJson) {
+    final json = (rawJson['data'] is Map<String, dynamic>)
+        ? rawJson['data'] as Map<String, dynamic>
+        : rawJson;
     return AppVersionInfo(
       latestVersion: json['latestVersion'] as String? ?? '1.0.0',
       latestVersionCode: json['latestVersionCode'] as int? ?? 1,

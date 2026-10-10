@@ -72,6 +72,7 @@ export interface BackendChatMessage {
   attachments?: BackendAttachment[]
   durationMs?: number | null
   sources?: SearchSource[] | null
+  toolCalls?: any[] | null
   createdAt: string
   updatedAt: string
 }
@@ -114,6 +115,7 @@ export interface SendMessageParams {
   maxTokens?: number
   fileIds?: string[]
   webSearch?: boolean
+  enabledTools?: string[]
 }
 
 /**
@@ -128,6 +130,7 @@ export interface ChatMessageResponse {
   usage?: UsageStats | null
   durationMs?: number | null
   sources?: SearchSource[] | null
+  toolCalls?: any[] | null
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   createdAt: string
@@ -137,7 +140,7 @@ export interface ChatMessageResponse {
  * 流式聊天数据块
  */
 export interface StreamChunk {
-  type?: 'search_start' | 'search_sources' | 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
+  type?: 'search_start' | 'search_sources' | 'tool_start' | 'tool_result' | 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
   delta?: string
   finish_reason: string | null
   sessionId?: string
@@ -148,6 +151,8 @@ export interface StreamChunk {
   durationMs?: number | null
   query?: string
   sources?: SearchSource[]
+  tool?: any
+  toolCalls?: any[]
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   error?: string

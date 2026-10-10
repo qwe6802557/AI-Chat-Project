@@ -6,6 +6,7 @@ import '../../../core/network/sse_parser.dart';
 import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
+import '../domain/tool_model.dart';
 
 /// 聊天领域仓储层
 class ChatRepository {
@@ -101,12 +102,18 @@ class ChatRepository {
           );
         }
 
-        // 映射助手回复与联网搜索来源
+        // 映射助手回复与联网搜索来源及工具调用
         if (m['aiMessage'] != null && (m['aiMessage'] as String).isNotEmpty) {
           final rawSources = m['sources'] as List? ?? [];
           final sources = rawSources
               .whereType<Map<String, dynamic>>()
               .map((s) => SearchSourceModel.fromJson(s))
+              .toList();
+
+          final rawToolCalls = m['toolCalls'] as List? ?? [];
+          final toolCalls = rawToolCalls
+              .whereType<Map<String, dynamic>>()
+              .map((t) => ToolExecutionRecordModel.fromJson(t))
               .toList();
 
           result.add(
@@ -119,6 +126,7 @@ class ChatRepository {
               createdAt: createdAt,
               sources: sources,
               searchStatus: sources.isNotEmpty ? 'done' : null,
+              toolCalls: toolCalls,
             ),
           );
         }
@@ -135,6 +143,7 @@ class ChatRepository {
     String? sessionId,
     List<String>? fileIds,
     bool webSearch = false,
+    List<String>? enabledTools,
     CancelToken? cancelToken,
   }) async {
     final response = await _client.dio.post<ResponseBody>(
@@ -146,6 +155,8 @@ class ChatRepository {
         if (sessionId != null && sessionId.isNotEmpty) 'sessionId': sessionId,
         if (fileIds != null && fileIds.isNotEmpty) 'fileIds': fileIds,
         if (webSearch) 'webSearch': true,
+        if (enabledTools != null && enabledTools.isNotEmpty)
+          'enabledTools': enabledTools,
       },
       options: Options(
         responseType: ResponseType.stream,

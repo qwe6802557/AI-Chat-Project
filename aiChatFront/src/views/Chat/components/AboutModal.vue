@@ -88,6 +88,11 @@ const handleCheckUpdate = () => {
   })
 }
 
+// 下载手机客户端
+const handleDownloadMobile = () => {
+  window.open('/download/app-release.apk', '_blank')
+}
+
 // 访问项目地址
 const handleVisitRepo = () => {
   window.open(import.meta.env.VITE_PROJECT_GIT_URL, '_blank')

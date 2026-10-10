@@ -4,6 +4,7 @@ import '../../../../shared/widgets/glass_card.dart';
 import '../../domain/chat_message_model.dart';
 import 'chat_reasoning_card.dart';
 import 'chat_search_source_gallery.dart';
+import 'chat_tool_execution_card.dart';
 
 /// AI 助手消息气泡组件
 class ChatAssistantMessageBubble extends StatelessWidget {
@@ -111,6 +112,8 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                     sources: msg.sources,
                     searchStatus: msg.searchStatus,
                   ),
+                if (msg.toolCalls.isNotEmpty)
+                  ChatToolExecutionGallery(toolCalls: msg.toolCalls),
                 if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty)
                   ChatReasoningCard(msg: msg),
                 if (msg.status == MessageStatus.error)

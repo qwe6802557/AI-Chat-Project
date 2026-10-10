@@ -4,6 +4,7 @@ import { sendStreamMessage } from '@/api/chat'
 import type { SearchSource, StreamChunk, StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores/conversation'
 import { useAuthStore } from '@/stores/auth'
+import { useToolsStore } from '@/stores/tools'
 import logger from '@/utils/logger'
 import { generateUUID } from '@/utils/common'
 import type {
@@ -158,15 +159,18 @@ export function useStreamChat() {
       serverFiles?: ServerFileInfo[]
       model?: string
       webSearch?: boolean
+      enabledTools?: string[]
     },
   ) => {
     cancelCurrentStream()
 
+    const toolsStore = useToolsStore()
     const {
       fileIds,
       serverFiles,
       model: selectedModelId = 'grok-chat-fast',
       webSearch = false,
+      enabledTools = toolsStore.enabledTools,
     } = options || {}
 
     if (!userId) {
@@ -295,12 +299,24 @@ export function useStreamChat() {
           model: selectedModelId,
           fileIds: hasFileIds ? fileIds : undefined,
           webSearch,
+          enabledTools,
         },
         {
           onChunk: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
             switch (chunk.type) {
+              case 'tool_result': {
+                const messageId = ensureAssistantMessage()
+                if (chunk.tool) {
+                  const currentMsg = conversationStore.currentConversation?.messages.find((m) => m.id === messageId)
+                  const existingTools = currentMsg?.toolCalls || []
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    toolCalls: [...existingTools, chunk.tool],
+                  })
+                }
+                return
+              }
               case 'search_start': {
                 const messageId = ensureAssistantMessage()
                 conversationStore.patchMessageById(sessionId, messageId, {
@@ -421,6 +437,7 @@ export function useStreamChat() {
                 durationMs,
                 sources: finalSources,
                 searchStatus: finalSearchStatus,
+                toolCalls: chunk.toolCalls || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.toolCalls : undefined),
               })
             } else {
               conversationStore.updateMessageContentById(
@@ -438,6 +455,7 @@ export function useStreamChat() {
                 durationMs,
                 sources: finalSources,
                 searchStatus: finalSearchStatus,
+                toolCalls: chunk.toolCalls || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.toolCalls : undefined),
               })
             }
 

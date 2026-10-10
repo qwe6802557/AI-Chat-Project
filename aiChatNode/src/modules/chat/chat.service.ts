@@ -37,6 +37,8 @@ import {
 } from './utils/assistant-content.util';
 import { WebSearchService } from '../web-search/web-search.service';
 import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
+import { ToolRegistryService } from '../tools/tools.registry.service';
+import type { ToolExecutionRecord } from '../tools/types/tools.types';
 
 export interface SessionMessageAttachmentDto {
   id: string;
@@ -62,6 +64,7 @@ export type SessionMessageDto = Pick<
   | 'usage'
   | 'reasoning'
   | 'sources'
+  | 'toolCalls'
   | 'createdAt'
   | 'updatedAt'
 > & {
@@ -121,6 +124,7 @@ export class ChatService {
     private readonly aiModelService: AiModelService,
     private readonly creditsService: CreditsService,
     private readonly webSearchService: WebSearchService,
+    private readonly toolRegistryService: ToolRegistryService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -292,6 +296,7 @@ export class ChatService {
     attachmentIds: string[];
     durationMs?: number | null;
     sources?: SearchSource[] | null;
+    toolCalls?: ToolExecutionRecord[] | null;
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
       let targetSessionId = params.sessionId;
@@ -317,6 +322,7 @@ export class ChatService {
         usage: params.usage || null,
         durationMs: params.durationMs || null,
         sources: params.sources || null,
+        toolCalls: params.toolCalls || null,
       });
 
       const savedMessage = await chatMessageRepository.save(chatMessage);
@@ -559,8 +565,17 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    let toolExecutionRecords: ToolExecutionRecord[] = [];
+    if (createChatDto.enabledTools?.length) {
+      toolExecutionRecords = await this.toolRegistryService.autoExecutePresetTools(
+        createChatDto.message,
+        createChatDto.enabledTools,
+        { userId, sessionId, userMessage: createChatDto.message },
+      );
+    }
+
     let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch) {
+    if (createChatDto.webSearch || createChatDto.enabledTools?.includes('web_search_v2')) {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
@@ -570,6 +585,27 @@ export class ChatService {
     );
 
     let finalUserContent: string | MultimodalContent[] = userContent;
+    if (toolExecutionRecords.length > 0) {
+      const toolPrompt = toolExecutionRecords
+        .map(
+          (rec) =>
+            `【工具执行结果 - ${rec.title}】:\n${
+              rec.result.status === 'success'
+                ? rec.result.rawOutput || JSON.stringify(rec.result.output)
+                : `执行失败: ${rec.result.error}`
+            }`,
+        )
+        .join('\n\n');
+      if (typeof finalUserContent === 'string') {
+        finalUserContent = `${toolPrompt}\n\n${finalUserContent}`;
+      } else {
+        finalUserContent = [
+          { type: 'text', text: `${toolPrompt}\n\n` },
+          ...finalUserContent,
+        ];
+      }
+    }
+
     if (searchResult?.sources?.length) {
       if (typeof finalUserContent === 'string') {
         finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
@@ -649,6 +685,7 @@ export class ChatService {
         attachmentIds,
         durationMs,
         sources: searchResult?.sources || null,
+        toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
       });
 
       reservedSessionId = persistedSessionId;
@@ -664,6 +701,7 @@ export class ChatService {
         durationMs,
         charge,
         creditsSnapshot,
+        toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
         createdAt: savedMessage.createdAt,
       };
     } catch (error) {
@@ -884,8 +922,17 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    let toolExecutionRecords: ToolExecutionRecord[] = [];
+    if (createChatDto.enabledTools?.length) {
+      toolExecutionRecords = await this.toolRegistryService.autoExecutePresetTools(
+        createChatDto.message,
+        createChatDto.enabledTools,
+        { userId, sessionId, userMessage: createChatDto.message },
+      );
+    }
+
     let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch) {
+    if (createChatDto.webSearch || createChatDto.enabledTools?.includes('web_search_v2')) {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
@@ -895,6 +942,27 @@ export class ChatService {
     );
 
     let finalUserContent: string | MultimodalContent[] = userContent;
+    if (toolExecutionRecords.length > 0) {
+      const toolPrompt = toolExecutionRecords
+        .map(
+          (rec) =>
+            `【工具执行结果 - ${rec.title}】:\n${
+              rec.result.status === 'success'
+                ? rec.result.rawOutput || JSON.stringify(rec.result.output)
+                : `执行失败: ${rec.result.error}`
+            }`,
+        )
+        .join('\n\n');
+      if (typeof finalUserContent === 'string') {
+        finalUserContent = `${toolPrompt}\n\n${finalUserContent}`;
+      } else {
+        finalUserContent = [
+          { type: 'text', text: `${toolPrompt}\n\n` },
+          ...finalUserContent,
+        ];
+      }
+    }
+
     if (searchResult?.sources?.length) {
       if (typeof finalUserContent === 'string') {
         finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
@@ -956,6 +1024,7 @@ export class ChatService {
         clientRequestId,
         attachmentIds,
         searchResult,
+        toolExecutions: toolExecutionRecords,
       };
     } catch (error) {
       if (hasReservedCharge) {
@@ -989,6 +1058,7 @@ export class ChatService {
     attachmentIds?: string[],
     durationMs?: number | null,
     sources?: SearchSource[] | null,
+    toolCalls?: ToolExecutionRecord[] | null,
   ) {
     const chargeModel = await this.resolveChatModelConfig(model);
     const actualCredits = this.estimateActualChargeCredits(usage, chargeModel);
@@ -1005,6 +1075,7 @@ export class ChatService {
       attachmentIds: attachmentIds || [],
       durationMs: durationMs || null,
       sources: sources || null,
+      toolCalls: toolCalls || null,
     });
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);

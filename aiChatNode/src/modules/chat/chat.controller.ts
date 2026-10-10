@@ -200,6 +200,18 @@ export class ChatController {
         }
       }
 
+      if (streamContext.toolExecutions && streamContext.toolExecutions.length > 0 && !res.writableEnded) {
+        for (const toolExec of streamContext.toolExecutions) {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'tool_result',
+              sessionId,
+              tool: toolExec,
+            })}\n\n`,
+          );
+        }
+      }
+
       let fullMessage = '';
       let finalFinishReason: string | null = null;
       let finalUsage: CompletionUsageStats | undefined;
@@ -332,6 +344,7 @@ export class ChatController {
           attachmentIds,
           durationMs,
           streamContext.searchResult?.sources || null,
+          streamContext.toolExecutions || null,
         );
         chargeFinalized = true;
         finalCharge = finalizeResult.charge;
@@ -352,6 +365,7 @@ export class ChatController {
           charge: finalCharge,
           creditsSnapshot: finalCreditsSnapshot,
           sources: streamContext.searchResult?.sources || null,
+          toolCalls: streamContext.toolExecutions || null,
         });
         res.write(`data: ${finalData}\n\n`);
       }

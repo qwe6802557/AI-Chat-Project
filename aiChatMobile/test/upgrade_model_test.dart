@@ -30,5 +30,23 @@ void main() {
       expect(info.releaseNotes.length, equals(2));
       expect(info.releaseNotes.first, contains('联网搜索'));
     });
+
+    test('正确解析嵌套在 data 字段中的升级信息', () {
+      final wrappedJson = {
+        'code': 0,
+        'message': '操作成功',
+        'data': {
+          'latestVersion': '1.1.0',
+          'latestVersionCode': 2,
+          'hasUpdate': true,
+          'downloadUrl': 'https://aichat.yanggenbwebsite.site/downloads/aichat-latest.apk',
+        },
+      };
+
+      final info = AppVersionInfo.fromJson(wrappedJson);
+
+      expect(info.latestVersion, equals('1.1.0'));
+      expect(info.hasUpdate, isTrue);
+    });
   });
 }

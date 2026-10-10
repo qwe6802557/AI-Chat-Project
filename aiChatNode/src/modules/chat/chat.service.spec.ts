@@ -11,10 +11,18 @@ import { FilesService } from '../files/files.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { WebSearchService } from '../web-search/web-search.service';
+import { ToolRegistryService } from '../tools/tools.registry.service';
 import { DEFAULT_CHAT_BILLING_MODE, DEFAULT_CHAT_MODEL_CREDIT_COST } from '../credits/types/credits.types';
 
 describe('ChatService - Billing & Credits', () => {
   let service: ChatService;
+
+  const mockToolRegistryService = {
+    autoExecutePresetTools: jest.fn().mockResolvedValue([]),
+    executeTool: jest.fn(),
+    listTools: jest.fn().mockReturnValue([]),
+    toOpenAITools: jest.fn().mockReturnValue([]),
+  };
 
   const mockWebSearchService = {
     search: jest.fn().mockResolvedValue({ query: '', sources: [], contextPrompt: '' }),
@@ -86,6 +94,7 @@ describe('ChatService - Billing & Credits', () => {
         { provide: AiModelService, useValue: mockAiModelService },
         { provide: CreditsService, useValue: mockCreditsService },
         { provide: WebSearchService, useValue: mockWebSearchService },
+        { provide: ToolRegistryService, useValue: mockToolRegistryService },
       ],
     }).compile();
 

@@ -100,6 +100,8 @@
               :disabled="loading"
             />
 
+            <ToolQuickCapsules :disabled="loading" />
+
             <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
               {{ selectedModelReasoningBadgeLabel }}
             </span>
@@ -126,6 +128,8 @@
         </div>
       </div>
     </div>
+
+    <PluginCenterModal />
   </div>
 </template>
 
@@ -143,6 +147,8 @@ import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import WebSearchToggle from './WebSearchToggle.vue'
+import ToolQuickCapsules from './ToolQuickCapsules.vue'
+import PluginCenterModal from './PluginCenterModal.vue'
 import type { Message } from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
 

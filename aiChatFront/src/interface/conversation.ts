@@ -81,6 +81,7 @@ export interface Message {
   sources?: SearchSource[]
   searchStatus?: 'searching' | 'done'
   searchQuery?: string
+  toolCalls?: any[]
   attachments?: MessageAttachment[]
   error?: string
 }

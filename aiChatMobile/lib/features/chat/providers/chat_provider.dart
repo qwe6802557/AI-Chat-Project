@@ -13,6 +13,7 @@ import '../data/file_upload_repository.dart';
 import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
+import '../domain/tool_model.dart';
 
 class ChatState {
   final String? activeSessionId;
@@ -24,6 +25,7 @@ class ChatState {
   final String? errorMessage;
   final List<AttachmentItem> pendingAttachments;
   final bool isWebSearchEnabled;
+  final List<String> enabledTools;
 
   const ChatState({
     this.activeSessionId,
@@ -34,7 +36,8 @@ class ChatState {
     this.creditsRemaining = 1000,
     this.errorMessage,
     this.pendingAttachments = const [],
-    this.isWebSearchEnabled = false,
+    this.isWebSearchEnabled = true,
+    this.enabledTools = const ['web_search_v2'],
   });
 
   ChatState copyWith({
@@ -47,6 +50,7 @@ class ChatState {
     String? errorMessage,
     List<AttachmentItem>? pendingAttachments,
     bool? isWebSearchEnabled,
+    List<String>? enabledTools,
   }) {
     return ChatState(
       activeSessionId: activeSessionId ?? this.activeSessionId,
@@ -58,6 +62,7 @@ class ChatState {
       errorMessage: errorMessage,
       pendingAttachments: pendingAttachments ?? this.pendingAttachments,
       isWebSearchEnabled: isWebSearchEnabled ?? this.isWebSearchEnabled,
+      enabledTools: enabledTools ?? this.enabledTools,
     );
   }
 }
@@ -98,7 +103,47 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }
 
   void toggleWebSearch() {
-    state = state.copyWith(isWebSearchEnabled: !state.isWebSearchEnabled);
+    toggleTool('web_search_v2');
+  }
+
+  void toggleTool(String toolId) {
+    final list = List<String>.from(state.enabledTools);
+    if (list.contains(toolId)) {
+      list.remove(toolId);
+    } else {
+      list.add(toolId);
+    }
+    state = state.copyWith(
+      enabledTools: list,
+      isWebSearchEnabled: list.contains('web_search_v2'),
+    );
+  }
+
+  void enableTool(String toolId) {
+    if (!state.enabledTools.contains(toolId)) {
+      final list = [...state.enabledTools, toolId];
+      state = state.copyWith(
+        enabledTools: list,
+        isWebSearchEnabled: list.contains('web_search_v2'),
+      );
+    }
+  }
+
+  void disableTool(String toolId) {
+    if (state.enabledTools.contains(toolId)) {
+      final list = state.enabledTools.where((id) => id != toolId).toList();
+      state = state.copyWith(
+        enabledTools: list,
+        isWebSearchEnabled: list.contains('web_search_v2'),
+      );
+    }
+  }
+
+  void setEnabledTools(List<String> tools) {
+    state = state.copyWith(
+      enabledTools: tools,
+      isWebSearchEnabled: tools.contains('web_search_v2'),
+    );
   }
 
   Future<void> pickAndUploadImages() async {
@@ -424,6 +469,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final stopwatch = Stopwatch()..start();
     final contentBuffer = StringBuffer();
     final reasoningBuffer = StringBuffer();
+    final currentToolCalls = <ToolExecutionRecordModel>[];
     String? currentSearchStatus = state.isWebSearchEnabled ? 'searching' : null;
     List<SearchSourceModel>? currentSources;
 
@@ -435,6 +481,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         sessionId: state.activeSessionId,
         fileIds: fileIds,
         webSearch: state.isWebSearchEnabled,
+        enabledTools: state.enabledTools,
         cancelToken: _cancelToken,
       );
 
@@ -449,6 +496,15 @@ class ChatNotifier extends StateNotifier<ChatState> {
                   .toList();
             }
             currentSearchStatus = 'done';
+          }
+
+          if (chunk.type == 'tool_result' && chunk.rawTool != null) {
+            try {
+              final toolRecord = ToolExecutionRecordModel.fromJson(chunk.rawTool!);
+              if (!currentToolCalls.any((t) => t.id == toolRecord.id)) {
+                currentToolCalls.add(toolRecord);
+              }
+            } catch (_) {}
           }
 
           if (chunk.sessionId != null && state.activeSessionId == null) {
@@ -477,6 +533,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
                 status: chunk.finishReason != null ? MessageStatus.done : MessageStatus.streaming,
                 searchStatus: currentSearchStatus,
                 sources: currentSources ?? msg.sources,
+                toolCalls: List<ToolExecutionRecordModel>.from(currentToolCalls),
               );
             }
             return msg;

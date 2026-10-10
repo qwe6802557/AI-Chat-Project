@@ -236,4 +236,19 @@ export class CreateChatDto {
   @IsOptional()
   @IsBoolean({ message: 'webSearch 必须是布尔值' })
   webSearch?: boolean;
+
+  /**
+   * 启用的插件工具列表（可选）
+   */
+  @ApiProperty({
+    description: '启用的插件工具列表',
+    example: ['code_interpreter', 'calculator'],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray({ message: 'enabledTools 必须是数组' })
+  @IsString({ each: true, message: 'enabledTools 元素必须是字符串' })
+  enabledTools?: string[];
 }
+
