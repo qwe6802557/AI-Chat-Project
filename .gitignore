@@ -76,6 +76,8 @@ coverage/
 out/
 release/
 releases/
+apks/
+**/apks/
 
 # ===== 本地按需环境控制脚本 =====
 start-dev.bat
