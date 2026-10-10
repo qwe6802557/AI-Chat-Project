@@ -49,28 +49,28 @@ jobs:
         uses: shorebirdtech/setup-shorebird@v1
 
       - name: Authenticate Shorebird
-        env:
-          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
-          SHOREBIRD_CREDENTIALS: ${{ secrets.SHOREBIRD_CREDENTIALS }}
         run: |
-          mkdir -p ~/.shorebird
-          if [ -n "$SHOREBIRD_TOKEN" ]; then
-            echo "Shorebird API Key (SHOREBIRD_TOKEN) detected."
-          elif [ -n "$SHOREBIRD_CREDENTIALS" ]; then
-            if echo "$SHOREBIRD_CREDENTIALS" | grep -q '^{'; then
-              echo "$SHOREBIRD_CREDENTIALS" > ~/.shorebird/credentials.json
+          mkdir -p ~/.shorebird ~/.config/shorebird
+          TOKEN="${{ secrets.SHOREBIRD_TOKEN }}"
+          CREDS="${{ secrets.SHOREBIRD_CREDENTIALS }}"
+          if [ -n "$TOKEN" ]; then
+            echo "Shorebird API Key detected."
+            echo "SHOREBIRD_TOKEN=$TOKEN" >> $GITHUB_ENV
+          elif [ -n "$CREDS" ]; then
+            if echo "$CREDS" | grep -q '^{'; then
+              echo "$CREDS" > ~/.shorebird/credentials.json
+              echo "$CREDS" > ~/.config/shorebird/credentials.json
             else
-              echo "$SHOREBIRD_CREDENTIALS" | base64 -d > ~/.shorebird/credentials.json
+              echo "$CREDS" | base64 -d > ~/.shorebird/credentials.json
+              echo "$CREDS" | base64 -d > ~/.config/shorebird/credentials.json
             fi
-            echo "Successfully loaded Shorebird credentials into ~/.shorebird/credentials.json"
+            echo "Successfully loaded Shorebird credentials into ~/.shorebird/credentials.json and ~/.config/shorebird/credentials.json"
           else
             echo "::error::Neither SHOREBIRD_TOKEN nor SHOREBIRD_CREDENTIALS is configured in GitHub Secrets!"
             exit 1
           fi
 
       - name: Verify Shorebird Setup
-        env:
-          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
           shorebird --version
           shorebird account whoami || true
@@ -81,8 +81,6 @@ jobs:
           shorebird flutter test
 
       - name: Build and Push Shorebird Patch (Android)
-        env:
-          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
         run: |
           EXTRA_ARGS=""
           if [ "${{ github.event.inputs.allow_asset_diffs }}" = "true" ]; then
