@@ -19,6 +19,7 @@ import { AiProviderModule } from '../ai-provider/ai-provider.module';
 import { CreditsModule } from '../credits/credits.module';
 import { FilesModule } from '../files/files.module';
 import { WebSearchModule } from '../web-search/web-search.module';
+import { ToolsModule } from '../tools/tools.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { WebSearchModule } from '../web-search/web-search.module';
     FilesModule, // 导入文件模块
     RedisModule,
     WebSearchModule,
+    ToolsModule,
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [

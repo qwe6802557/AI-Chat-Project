@@ -68,6 +68,8 @@ const globalStubs = {
     emits: ['click'],
     template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>',
   },
+  ToolQuickCapsules: true,
+  PluginCenterModal: true,
   'a-select': true,
   transition: false,
 }

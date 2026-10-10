@@ -111,6 +111,12 @@ export class ChatMessage {
   sources?: SearchSource[] | null;
 
   /**
+   * 工具调用与执行记录
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  toolCalls?: any[] | null;
+
+  /**
    * 创建时间
    */
   @CreateDateColumn()

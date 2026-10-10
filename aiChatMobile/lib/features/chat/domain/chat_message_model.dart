@@ -1,4 +1,5 @@
 import 'file_attachment_model.dart';
+import 'tool_model.dart';
 
 enum MessageStatus { sending, streaming, done, error }
 
@@ -56,6 +57,7 @@ class ChatMessageModel {
   final List<AttachmentItem> attachments;
   final String? searchStatus;
   final List<SearchSourceModel> sources;
+  final List<ToolExecutionRecordModel> toolCalls;
 
   const ChatMessageModel({
     required this.id,
@@ -71,6 +73,7 @@ class ChatMessageModel {
     this.attachments = const [],
     this.searchStatus,
     this.sources = const [],
+    this.toolCalls = const [],
   });
 
   bool get isUser => role == 'user';
@@ -90,6 +93,7 @@ class ChatMessageModel {
     List<AttachmentItem>? attachments,
     String? searchStatus,
     List<SearchSourceModel>? sources,
+    List<ToolExecutionRecordModel>? toolCalls,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -105,6 +109,7 @@ class ChatMessageModel {
       attachments: attachments ?? this.attachments,
       searchStatus: searchStatus ?? this.searchStatus,
       sources: sources ?? this.sources,
+      toolCalls: toolCalls ?? this.toolCalls,
     );
   }
 }

@@ -18,6 +18,9 @@ class ChatBottomInputBar extends StatelessWidget {
   final ValueChanged<String>? onRemoveAttachment;
   final bool isWebSearchEnabled;
   final VoidCallback? onToggleWebSearch;
+  final List<String> enabledTools;
+  final VoidCallback? onOpenPluginCenter;
+  final ValueChanged<String>? onToggleTool;
 
   const ChatBottomInputBar({
     super.key,
@@ -32,6 +35,9 @@ class ChatBottomInputBar extends StatelessWidget {
     this.onRemoveAttachment,
     this.isWebSearchEnabled = false,
     this.onToggleWebSearch,
+    this.enabledTools = const ['web_search_v2'],
+    this.onOpenPluginCenter,
+    this.onToggleTool,
   });
 
   Widget _buildWebSearchPill() {
@@ -94,6 +100,54 @@ class ChatBottomInputBar extends StatelessWidget {
     );
   }
 
+  Widget _buildToolCapsules() {
+    final activeCount = enabledTools.length;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildWebSearchPill(),
+        const SizedBox(width: 6.0),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+            onTap: isGenerating ? null : onOpenPluginCenter,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+              decoration: BoxDecoration(
+                color: activeCount > 0 ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                border: Border.all(
+                  color: activeCount > 0 ? const Color(0xFFBBF7D0) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.extension_outlined,
+                    size: 13.0,
+                    color: activeCount > 0 ? const Color(0xFF16A34A) : const Color(0xFF64748B),
+                  ),
+                  const SizedBox(width: 3.0),
+                  Text(
+                    '插件 ($activeCount)',
+                    style: TextStyle(
+                      fontSize: 11.0,
+                      fontWeight: FontWeight.w500,
+                      color: activeCount > 0 ? const Color(0xFF15803D) : const Color(0xFF475467),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -136,7 +190,7 @@ class ChatBottomInputBar extends StatelessWidget {
                     ],
                   ),
                 ),
-                _buildWebSearchPill(),
+                _buildToolCapsules(),
               ],
             ),
             const SizedBox(height: 8.0),

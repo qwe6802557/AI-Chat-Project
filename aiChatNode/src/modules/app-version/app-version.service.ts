@@ -47,15 +47,16 @@ export class AppVersionService {
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '45.2 MB',
+      packageSize: '46.8 MB',
       releaseNotes: [
-        '移动端全链路打通联网搜索功能，支持实时来源追溯与来源卡片预览',
-        '深度重构流式打字与角标链接跳转体验',
-        'Stitch 风格深色玻璃态拟物视觉与触感反馈优化',
-        '集成应用内无缝 OTA 升级与浏览器极速直链通道',
+        '正式发布 Stage 3 插件化工具中心，内置 6 大高可用扩展工具',
+        '支持网络搜索、代码解释器、高精度计算器、网页正文提取、实时天气与时钟日历',
+        '大模型自主决策工具调用，流式卡片毫秒级耗时追踪与参数折叠查看',
+        'Stitch 风格深色拟物玻璃态设计，输入栏即插即用胶囊标签与全屏插件中心',
+        '全链路端到端性能调优与移动端触感升级',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-09T08:00:00.000Z',
+      publishedAt: '2026-10-11T04:00:00.000Z',
     };
   }
 

@@ -178,6 +178,7 @@ describe('ChatController', () => {
       ['file-1'],
       expect.any(Number),
       null,
+      null,
     );
   });
 });

@@ -1,0 +1,108 @@
+name: Mobile Shorebird Patch
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Target Release Version (e.g. 1.0.0+1)'
+        required: true
+        default: '1.0.0+1'
+      track:
+        description: 'Track to publish patch (stable/beta)'
+        required: true
+        default: 'stable'
+      allow_asset_diffs:
+        description: 'Allow asset diffs'
+        type: boolean
+        required: true
+        default: true
+      dry_run:
+        description: 'Dry run validation (do not upload patch)'
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: mobile-patch-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  patch-android:
+    name: Build & Push Android Shorebird Patch
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: aiChatMobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+
+      - name: Authenticate Shorebird
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+          SHOREBIRD_CREDENTIALS: ${{ secrets.SHOREBIRD_CREDENTIALS }}
+        run: |
+          mkdir -p ~/.shorebird
+          if [ -n "$SHOREBIRD_TOKEN" ]; then
+            echo "Shorebird API Key (SHOREBIRD_TOKEN) detected."
+          elif [ -n "$SHOREBIRD_CREDENTIALS" ]; then
+            if echo "$SHOREBIRD_CREDENTIALS" | grep -q '^{'; then
+              echo "$SHOREBIRD_CREDENTIALS" > ~/.shorebird/credentials.json
+            else
+              echo "$SHOREBIRD_CREDENTIALS" | base64 -d > ~/.shorebird/credentials.json
+            fi
+            echo "Successfully loaded Shorebird credentials into ~/.shorebird/credentials.json"
+          else
+            echo "::error::Neither SHOREBIRD_TOKEN nor SHOREBIRD_CREDENTIALS is configured in GitHub Secrets!"
+            exit 1
+          fi
+
+      - name: Verify Shorebird Setup
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird --version
+          shorebird account whoami || true
+          shorebird apps list
+
+      - name: Run Mobile Tests
+        run: |
+          shorebird flutter test
+
+      - name: Build and Push Shorebird Patch (Android)
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          EXTRA_ARGS=""
+          if [ "${{ github.event.inputs.allow_asset_diffs }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --allow-asset-diffs"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --dry-run"
+          fi
+
+          echo "Running shorebird patch android for release-version: ${{ github.event.inputs.release_version || '1.0.0+1' }}..."
+          shorebird patch android \
+            --release-version=${{ github.event.inputs.release_version || '1.0.0+1' }} \
+            --track=${{ github.event.inputs.track || 'stable' }} \
+            $EXTRA_ARGS
+
+      - name: Patch Summary
+        if: always()
+        run: |
+          echo "### 📱 Shorebird Android Patch Build Result" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Version**: ${{ github.event.inputs.release_version || '1.0.0+1' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Track**: ${{ github.event.inputs.track || 'stable' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Allow Asset Diffs**: ${{ github.event.inputs.allow_asset_diffs }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY

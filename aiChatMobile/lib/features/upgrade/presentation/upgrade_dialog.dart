@@ -32,6 +32,7 @@ class UpgradeDialog extends StatefulWidget {
 class _UpgradeDialogState extends State<UpgradeDialog> {
   final UpgradeService _upgradeService = UpgradeService();
   bool _isDownloading = false;
+  String? _downloadedPath;
   double _progress = 0.0;
   String _statusText = '';
 
@@ -61,9 +62,10 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
 
     if (path != null) {
       setState(() {
-        _statusText = '下载完成，已准备就绪';
+        _isDownloading = false;
+        _downloadedPath = path;
+        _statusText = '安装包下载完成，已准备就绪';
       });
-      await _upgradeService.launchBrowserDownload(widget.versionInfo.downloadUrl);
     } else {
       setState(() {
         _isDownloading = false;
@@ -244,9 +246,13 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
                 ],
                 CyberButton(
                   variant: CyberButtonVariant.primary,
-                  onPressed: _isDownloading ? null : _startInAppDownload,
+                  onPressed: _isDownloading
+                      ? null
+                      : (_downloadedPath != null ? _launchBrowser : _startInAppDownload),
                   child: Text(
-                    _isDownloading ? '正在下载更新包...' : '立即升级 (应用内下载)',
+                    _isDownloading
+                        ? '正在下载更新包...'
+                        : (_downloadedPath != null ? '安装包已就绪·点击安装' : '立即升级 (应用内下载)'),
                     style: const TextStyle(
                       fontSize: 14.0,
                       fontWeight: FontWeight.w600,

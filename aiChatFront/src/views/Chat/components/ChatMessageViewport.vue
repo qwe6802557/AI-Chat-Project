@@ -64,6 +64,10 @@
               :search-status="message.searchStatus"
               :search-query="message.searchQuery"
             />
+            <ToolExecutionCard
+              v-if="message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0"
+              :tool-calls="message.toolCalls"
+            />
             <ChatReasoningPanel
               v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
               :message-id="message.id"
@@ -218,6 +222,7 @@ import { useMessageListWatcher } from '../hooks/useMessageListWatcher'
 import MarkdownMessage from './MarkdownMessage.vue'
 import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
+import ToolExecutionCard from './ToolExecutionCard.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 import type { Message, MessageAttachment } from '@/interface/conversation'
 
