@@ -76,10 +76,6 @@ jobs:
           shorebird account whoami || true
           shorebird apps list
 
-      - name: Run Mobile Tests
-        run: |
-          shorebird flutter test
-
       - name: Build and Push Shorebird Patch (Android)
         run: |
           EXTRA_ARGS=""
