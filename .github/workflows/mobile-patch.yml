@@ -1,6 +1,12 @@
 name: Mobile Shorebird Patch
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'aiChatMobile/**'
+      - '.github/workflows/mobile-patch.yml'
   workflow_dispatch:
     inputs:
       release_version:
@@ -81,9 +87,9 @@ jobs:
 
       - name: Build and Push Shorebird Patch (Android)
         run: |
-          EXTRA_ARGS=""
-          if [ "${{ github.event.inputs.allow_asset_diffs }}" = "true" ]; then
-            EXTRA_ARGS="$EXTRA_ARGS --allow-asset-diffs"
+          EXTRA_ARGS="--allow-asset-diffs"
+          if [ "${{ github.event.inputs.allow_asset_diffs }}" = "false" ]; then
+            EXTRA_ARGS=""
           fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
             EXTRA_ARGS="$EXTRA_ARGS --dry-run"
