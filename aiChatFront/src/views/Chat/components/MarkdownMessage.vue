@@ -248,4 +248,32 @@ onBeforeUnmount(() => {
   opacity: 0.7;
 }
 
+:deep(.citation-ref-badge) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 0 2px;
+  vertical-align: super;
+  line-height: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:deep(.citation-ref-badge:hover) {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
 </style>

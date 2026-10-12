@@ -21,6 +21,8 @@ class ChatBottomInputBar extends StatelessWidget {
   final List<String> enabledTools;
   final VoidCallback? onOpenPluginCenter;
   final ValueChanged<String>? onToggleTool;
+  final List<String> selectedKnowledgeBaseIds;
+  final VoidCallback? onOpenKnowledgeBasePicker;
 
   const ChatBottomInputBar({
     super.key,
@@ -38,6 +40,8 @@ class ChatBottomInputBar extends StatelessWidget {
     this.enabledTools = const ['web_search_v2'],
     this.onOpenPluginCenter,
     this.onToggleTool,
+    this.selectedKnowledgeBaseIds = const [],
+    this.onOpenKnowledgeBasePicker,
   });
 
   Widget _buildWebSearchPill() {
@@ -100,12 +104,67 @@ class ChatBottomInputBar extends StatelessWidget {
     );
   }
 
+  Widget _buildKnowledgeBasePill() {
+    final activeCount = selectedKnowledgeBaseIds.length;
+    final isActive = activeCount > 0;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+        onTap: isGenerating ? null : onOpenKnowledgeBasePicker,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+            border: Border.all(
+              color: isActive ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.menu_book_rounded,
+                size: 13.0,
+                color: isActive ? StitchTokens.primary : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 3.0),
+              Text(
+                isActive ? '知识库 ($activeCount)' : '知识库',
+                style: TextStyle(
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w500,
+                  color: isActive ? StitchTokens.primary : const Color(0xFF475467),
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 4.0),
+                Container(
+                  width: 5.0,
+                  height: 5.0,
+                  decoration: const BoxDecoration(
+                    color: StitchTokens.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildToolCapsules() {
     final activeCount = enabledTools.length;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _buildWebSearchPill(),
+        const SizedBox(width: 6.0),
+        _buildKnowledgeBasePill(),
         const SizedBox(width: 6.0),
         Material(
           color: Colors.transparent,
@@ -165,33 +224,38 @@ class ChatBottomInputBar extends StatelessWidget {
                 onRemove: onRemoveAttachment ?? (_) {},
               ),
             ],
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-                  decoration: BoxDecoration(
-                    color: StitchTokens.creditBg,
-                    borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
-                    border: Border.all(color: StitchTokens.creditBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.toll_rounded, size: 12.0, color: StitchTokens.creditAmber),
-                      const SizedBox(width: 4.0),
-                      Text(
-                        '10 算力点/次 (余 $creditsRemaining)',
-                        style: const TextStyle(
-                          fontSize: 11.0,
-                          fontWeight: FontWeight.w600,
-                          color: StitchTokens.creditAmber,
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+                    decoration: BoxDecoration(
+                      color: StitchTokens.creditBg,
+                      borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                      border: Border.all(color: StitchTokens.creditBorder),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.toll_rounded, size: 12.0, color: StitchTokens.creditAmber),
+                        const SizedBox(width: 4.0),
+                        Text(
+                          '10 算力点/次 (余 $creditsRemaining)',
+                          style: const TextStyle(
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w600,
+                            color: StitchTokens.creditAmber,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                _buildToolCapsules(),
-              ],
+                  const SizedBox(width: 8.0),
+                  _buildToolCapsules(),
+                ],
+              ),
             ),
             const SizedBox(height: 8.0),
             Row(

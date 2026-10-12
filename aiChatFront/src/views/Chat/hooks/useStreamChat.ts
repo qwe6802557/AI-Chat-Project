@@ -160,6 +160,7 @@ export function useStreamChat() {
       model?: string
       webSearch?: boolean
       enabledTools?: string[]
+      knowledgeBaseIds?: string[]
     },
   ) => {
     cancelCurrentStream()
@@ -171,6 +172,7 @@ export function useStreamChat() {
       model: selectedModelId = 'grok-chat-fast',
       webSearch = false,
       enabledTools = toolsStore.enabledTools,
+      knowledgeBaseIds,
     } = options || {}
 
     if (!userId) {
@@ -300,12 +302,32 @@ export function useStreamChat() {
           fileIds: hasFileIds ? fileIds : undefined,
           webSearch,
           enabledTools,
+          knowledgeBaseIds,
         },
         {
           onChunk: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
             switch (chunk.type) {
+              case 'tool_call_start':
+              case 'tool_call_result': {
+                const messageId = ensureAssistantMessage()
+                const toolCall = chunk.toolCall
+                if (toolCall) {
+                  const currentMsg = conversationStore.currentConversation?.messages.find((m) => m.id === messageId)
+                  const existingTools = [...(currentMsg?.toolCalls || [])]
+                  const index = existingTools.findIndex(t => t.id === toolCall.id)
+                  if (index >= 0) {
+                    existingTools[index] = { ...existingTools[index], ...toolCall }
+                  } else {
+                    existingTools.push(toolCall)
+                  }
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    toolCalls: existingTools,
+                  })
+                }
+                return
+              }
               case 'tool_result': {
                 const messageId = ensureAssistantMessage()
                 if (chunk.tool) {

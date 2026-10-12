@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 工具模型与内置工具定义
 class ToolExecutionResultModel {
   final String status;
@@ -41,8 +43,10 @@ class ToolExecutionRecordModel {
   final String name;
   final String title;
   final String callType;
+  final String status;
   final Map<String, dynamic> args;
   final ToolExecutionResultModel result;
+  final int? durationMs;
   final String? createdAt;
 
   const ToolExecutionRecordModel({
@@ -50,27 +54,64 @@ class ToolExecutionRecordModel {
     required this.name,
     required this.title,
     this.callType = 'user_preset',
+    this.status = 'completed',
     this.args = const {},
     required this.result,
+    this.durationMs,
     this.createdAt,
   });
 
+  bool get isCalling => status == 'calling';
+  bool get isExecuting => status == 'executing';
+  bool get isCompleted =>
+      status == 'completed' ||
+      status == 'success' ||
+      (status != 'calling' && status != 'executing' && result.isSuccess);
+  bool get isFailed =>
+      status == 'failed' ||
+      status == 'error' ||
+      (!result.isSuccess && !isCalling && !isExecuting);
+  int get effectiveDurationMs => durationMs ?? result.durationMs;
+
   factory ToolExecutionRecordModel.fromJson(Map<String, dynamic> json) {
     final rawResult = json['result'];
+    final statusStr = json['status'] as String?;
+    final duration = (json['durationMs'] as num?)?.toInt();
+
     final resultModel = rawResult is Map<String, dynamic>
         ? ToolExecutionResultModel.fromJson(rawResult)
         : ToolExecutionResultModel(
-            status: 'success',
+            status: statusStr == 'failed' || statusStr == 'error' ? 'error' : 'success',
             output: rawResult,
+            durationMs: duration ?? 0,
           );
+
+    final rawArgs = json['arguments'] ?? json['args'];
+    Map<String, dynamic> argsMap = const {};
+    if (rawArgs is Map<String, dynamic>) {
+      argsMap = rawArgs;
+    } else if (rawArgs is String && rawArgs.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawArgs);
+        if (decoded is Map<String, dynamic>) {
+          argsMap = decoded;
+        } else {
+          argsMap = {'value': rawArgs};
+        }
+      } catch (_) {
+        argsMap = {'value': rawArgs};
+      }
+    }
 
     return ToolExecutionRecordModel(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       title: json['title'] as String? ?? (json['name'] as String? ?? '工具调用'),
       callType: json['callType'] as String? ?? 'user_preset',
-      args: (json['args'] as Map<String, dynamic>?) ?? const {},
+      status: statusStr ?? (resultModel.isSuccess ? 'completed' : 'failed'),
+      args: argsMap,
       result: resultModel,
+      durationMs: duration ?? resultModel.durationMs,
       createdAt: json['createdAt'] as String?,
     );
   }
@@ -80,8 +121,10 @@ class ToolExecutionRecordModel {
     'name': name,
     'title': title,
     'callType': callType,
+    'status': status,
     'args': args,
     'result': result.toJson(),
+    if (durationMs != null) 'durationMs': durationMs,
     if (createdAt != null) 'createdAt': createdAt,
   };
 }

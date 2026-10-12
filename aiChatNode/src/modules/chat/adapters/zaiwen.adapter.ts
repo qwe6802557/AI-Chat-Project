@@ -130,6 +130,8 @@ export class ZaiwenAdapter implements IProviderAdapter {
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
           stream: false,
+          ...(options?.tools?.length ? { tools: options.tools } : {}),
+          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -161,6 +163,8 @@ export class ZaiwenAdapter implements IProviderAdapter {
           stream_options: {
             include_usage: true,
           },
+          ...(options?.tools?.length ? { tools: options.tools } : {}),
+          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -183,6 +187,8 @@ export class ZaiwenAdapter implements IProviderAdapter {
             temperature: options?.temperature ?? 0.7,
             max_tokens: options?.maxTokens ?? 4096,
             stream: true,
+            ...(options?.tools?.length ? { tools: options.tools } : {}),
+            ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
           },
           options?.abortSignal ? { signal: options.abortSignal } : undefined,
         );
@@ -240,6 +246,7 @@ export class ZaiwenAdapter implements IProviderAdapter {
         completionTokens,
         totalTokens,
       },
+      toolCalls: (firstChoice?.message as any)?.tool_calls,
     };
   }
 
@@ -264,6 +271,7 @@ export class ZaiwenAdapter implements IProviderAdapter {
         delta: {
           content: readString(delta?.content),
           role: typeof delta?.role === 'string' ? delta.role : undefined,
+          tool_calls: (delta as any)?.tool_calls,
         },
         finish_reason: finishReason,
         usage: normalizedChunk.usage

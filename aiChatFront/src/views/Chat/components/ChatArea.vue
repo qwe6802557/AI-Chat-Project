@@ -102,6 +102,11 @@
 
             <ToolQuickCapsules :disabled="loading" />
 
+            <KnowledgeBaseCapsule
+              v-model:selected-ids="selectedKnowledgeBaseIds"
+              :disabled="loading"
+            />
+
             <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
               {{ selectedModelReasoningBadgeLabel }}
             </span>
@@ -148,6 +153,7 @@ import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import WebSearchToggle from './WebSearchToggle.vue'
 import ToolQuickCapsules from './ToolQuickCapsules.vue'
+import KnowledgeBaseCapsule from './KnowledgeBaseCapsule.vue'
 import PluginCenterModal from './PluginCenterModal.vue'
 import type { Message } from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
@@ -200,6 +206,7 @@ const emit = defineEmits<{
       fileIds?: string[]
       serverFiles?: ServerFileInfo[]
       webSearch?: boolean
+      knowledgeBaseIds?: string[]
     }
   ]
   'stop-generation': []
@@ -208,6 +215,7 @@ const emit = defineEmits<{
 
 const inputMessage = ref('')
 const webSearchEnabled = ref(false)
+const selectedKnowledgeBaseIds = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const scrollSignal = ref(0)
 
@@ -253,8 +261,11 @@ const handleModelChange = (value: string) => {
 }
 
 const handlePromptClick = (prompt: string) => {
-  if (webSearchEnabled.value) {
-    emit('send-message', prompt, { webSearch: true })
+  const options: { webSearch?: boolean; knowledgeBaseIds?: string[] } = {}
+  if (webSearchEnabled.value) options.webSearch = true
+  if (selectedKnowledgeBaseIds.value.length > 0) options.knowledgeBaseIds = selectedKnowledgeBaseIds.value
+  if (Object.keys(options).length > 0) {
+    emit('send-message', prompt, options)
   } else {
     emit('send-message', prompt)
   }
@@ -290,6 +301,7 @@ const handleSend = () => {
     fileIds?: string[]
     serverFiles?: ServerFileInfo[]
     webSearch?: boolean
+    knowledgeBaseIds?: string[]
   } | undefined
 
   if (hasFiles.value) {
@@ -308,6 +320,13 @@ const handleSend = () => {
     sendOptions = {
       ...(sendOptions || {}),
       webSearch: true,
+    }
+  }
+
+  if (selectedKnowledgeBaseIds.value.length > 0) {
+    sendOptions = {
+      ...(sendOptions || {}),
+      knowledgeBaseIds: selectedKnowledgeBaseIds.value,
     }
   }
 

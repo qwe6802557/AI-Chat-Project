@@ -5,24 +5,26 @@
       :key="tool.id"
       class="tool-card"
       :class="{
-        'is-success': tool.result.status === 'success',
-        'is-error': tool.result.status === 'error',
+        'is-calling': isCalling(tool),
+        'is-executing': isExecuting(tool),
+        'is-completed': isCompleted(tool),
+        'is-failed': isFailed(tool),
         'is-expanded': isExpanded(tool.id),
       }"
     >
       <div class="tool-card-header" @click="toggleExpand(tool.id)">
         <div class="header-left">
           <component :is="getToolIcon(tool.name)" class="tool-icon" />
-          <span class="tool-name">{{ tool.title || tool.name }}</span>
-          <span
-            :class="[
-              'status-badge',
-              tool.result.status === 'success' ? 'badge-success' : 'badge-error',
-            ]"
-          >
-            {{ tool.result.status === 'success' ? '执行成功' : '执行失败' }}
+          <span class="tool-name">{{ getToolTitle(tool) }}</span>
+          <span :class="['status-badge', getStatusBadgeClass(tool)]">
+            <LoadingOutlined v-if="isCalling(tool) || isExecuting(tool)" spin class="status-spinner" />
+            <CheckCircleFilled v-else-if="isCompleted(tool)" class="status-icon" />
+            <CloseCircleFilled v-else class="status-icon" />
+            <span>{{ getStatusLabel(tool) }}</span>
           </span>
-          <span class="duration-tag">{{ tool.result.durationMs }}ms</span>
+          <span v-if="getDuration(tool) !== null" class="duration-tag">
+            {{ getDuration(tool) }}ms
+          </span>
         </div>
 
         <div class="header-right">
@@ -33,20 +35,27 @@
       <transition name="expand">
         <div v-if="isExpanded(tool.id)" class="tool-card-body">
           <!-- 调用参数 -->
-          <div v-if="tool.args && Object.keys(tool.args).length > 0" class="section-block">
+          <div v-if="hasArgs(tool)" class="section-block">
             <div class="section-title">调用参数</div>
-            <pre class="code-block"><code>{{ formatJson(tool.args) }}</code></pre>
+            <pre class="code-block"><code>{{ formatJson(getArgs(tool)) }}</code></pre>
           </div>
 
-          <!-- 执行结果输出 -->
+          <!-- 执行结果与输出 -->
           <div class="section-block">
             <div class="section-title">执行输出</div>
+            <div v-if="isCalling(tool) || isExecuting(tool)" class="running-indicator">
+              <LoadingOutlined spin />
+              <span>正在等待外部工具执行返回...</span>
+            </div>
+            <div v-else-if="getErrorMessage(tool)" class="error-text">
+              {{ getErrorMessage(tool) }}
+            </div>
             <pre
-              v-if="tool.result.rawOutput || tool.result.output"
+              v-else-if="hasOutput(tool)"
               class="code-block output-block"
-            ><code>{{ tool.result.rawOutput || formatJson(tool.result.output) }}</code></pre>
-            <div v-else-if="tool.result.error" class="error-text">
-              {{ tool.result.error }}
+            ><code>{{ formatOutput(tool) }}</code></pre>
+            <div v-else class="empty-output">
+              (无返回值)
             </div>
           </div>
         </div>
@@ -66,15 +75,18 @@ import {
   LinkOutlined,
   DownOutlined,
   AppstoreOutlined,
+  LoadingOutlined,
+  CheckCircleFilled,
+  CloseCircleFilled,
 } from '@ant-design/icons-vue'
-import type { ToolExecutionRecord } from '@/interface/tools'
+import type { ToolCallItem } from '@/interface/chat'
 
 defineOptions({
   name: 'ToolExecutionCard',
 })
 
 defineProps<{
-  toolCalls?: ToolExecutionRecord[] | null
+  toolCalls?: ToolCallItem[] | null
 }>()
 
 const expandedMap = ref<Record<string, boolean>>({})
@@ -85,6 +97,123 @@ const isExpanded = (id: string): boolean => {
 
 const toggleExpand = (id: string) => {
   expandedMap.value[id] = !expandedMap.value[id]
+}
+
+const getStatus = (tool: ToolCallItem): 'calling' | 'executing' | 'completed' | 'failed' => {
+  if (tool.status === 'calling') return 'calling'
+  if (tool.status === 'executing') return 'executing'
+  if (tool.status === 'completed' || tool.status === 'success') return 'completed'
+  if (tool.status === 'failed' || tool.status === 'error') return 'failed'
+
+  if (tool.result) {
+    if (typeof tool.result === 'object' && tool.result.status === 'error') {
+      return 'failed'
+    }
+    return 'completed'
+  }
+
+  return 'calling'
+}
+
+const isCalling = (tool: ToolCallItem): boolean => getStatus(tool) === 'calling'
+const isExecuting = (tool: ToolCallItem): boolean => getStatus(tool) === 'executing'
+const isCompleted = (tool: ToolCallItem): boolean => getStatus(tool) === 'completed'
+const isFailed = (tool: ToolCallItem): boolean => getStatus(tool) === 'failed'
+
+const getStatusLabel = (tool: ToolCallItem): string => {
+  const status = getStatus(tool)
+  switch (status) {
+    case 'calling':
+      return '准备调用'
+    case 'executing':
+      return '正在执行...'
+    case 'completed':
+      return '执行成功'
+    case 'failed':
+      return '执行失败'
+  }
+}
+
+const getStatusBadgeClass = (tool: ToolCallItem): string => {
+  const status = getStatus(tool)
+  switch (status) {
+    case 'calling':
+      return 'badge-calling'
+    case 'executing':
+      return 'badge-executing'
+    case 'completed':
+      return 'badge-completed'
+    case 'failed':
+      return 'badge-failed'
+  }
+}
+
+const getDuration = (tool: ToolCallItem): number | null => {
+  if (typeof tool.durationMs === 'number') {
+    return tool.durationMs
+  }
+  if (tool.result && typeof tool.result === 'object' && typeof tool.result.durationMs === 'number') {
+    return tool.result.durationMs
+  }
+  return null
+}
+
+const getArgs = (tool: ToolCallItem) => {
+  return tool.arguments ?? tool.args ?? null
+}
+
+const hasArgs = (tool: ToolCallItem): boolean => {
+  const args = getArgs(tool)
+  if (!args) return false
+  if (typeof args === 'object') {
+    return Object.keys(args).length > 0
+  }
+  return true
+}
+
+const getErrorMessage = (tool: ToolCallItem): string | null => {
+  if (tool.result && typeof tool.result === 'object') {
+    if (tool.result.error) return String(tool.result.error)
+    if (tool.result.status === 'error' && tool.result.message) return String(tool.result.message)
+  }
+  if (isFailed(tool)) {
+    return '工具执行未成功返回结果'
+  }
+  return null
+}
+
+const hasOutput = (tool: ToolCallItem): boolean => {
+  return tool.result !== undefined && tool.result !== null
+}
+
+const formatOutput = (tool: ToolCallItem): string => {
+  const res = tool.result
+  if (res && typeof res === 'object') {
+    if (res.rawOutput) return String(res.rawOutput)
+    if (res.output !== undefined) return formatJson(res.output)
+  }
+  return formatJson(res)
+}
+
+const getToolTitle = (tool: ToolCallItem): string => {
+  if (tool.title) return tool.title
+
+  switch (tool.name) {
+    case 'calculator':
+      return '计算器'
+    case 'clock_calendar':
+      return '时钟与日历'
+    case 'code_interpreter':
+      return '代码沙箱'
+    case 'url_fetcher':
+      return '网页读取'
+    case 'weather':
+      return '天气查询'
+    case 'web_search_v2':
+      return '深度联网搜索'
+    default:
+      return tool.name
+  }
 }
 
 const getToolIcon = (name: string) => {
@@ -125,18 +254,30 @@ const formatJson = (val: any): string => {
 }
 
 .tool-card {
-  border-radius: 8px;
+  border-radius: 10px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   overflow: hidden;
   font-size: 12px;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
 
-  &.is-success {
-    border-color: #e2e8f0;
+  &.is-calling {
+    border-color: #cbd5e1;
+    background: #f8fafc;
   }
 
-  &.is-error {
+  &.is-executing {
+    border-color: #93c5fd;
+    background: #f0f7ff;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.1);
+  }
+
+  &.is-completed {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+  }
+
+  &.is-failed {
     border-color: #fecaca;
     background: #fff5f5;
   }
@@ -150,13 +291,14 @@ const formatJson = (val: any): string => {
     user-select: none;
 
     &:hover {
-      background: #f1f5f9;
+      background: rgba(15, 23, 42, 0.03);
     }
 
     .header-left {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
 
       .tool-icon {
         font-size: 14px;
@@ -169,17 +311,38 @@ const formatJson = (val: any): string => {
       }
 
       .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         font-size: 11px;
-        padding: 1px 6px;
-        border-radius: 4px;
+        padding: 2px 8px;
+        border-radius: 6px;
         font-weight: 500;
 
-        &.badge-success {
+        .status-spinner {
+          font-size: 10px;
+        }
+
+        .status-icon {
+          font-size: 11px;
+        }
+
+        &.badge-calling {
+          color: #475467;
+          background: #f2f4f7;
+        }
+
+        &.badge-executing {
+          color: #1d4ed8;
+          background: #dbeafe;
+        }
+
+        &.badge-completed {
           color: #166534;
           background: #dcfce7;
         }
 
-        &.badge-error {
+        &.badge-failed {
           color: #991b1b;
           background: #fee2e2;
         }
@@ -241,6 +404,17 @@ const formatJson = (val: any): string => {
         max-height: 240px;
       }
 
+      .running-indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: #f0f7ff;
+        color: #2563eb;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+
       .error-text {
         padding: 8px 10px;
         background: #fef2f2;
@@ -248,7 +422,31 @@ const formatJson = (val: any): string => {
         border-radius: 6px;
         font-size: 12px;
       }
+
+      .empty-output {
+        font-size: 11px;
+        color: #94a3b8;
+        font-style: italic;
+        padding: 4px 0;
+      }
     }
   }
+}
+
+.expand-enter-active,
+.expand-leave-active {
+  transition: all 0.2s ease-out;
+  max-height: 600px;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 </style>

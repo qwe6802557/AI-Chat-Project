@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/tool_model.dart';
 
-/// 单个工具执行结果展示卡片（沉浸式折叠面板）
+/// 单个工具执行结果展示卡片（沉浸式渐进三段式折叠面板）
 class ChatToolExecutionCard extends StatefulWidget {
   final ToolExecutionRecordModel toolRecord;
 
@@ -36,6 +36,28 @@ class _ChatToolExecutionCardState extends State<ChatToolExecutionCard> {
         return Icons.terminal_rounded;
       default:
         return Icons.extension_rounded;
+    }
+  }
+
+  String _resolveToolTitle(String name, String title) {
+    if (title.isNotEmpty && title != name && title != '工具调用') {
+      return title;
+    }
+    switch (name) {
+      case 'calculator':
+        return '计算器';
+      case 'clock_calendar':
+        return '时钟与日历';
+      case 'weather':
+        return '天气查询';
+      case 'web_search_v2':
+        return '深度联网搜索';
+      case 'url_fetcher':
+        return '网页读取';
+      case 'code_interpreter':
+        return '代码沙箱';
+      default:
+        return title.isNotEmpty ? title : name;
     }
   }
 
@@ -71,17 +93,31 @@ class _ChatToolExecutionCardState extends State<ChatToolExecutionCard> {
   @override
   Widget build(BuildContext context) {
     final record = widget.toolRecord;
-    final isSuccess = record.result.isSuccess;
+    final isCalling = record.isCalling;
+    final isExecuting = record.isExecuting;
+    final isSuccess = record.isCompleted;
+    final isFailed = record.isFailed;
+
+    final borderColor = isFailed
+        ? const Color(0xFFFECACA)
+        : (isExecuting
+            ? const Color(0xFF93C5FD)
+            : const Color(0xFFE2E8F0));
+
+    final bgColor = isFailed
+        ? const Color(0xFFFFF5F5)
+        : (isExecuting
+            ? const Color(0xFFF0F7FF)
+            : const Color(0xFFF8FAFC));
+
     final formattedOutput = _formatOutput(record.result.output, record.result.rawOutput);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8.0),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: bgColor,
         borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-        border: Border.all(
-          color: isSuccess ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
-        ),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,19 +139,23 @@ class _ChatToolExecutionCardState extends State<ChatToolExecutionCard> {
                     Container(
                       padding: const EdgeInsets.all(4.0),
                       decoration: BoxDecoration(
-                        color: isSuccess ? const Color(0xFFEFF6FF) : const Color(0xFFFEF2F2),
+                        color: isFailed
+                            ? const Color(0xFFFEF2F2)
+                            : const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
                       ),
                       child: Icon(
                         _resolveToolIcon(record.name),
                         size: 14.0,
-                        color: isSuccess ? StitchTokens.primaryContainer : StitchTokens.crimsonStop,
+                        color: isFailed
+                            ? StitchTokens.crimsonStop
+                            : StitchTokens.primaryContainer,
                       ),
                     ),
                     const SizedBox(width: 8.0),
                     Expanded(
                       child: Text(
-                        record.title,
+                        _resolveToolTitle(record.name, record.title),
                         style: const TextStyle(
                           fontSize: 12.0,
                           fontWeight: FontWeight.w600,
@@ -126,42 +166,27 @@ class _ChatToolExecutionCardState extends State<ChatToolExecutionCard> {
                       ),
                     ),
                     const SizedBox(width: 6.0),
-                    // 状态胶囊
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: isSuccess ? const Color(0xFFECFDF5) : const Color(0xFFFEF2F2),
-                        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
-                        border: Border.all(
-                          color: isSuccess ? const Color(0xFFA7F3D0) : const Color(0xFFFECDD3),
+                    // 渐进状态徽章
+                    _buildStatusBadge(isCalling, isExecuting, isSuccess, isFailed),
+                    if (!isCalling && !isExecuting) ...[
+                      const SizedBox(width: 6.0),
+                      // 耗时胶囊
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                        ),
+                        child: Text(
+                          '${record.effectiveDurationMs}ms',
+                          style: const TextStyle(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF64748B),
+                          ),
                         ),
                       ),
-                      child: Text(
-                        isSuccess ? '成功' : '失败',
-                        style: TextStyle(
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w600,
-                          color: isSuccess ? const Color(0xFF047857) : const Color(0xFFB91C1C),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6.0),
-                    // 耗时胶囊
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
-                      ),
-                      child: Text(
-                        '${record.result.durationMs}ms',
-                        style: const TextStyle(
-                          fontSize: 10.0,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
+                    ],
                     const SizedBox(width: 4.0),
                     AnimatedRotation(
                       turns: _isExpanded ? 0.5 : 0.0,
@@ -216,61 +241,181 @@ class _ChatToolExecutionCardState extends State<ChatToolExecutionCard> {
                     const SizedBox(height: 8.0),
                   ],
 
-                  // 执行结果标题与复制按钮
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isSuccess ? '执行结果:' : '错误详情:',
-                        style: TextStyle(
-                          fontSize: 11.0,
-                          fontWeight: FontWeight.w600,
-                          color: isSuccess ? const Color(0xFF64748B) : const Color(0xFFDC2626),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () => _copyToClipboard(formattedOutput),
-                        borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
-                          child: Row(
-                            children: [
-                              Icon(Icons.copy_rounded, size: 11.0, color: Color(0xFF64748B)),
-                              SizedBox(width: 2.0),
-                              Text(
-                                '复制',
-                                style: TextStyle(fontSize: 10.0, color: Color(0xFF64748B)),
-                              ),
-                            ],
+                  if (isCalling)
+                    _buildPendingBox('正在准备工具调用参数...')
+                  else if (isExecuting)
+                    _buildPendingBox('正在等待工具执行返回...')
+                  else ...[
+                    // 执行结果标题与复制按钮
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isSuccess ? '执行结果:' : '错误详情:',
+                          style: TextStyle(
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w600,
+                            color: isSuccess
+                                ? const Color(0xFF64748B)
+                                : const Color(0xFFDC2626),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4.0),
+                        InkWell(
+                          onTap: () => _copyToClipboard(
+                              record.result.error ?? formattedOutput),
+                          borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                            child: Row(
+                              children: [
+                                Icon(Icons.copy_rounded, size: 11.0, color: Color(0xFF64748B)),
+                                SizedBox(width: 2.0),
+                                Text(
+                                  '复制',
+                                  style: TextStyle(fontSize: 10.0, color: Color(0xFF64748B)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4.0),
 
-                  // 执行结果代码框
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8.0),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
-                    ),
-                    child: SelectableText(
-                      formattedOutput,
-                      style: const TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11.0,
-                        height: 1.4,
-                        color: Color(0xFFF8FAFC),
+                    // 执行结果/错误代码框
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8.0),
+                      decoration: BoxDecoration(
+                        color: isFailed ? const Color(0xFFFEF2F2) : const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                        border: isFailed
+                            ? Border.all(color: const Color(0xFFFECACA))
+                            : null,
+                      ),
+                      child: SelectableText(
+                        record.result.error ?? formattedOutput,
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11.0,
+                          height: 1.4,
+                          color: isFailed ? const Color(0xFFB91C1C) : const Color(0xFFF8FAFC),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(
+      bool isCalling, bool isExecuting, bool isSuccess, bool isFailed) {
+    if (isCalling) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 8.0,
+              height: 8.0,
+              child: CircularProgressIndicator(strokeWidth: 1.2, color: Color(0xFF475467)),
+            ),
+            SizedBox(width: 4.0),
+            Text(
+              '准备调用',
+              style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w500, color: Color(0xFF475467)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isExecuting) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFDBEAFE),
+          borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+          border: Border.all(color: const Color(0xFFBFDBFE)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 8.0,
+              height: 8.0,
+              child: CircularProgressIndicator(strokeWidth: 1.2, color: Color(0xFF1D4ED8)),
+            ),
+            SizedBox(width: 4.0),
+            Text(
+              '执行中...',
+              style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w600, color: Color(0xFF1D4ED8)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isSuccess) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFECFDF5),
+          borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+          border: Border.all(color: const Color(0xFFA7F3D0)),
+        ),
+        child: const Text(
+          '成功',
+          style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w600, color: Color(0xFF047857)),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+        border: Border.all(color: const Color(0xFFFECDD3)),
+      ),
+      child: const Text(
+        '失败',
+        style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.w600, color: Color(0xFFB91C1C)),
+      ),
+    );
+  }
+
+  Widget _buildPendingBox(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F7FF),
+        borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 10.0,
+            height: 10.0,
+            child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF2563EB)),
+          ),
+          const SizedBox(width: 8.0),
+          Text(
+            text,
+            style: const TextStyle(fontSize: 11.0, color: Color(0xFF2563EB)),
+          ),
         ],
       ),
     );

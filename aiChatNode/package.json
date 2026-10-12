@@ -22,6 +22,7 @@
     "migration:create": "npm run typeorm -- migration:create src/database/migrations/Manual",
     "migration:generate": "npm run build && npm run typeorm -- -d dist/database/data-source.js migration:generate src/database/migrations/AutoMigration",
     "migration:run": "npm run build && npm run typeorm -- -d dist/database/data-source.js migration:run",
+    "migration:run:prod": "npm run typeorm -- -d dist/database/data-source.js migration:run",
     "migration:revert": "npm run build && npm run typeorm -- -d dist/database/data-source.js migration:revert",
     "migration:show": "npm run build && npm run typeorm -- -d dist/database/data-source.js migration:show"
   },

@@ -10,6 +10,7 @@ import 'widgets/chat_top_header.dart';
 import 'widgets/chat_user_message_bubble.dart';
 import 'widgets/model_switcher_bottom_sheet.dart';
 import 'widgets/plugin_center_bottom_sheet.dart';
+import 'widgets/knowledge_base_bottom_sheet.dart';
 import '../../upgrade/presentation/upgrade_dialog.dart';
 import '../../upgrade/services/upgrade_service.dart';
 
@@ -106,6 +107,23 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       },
       onSetTools: (tools) {
         ref.read(chatProvider.notifier).setEnabledTools(tools);
+      },
+    );
+  }
+
+  void _openKnowledgeBasePicker() {
+    final chatState = ref.read(chatProvider);
+    KnowledgeBaseBottomSheet.show(
+      context,
+      selectedIds: chatState.selectedKnowledgeBaseIds,
+      onToggleKnowledgeBase: (id) {
+        ref.read(chatProvider.notifier).toggleKnowledgeBase(id);
+      },
+      onSetKnowledgeBases: (ids) {
+        ref.read(chatProvider.notifier).setSelectedKnowledgeBases(ids);
+      },
+      onFetchKnowledgeBases: () {
+        return ref.read(chatProvider.notifier).fetchKnowledgeBases();
       },
     );
   }
@@ -236,7 +254,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               attachments: chatState.pendingAttachments,
               isWebSearchEnabled: chatState.isWebSearchEnabled,
               enabledTools: chatState.enabledTools,
+              selectedKnowledgeBaseIds: chatState.selectedKnowledgeBaseIds,
               onOpenPluginCenter: _openPluginCenter,
+              onOpenKnowledgeBasePicker: _openKnowledgeBasePicker,
               onToggleTool: (toolId) => ref.read(chatProvider.notifier).toggleTool(toolId),
               onToggleWebSearch: () => ref.read(chatProvider.notifier).toggleWebSearch(),
               onPickImages: () => ref.read(chatProvider.notifier).pickAndUploadImages(),

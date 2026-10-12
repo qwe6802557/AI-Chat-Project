@@ -4,7 +4,7 @@
     <div v-if="isSearching" class="searching-state">
       <div class="searching-indicator">
         <LoadingOutlined class="pulse-icon" spin />
-        <span class="searching-text">正在深度联网检索中...</span>
+        <span class="searching-text">正在检索相关参考来源与知识库...</span>
       </div>
       <div v-if="searchQuery" class="search-query-tag">
         <span class="query-prefix">关键词:</span>
@@ -16,46 +16,76 @@
     <div v-else-if="sources.length > 0" class="sources-container">
       <div class="sources-header">
         <div class="header-left">
-          <GlobalOutlined class="header-icon" />
-          <span class="header-title">参考了 {{ sources.length }} 个网页来源</span>
+          <DatabaseOutlined v-if="hasKnowledgeSources && !hasWebSources" class="header-icon" />
+          <GlobalOutlined v-else class="header-icon" />
+          <span class="header-title">{{ headerTitleText }}</span>
         </div>
       </div>
 
       <div class="cards-scroll-container">
-        <a
-          v-for="(source, index) in sources"
-          :key="source.id || index"
-          :href="source.url"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="source-card"
-          :title="source.snippet || source.title"
-        >
-          <div class="card-top-row">
-            <div class="site-info">
-              <img
-                v-if="source.icon && !failedIcons.has(source.id ?? index)"
-                :src="source.icon"
-                alt=""
-                class="site-icon"
-                @error="markIconFailed(source.id ?? index)"
-              />
-              <GlobalOutlined v-else class="site-icon-fallback" />
-              <span class="site-domain">{{ getDisplayDomain(source.url, source.sitename) }}</span>
+        <template v-for="(source, index) in sources" :key="source.id || index">
+          <!-- 知识库来源卡片 (点击抽屉预览切片) -->
+          <div
+            v-if="source.isKnowledgeBase"
+            class="source-card kb-source-card"
+            :title="source.snippet || source.title"
+            @click="handleOpenKbDrawer(source)"
+          >
+            <div class="card-top-row">
+              <div class="site-info">
+                <DatabaseOutlined class="site-icon-kb" />
+                <span class="site-domain">知识库切片</span>
+              </div>
+              <span class="source-index-badge">#{{ source.id ?? (index + 1) }}</span>
             </div>
-            <span class="source-index-badge">{{ source.id ?? (index + 1) }}</span>
+            <div class="card-title">{{ source.title }}</div>
+            <div v-if="source.score" class="kb-score-pill">
+              <span>置信度 {{ (source.score * 100).toFixed(0) }}%</span>
+            </div>
           </div>
-          <div class="card-title">{{ source.title }}</div>
-        </a>
+
+          <!-- 普通网页来源卡片 (点击打开新标签) -->
+          <a
+            v-else
+            :href="source.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="source-card"
+            :title="source.snippet || source.title"
+          >
+            <div class="card-top-row">
+              <div class="site-info">
+                <img
+                  v-if="source.icon && !failedIcons.has(source.id ?? index)"
+                  :src="source.icon"
+                  alt=""
+                  class="site-icon"
+                  @error="markIconFailed(source.id ?? index)"
+                />
+                <GlobalOutlined v-else class="site-icon-fallback" />
+                <span class="site-domain">{{ getDisplayDomain(source.url, source.sitename) }}</span>
+              </div>
+              <span class="source-index-badge">#{{ source.id ?? (index + 1) }}</span>
+            </div>
+            <div class="card-title">{{ source.title }}</div>
+          </a>
+        </template>
       </div>
     </div>
+
+    <!-- 知识库切片详情抽屉 -->
+    <KnowledgeSourceDrawer
+      v-model:open="drawerOpen"
+      :source="selectedKbSource"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { GlobalOutlined, LoadingOutlined } from '@ant-design/icons-vue'
+import { GlobalOutlined, DatabaseOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import type { SearchSource } from '@/interface/chat'
+import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
 
 defineOptions({
   name: 'SearchSourceGallery',
@@ -74,13 +104,34 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const failedIcons = ref<Set<number>>(new Set())
+const drawerOpen = ref(false)
+const selectedKbSource = ref<SearchSource | null>(null)
 
 const markIconFailed = (id: number) => {
   failedIcons.value.add(id)
 }
 
+const handleOpenKbDrawer = (source: SearchSource) => {
+  selectedKbSource.value = source
+  drawerOpen.value = true
+}
+
 const isSearching = computed(() => props.searchStatus === 'searching')
 const shouldRender = computed(() => isSearching.value || (props.sources && props.sources.length > 0))
+
+const hasKnowledgeSources = computed(() => props.sources.some((s) => s.isKnowledgeBase))
+const hasWebSources = computed(() => props.sources.some((s) => !s.isKnowledgeBase))
+
+const headerTitleText = computed(() => {
+  const count = props.sources.length
+  if (hasKnowledgeSources.value && !hasWebSources.value) {
+    return `参考了 ${count} 个知识库切片`
+  }
+  if (hasKnowledgeSources.value && hasWebSources.value) {
+    return `参考了 ${count} 个来源 (含知识库切片与网页)`
+  }
+  return `参考了 ${count} 个网页来源`
+})
 
 const getDisplayDomain = (url: string, sitename?: string): string => {
   if (sitename && sitename.trim()) {
@@ -185,7 +236,7 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 2px 2px 4px 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 
@@ -211,17 +262,26 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 
   &:hover {
     border-color: #93c5fd;
     background: #f8fafc;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.08);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
 
     .card-title {
       color: #1d4ed8;
+    }
+  }
+
+  &.kb-source-card {
+    border-color: #cbd5e1;
+
+    &:hover {
+      border-color: #60a5fa;
+      background: #f0f7ff;
     }
   }
 
@@ -254,6 +314,12 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
     flex-shrink: 0;
   }
 
+  .site-icon-kb {
+    font-size: 13px;
+    color: #2563eb;
+    flex-shrink: 0;
+  }
+
   .site-domain {
     font-size: 11px;
     color: #64748b;
@@ -265,9 +331,10 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
 
   .source-index-badge {
     flex-shrink: 0;
-    width: 16px;
+    min-width: 16px;
     height: 16px;
-    border-radius: 50%;
+    padding: 0 4px;
+    border-radius: 8px;
     background: #f1f5f9;
     color: #475467;
     font-size: 10px;
@@ -289,6 +356,15 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     transition: color 0.2s ease;
+  }
+
+  .kb-score-pill {
+    font-size: 10px;
+    color: #0284c7;
+    background: #f0f9ff;
+    padding: 2px 4px;
+    border-radius: 4px;
+    align-self: flex-start;
   }
 }
 </style>

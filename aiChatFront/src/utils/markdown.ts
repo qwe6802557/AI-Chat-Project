@@ -132,6 +132,16 @@ export function canRenderSafely(content: string): boolean {
   return true
 }
 
+function injectCitationBadges(rawHtml: string): string {
+  return rawHtml.replace(
+    /(<code[\s\S]*?<\/code>|<pre[\s\S]*?<\/pre>)|\[(\d+)\]/g,
+    (match, codeBlock, citationNum) => {
+      if (codeBlock) return codeBlock
+      return `<button type="button" class="citation-ref-badge" data-citation="${citationNum}">[${citationNum}]</button>`
+    },
+  )
+}
+
 /**
  * 渲染 Markdown 为 HTML
  */
@@ -143,8 +153,12 @@ export function renderMarkdown(
 
   try {
     const renderer = options.highlightCode === false ? rendererPlain : rendererWithHighlight
-    const html = marked.parse(content, { renderer }) as string
-    return DOMPurify.sanitize(html)  // 引入DOMPurify防止xss攻击
+    const rawHtml = marked.parse(content, { renderer }) as string
+    const htmlWithCitations = injectCitationBadges(rawHtml)
+    return DOMPurify.sanitize(htmlWithCitations, {
+      ADD_ATTR: ['data-citation', 'target'],
+      ADD_TAGS: ['button'],
+    })
   } catch (error) {
     logger.error('Markdown 渲染失败:', error)
     return DOMPurify.sanitize(`<p>${escapeHtml(content)}</p>`)

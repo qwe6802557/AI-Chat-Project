@@ -8,6 +8,11 @@ export interface SearchSource {
   snippet: string;
   icon?: string;
   sitename?: string;
+  score?: number;
+  isKnowledgeBase?: boolean;
+  knowledgeBaseId?: string;
+  documentId?: string;
+  chunkIndex?: number;
 }
 
 /**

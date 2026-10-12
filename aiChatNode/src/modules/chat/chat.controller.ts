@@ -200,18 +200,6 @@ export class ChatController {
         }
       }
 
-      if (streamContext.toolExecutions && streamContext.toolExecutions.length > 0 && !res.writableEnded) {
-        for (const toolExec of streamContext.toolExecutions) {
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'tool_result',
-              sessionId,
-              tool: toolExec,
-            })}\n\n`,
-          );
-        }
-      }
-
       let fullMessage = '';
       let finalFinishReason: string | null = null;
       let finalUsage: CompletionUsageStats | undefined;
@@ -258,6 +246,20 @@ export class ChatController {
         let sseData: Record<string, unknown> | null = null;
 
         switch ((chunk as CompletionChunk).type) {
+          case 'tool_call_start':
+            sseData = {
+              type: 'tool_call_start',
+              sessionId,
+              toolCall: chunk.toolCall,
+            };
+            break;
+          case 'tool_call_result':
+            sseData = {
+              type: 'tool_call_result',
+              sessionId,
+              toolCall: chunk.toolCall,
+            };
+            break;
           case 'reasoning_start':
             finalReasoning = {
               mode: chunk.reasoning?.mode || 'raw',
@@ -300,14 +302,16 @@ export class ChatController {
           case 'answer_delta':
           default: {
             const delta = chunk.delta?.content || '';
-            fullMessage += delta;
-            sseData = {
-              type: 'answer_delta',
-              delta,
-              finish_reason: chunk.finish_reason,
-              sessionId,
-              usage: chunk.usage,
-            };
+            if (delta) {
+              fullMessage += delta;
+              sseData = {
+                type: 'answer_delta',
+                delta,
+                finish_reason: chunk.finish_reason,
+                sessionId,
+                usage: chunk.usage,
+              };
+            }
             break;
           }
         }
