@@ -15,6 +15,7 @@ import { OpenaiGatewayModule } from './modules/openai-gateway/openai-gateway.mod
 import { AppVersionModule } from './modules/app-version/app-version.module';
 import { ToolsModule } from './modules/tools/tools.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
+import { VideoModule } from './modules/video/video.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import databaseConfig from './config/database.config';
@@ -57,6 +58,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     AppVersionModule,
     ToolsModule,
     KnowledgeBaseModule,
+    VideoModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

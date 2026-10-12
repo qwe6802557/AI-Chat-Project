@@ -26,6 +26,7 @@ export enum CreditBusinessType {
   IMAGE_GENERATION = 'image_generation',
   VOICE_TTS = 'voice_tts',
   VOICE_STT = 'voice_stt',
+  VIDEO_GENERATION = 'video_generation',
   MANUAL = 'manual',
   SYSTEM = 'system',
 }

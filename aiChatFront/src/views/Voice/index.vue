@@ -1,8 +1,5 @@
 <template>
   <div class="voice-workbench-layout">
-    <!-- 顶部统一模式切换导航栏 -->
-    <AppHeaderNav active-mode="voice" />
-
     <!-- 主体区域：左侧共享侧边栏 + 右侧语音瀑布流与悬浮控制台 -->
     <div class="voice-main-container">
       <Sidebar
@@ -13,7 +10,6 @@
         @rename-conversation="handleRenameConversation"
         @delete-conversation="handleDeleteConversation"
       />
-
       <div class="voice-workspace">
         <main ref="mainScrollRef" class="voice-workbench-main">
           <VoiceTaskStream
@@ -45,12 +41,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import axios from 'axios'
-import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from '@/views/Chat/components/Sidebar.vue'
 import VoiceTaskStream from './components/VoiceTaskStream.vue'
 import VoiceControlBar from './components/VoiceControlBar.vue'
@@ -307,6 +302,10 @@ onMounted(async () => {
   await Promise.all([fetchVoices(), fetchHistory(), syncUserCredits()])
 })
 
+onActivated(() => {
+  syncUserCredits()
+})
+
 onUnmounted(() => {
   if (timerId) clearInterval(timerId)
   if (activeAbortController) activeAbortController.abort()
@@ -317,8 +316,8 @@ onUnmounted(() => {
 .voice-workbench-layout {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background-color: #f8fafc;
 }
@@ -327,7 +326,7 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   width: 100%;
-  height: calc(100vh - 60px);
+  height: 100%;
   overflow: hidden;
   position: relative;
 }

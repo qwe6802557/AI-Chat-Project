@@ -1,6 +1,5 @@
 <template>
   <div class="chat-page-layout">
-    <AppHeaderNav active-mode="chat" />
     <div class="chat-main-container">
       <Sidebar
         :conversations="conversations"
@@ -39,11 +38,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, onActivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
 import logger from '@/utils/logger'
@@ -434,14 +432,25 @@ onMounted(async () => {
     message.warning('未获取到用户信息，请重新登录')
   }
 })
+
+onActivated(async () => {
+  try {
+    const res = await getCurrentUserAccount()
+    if (res?.data?.user?.credits) {
+      authStore.setUserCredits(res.data.user.credits)
+    }
+  } catch (error) {
+    logger.warn('ChatPage onActivated 静默同步积分失败:', error)
+  }
+})
 </script>
 
 <style scoped lang="scss">
 .chat-page-layout {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: #f8fafc;
   overflow: hidden;
 }

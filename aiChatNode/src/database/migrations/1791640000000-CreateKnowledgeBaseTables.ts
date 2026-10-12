@@ -68,6 +68,7 @@ export class CreateKnowledgeBaseTables1791640000000
         CONSTRAINT "FK_knowledge_chunks_kb" FOREIGN KEY ("knowledgeBaseId") REFERENCES "knowledge_bases"("id") ON DELETE CASCADE,
         CONSTRAINT "FK_knowledge_chunks_user" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE
       );
+      ALTER TABLE "knowledge_chunks" ADD COLUMN IF NOT EXISTS "tsv" tsvector;
       CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_doc_id" ON "knowledge_chunks" ("documentId");
       CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_kb_id" ON "knowledge_chunks" ("knowledgeBaseId");
       CREATE INDEX IF NOT EXISTS "idx_knowledge_chunks_tsv" ON "knowledge_chunks" USING gin ("tsv");
