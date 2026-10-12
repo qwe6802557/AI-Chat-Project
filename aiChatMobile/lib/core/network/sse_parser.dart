@@ -12,6 +12,7 @@ class SseChunk {
   final String? searchQuery;
   final List<Map<String, dynamic>>? rawSources;
   final Map<String, dynamic>? rawTool;
+  final List<Map<String, dynamic>>? rawToolCalls;
 
   const SseChunk({
     this.type,
@@ -23,6 +24,7 @@ class SseChunk {
     this.searchQuery,
     this.rawSources,
     this.rawTool,
+    this.rawToolCalls,
   });
 
   factory SseChunk.fromJson(Map<String, dynamic> json) {
@@ -37,7 +39,10 @@ class SseChunk {
       rawSources: (json['sources'] as List?)
           ?.whereType<Map<String, dynamic>>()
           .toList(),
-      rawTool: json['tool'] as Map<String, dynamic>?,
+      rawTool: (json['toolCall'] ?? json['tool']) as Map<String, dynamic>?,
+      rawToolCalls: (json['toolCalls'] as List?)
+          ?.whereType<Map<String, dynamic>>()
+          .toList(),
     );
   }
 }

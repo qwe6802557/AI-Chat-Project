@@ -1,4 +1,4 @@
-import type { SearchSource } from './chat'
+import type { SearchSource, ToolCallItem } from './chat'
 
 export type AttachmentType = 'image' | 'pdf' | 'document'
 
@@ -81,7 +81,7 @@ export interface Message {
   sources?: SearchSource[]
   searchStatus?: 'searching' | 'done'
   searchQuery?: string
-  toolCalls?: any[]
+  toolCalls?: ToolCallItem[]
   attachments?: MessageAttachment[]
   error?: string
 }

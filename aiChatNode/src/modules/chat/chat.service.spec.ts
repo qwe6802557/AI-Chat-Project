@@ -12,16 +12,22 @@ import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { ToolRegistryService } from '../tools/tools.registry.service';
+import { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
 import { DEFAULT_CHAT_BILLING_MODE, DEFAULT_CHAT_MODEL_CREDIT_COST } from '../credits/types/credits.types';
 
 describe('ChatService - Billing & Credits', () => {
   let service: ChatService;
+
+  const mockHybridRagService = {
+    search: jest.fn().mockResolvedValue([]),
+  };
 
   const mockToolRegistryService = {
     autoExecutePresetTools: jest.fn().mockResolvedValue([]),
     executeTool: jest.fn(),
     listTools: jest.fn().mockReturnValue([]),
     toOpenAITools: jest.fn().mockReturnValue([]),
+    getPlugin: jest.fn(),
   };
 
   const mockWebSearchService = {
@@ -95,6 +101,7 @@ describe('ChatService - Billing & Credits', () => {
         { provide: CreditsService, useValue: mockCreditsService },
         { provide: WebSearchService, useValue: mockWebSearchService },
         { provide: ToolRegistryService, useValue: mockToolRegistryService },
+        { provide: HybridRagService, useValue: mockHybridRagService },
       ],
     }).compile();
 
@@ -242,4 +249,81 @@ describe('ChatService - Billing & Credits', () => {
       expect(formatted).toContain('【用户提问】：\n分析这份代码');
     });
   });
+
+  describe('Native Function Calling & ReAct loop', () => {
+    it('executes tool and yields tool_call_start and tool_call_result in executeReActStream', async () => {
+      mockToolRegistryService.getPlugin.mockReturnValue({
+        metadata: { title: '数学计算器', icon: 'calculator' },
+      });
+      mockToolRegistryService.executeTool.mockResolvedValue({
+        id: 'call_1',
+        name: 'calculator',
+        title: '数学计算器',
+        callType: 'model_function_call',
+        args: { expression: '12 * 12' },
+        result: { status: 'success', output: 144, durationMs: 15 },
+        createdAt: new Date().toISOString(),
+      });
+
+      let callCount = 0;
+      mockAiClientService.createStreamChatCompletion.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return (async function* () {
+            yield {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_1',
+                    function: { name: 'calculator', arguments: '{"expression":"12 * 12"}' },
+                  },
+                ],
+              },
+            };
+          })();
+        } else {
+          return (async function* () {
+            yield {
+              type: 'answer_delta',
+              delta: { content: '计算结果是 144' },
+            };
+            yield {
+              finish_reason: 'stop',
+              usage: { promptTokens: 30, completionTokens: 10, totalTokens: 40 },
+            };
+          })();
+        }
+      });
+
+      const toolRecords: any[] = [];
+      const chunks: any[] = [];
+      const stream = (service as any).executeReActStream({
+        modelId: 'gpt-4o',
+        initialMessages: [{ role: 'user', content: '计算 12 * 12' }],
+        tools: [{ type: 'function', function: { name: 'calculator' } }],
+        context: { userId: 'u1', sessionId: 's1', userMessage: '计算 12 * 12' },
+        toolExecutionRecords: toolRecords,
+      });
+
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      const startChunk = chunks.find((c) => c.type === 'tool_call_start');
+      const resultChunk = chunks.find((c) => c.type === 'tool_call_result');
+      const answerChunk = chunks.find((c) => c.type === 'answer_delta');
+
+      expect(startChunk).toBeDefined();
+      expect(startChunk.toolCall.name).toBe('calculator');
+      expect(resultChunk).toBeDefined();
+      expect(resultChunk.toolCall.status).toBe('success');
+      expect(resultChunk.toolCall.output).toBe(144);
+      expect(answerChunk).toBeDefined();
+      expect(answerChunk.delta.content).toBe('计算结果是 144');
+      expect(toolRecords).toHaveLength(1);
+      expect(toolRecords[0].name).toBe('calculator');
+    });
+  });
 });
+

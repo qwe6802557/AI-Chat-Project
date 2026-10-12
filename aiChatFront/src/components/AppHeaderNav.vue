@@ -41,6 +41,15 @@
           <AudioOutlined class="tab-icon" />
           <span>语音</span>
         </button>
+
+        <button
+          type="button"
+          :class="['mode-tab', { active: currentMode === 'knowledge' }]"
+          @click="handleSwitchMode('knowledge')"
+        >
+          <DatabaseOutlined class="tab-icon" />
+          <span>知识库</span>
+        </button>
       </div>
     </div>
 
@@ -114,6 +123,7 @@ import {
   LogoutOutlined,
   ThunderboltFilled,
   MobileOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
@@ -123,7 +133,7 @@ defineOptions({
 })
 
 const props = defineProps<{
-  activeMode?: 'chat' | 'image' | 'video' | 'audio' | 'voice'
+  activeMode?: 'chat' | 'image' | 'video' | 'audio' | 'voice' | 'knowledge'
 }>()
 
 const route = useRoute()
@@ -136,6 +146,7 @@ const currentMode = computed(() => {
   if (props.activeMode) return props.activeMode
   if (route.path.startsWith('/image')) return 'image'
   if (route.path.startsWith('/voice')) return 'voice'
+  if (route.path.startsWith('/knowledge')) return 'knowledge'
   return 'chat'
 })
 
@@ -154,13 +165,15 @@ const creditsRemaining = computed(() => {
   return authStore.userProfile?.credits?.remaining ?? 0
 })
 
-const handleSwitchMode = (mode: 'chat' | 'image' | 'voice') => {
+const handleSwitchMode = (mode: 'chat' | 'image' | 'voice' | 'knowledge') => {
   if (mode === 'chat' && route.path !== '/chat') {
     router.push('/chat')
   } else if (mode === 'image' && route.path !== '/image') {
     router.push('/image')
   } else if (mode === 'voice' && route.path !== '/voice') {
     router.push('/voice')
+  } else if (mode === 'knowledge' && route.path !== '/knowledge') {
+    router.push('/knowledge')
   }
 }
 

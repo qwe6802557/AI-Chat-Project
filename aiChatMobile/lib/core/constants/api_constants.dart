@@ -1,12 +1,21 @@
+import 'package:flutter/foundation.dart';
+ 
 /// 全局 API 契约与服务常量
 class ApiConstants {
   ApiConstants._();
 
   // API 服务基址（支持通过 --dart-define=API_BASE_URL 覆盖本地调试地址）
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://aichat.yanggenbwebsite.site',
-  );
+  static String get baseUrl {
+    const envUrl = String.fromEnvironment('API_BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host == 'localhost' || host == '127.0.0.1') {
+        return 'http://localhost:3000';
+      }
+    }
+    return 'https://aichat.yanggenbwebsite.site';
+  }
 
   // 认证链路端点
   static const String authLogin = '/auth/login';

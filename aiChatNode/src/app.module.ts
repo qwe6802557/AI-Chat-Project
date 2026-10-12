@@ -14,6 +14,7 @@ import { VoiceModule } from './modules/voice/voice.module';
 import { OpenaiGatewayModule } from './modules/openai-gateway/openai-gateway.module';
 import { AppVersionModule } from './modules/app-version/app-version.module';
 import { ToolsModule } from './modules/tools/tools.module';
+import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import databaseConfig from './config/database.config';
@@ -55,6 +56,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     OpenaiGatewayModule,
     AppVersionModule,
     ToolsModule,
+    KnowledgeBaseModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

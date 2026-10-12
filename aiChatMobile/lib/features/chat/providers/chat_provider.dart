@@ -14,6 +14,7 @@ import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
 import '../domain/tool_model.dart';
+import '../domain/knowledge_base_model.dart';
 
 class ChatState {
   final String? activeSessionId;
@@ -26,6 +27,7 @@ class ChatState {
   final List<AttachmentItem> pendingAttachments;
   final bool isWebSearchEnabled;
   final List<String> enabledTools;
+  final List<String> selectedKnowledgeBaseIds;
 
   const ChatState({
     this.activeSessionId,
@@ -38,6 +40,7 @@ class ChatState {
     this.pendingAttachments = const [],
     this.isWebSearchEnabled = true,
     this.enabledTools = const ['web_search_v2'],
+    this.selectedKnowledgeBaseIds = const [],
   });
 
   ChatState copyWith({
@@ -51,6 +54,7 @@ class ChatState {
     List<AttachmentItem>? pendingAttachments,
     bool? isWebSearchEnabled,
     List<String>? enabledTools,
+    List<String>? selectedKnowledgeBaseIds,
   }) {
     return ChatState(
       activeSessionId: activeSessionId ?? this.activeSessionId,
@@ -63,6 +67,8 @@ class ChatState {
       pendingAttachments: pendingAttachments ?? this.pendingAttachments,
       isWebSearchEnabled: isWebSearchEnabled ?? this.isWebSearchEnabled,
       enabledTools: enabledTools ?? this.enabledTools,
+      selectedKnowledgeBaseIds:
+          selectedKnowledgeBaseIds ?? this.selectedKnowledgeBaseIds,
     );
   }
 }
@@ -144,6 +150,28 @@ class ChatNotifier extends StateNotifier<ChatState> {
       enabledTools: tools,
       isWebSearchEnabled: tools.contains('web_search_v2'),
     );
+  }
+
+  Future<List<KnowledgeBaseModel>> fetchKnowledgeBases() async {
+    try {
+      return await _repository.getKnowledgeBases();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  void toggleKnowledgeBase(String kbId) {
+    final list = List<String>.from(state.selectedKnowledgeBaseIds);
+    if (list.contains(kbId)) {
+      list.remove(kbId);
+    } else {
+      list.add(kbId);
+    }
+    state = state.copyWith(selectedKnowledgeBaseIds: list);
+  }
+
+  void setSelectedKnowledgeBases(List<String> ids) {
+    state = state.copyWith(selectedKnowledgeBaseIds: ids);
   }
 
   Future<void> pickAndUploadImages() async {
@@ -470,7 +498,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final contentBuffer = StringBuffer();
     final reasoningBuffer = StringBuffer();
     final currentToolCalls = <ToolExecutionRecordModel>[];
-    String? currentSearchStatus = state.isWebSearchEnabled ? 'searching' : null;
+    String? currentSearchStatus =
+        (state.isWebSearchEnabled || state.selectedKnowledgeBaseIds.isNotEmpty)
+            ? 'searching'
+            : null;
     List<SearchSourceModel>? currentSources;
 
     try {
@@ -482,6 +513,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         fileIds: fileIds,
         webSearch: state.isWebSearchEnabled,
         enabledTools: state.enabledTools,
+        knowledgeBaseIds: state.selectedKnowledgeBaseIds,
         cancelToken: _cancelToken,
       );
 
@@ -498,11 +530,33 @@ class ChatNotifier extends StateNotifier<ChatState> {
             currentSearchStatus = 'done';
           }
 
-          if (chunk.type == 'tool_result' && chunk.rawTool != null) {
+          if ((chunk.type == 'tool_call_start' ||
+                  chunk.type == 'tool_call_result' ||
+                  chunk.type == 'tool_result') &&
+              chunk.rawTool != null) {
             try {
               final toolRecord = ToolExecutionRecordModel.fromJson(chunk.rawTool!);
-              if (!currentToolCalls.any((t) => t.id == toolRecord.id)) {
+              final existingIndex =
+                  currentToolCalls.indexWhere((t) => t.id == toolRecord.id);
+              if (existingIndex != -1) {
+                currentToolCalls[existingIndex] = toolRecord;
+              } else {
                 currentToolCalls.add(toolRecord);
+              }
+            } catch (_) {}
+          }
+
+          if (chunk.rawToolCalls != null && chunk.rawToolCalls!.isNotEmpty) {
+            try {
+              for (final raw in chunk.rawToolCalls!) {
+                final toolRecord = ToolExecutionRecordModel.fromJson(raw);
+                final existingIndex =
+                    currentToolCalls.indexWhere((t) => t.id == toolRecord.id);
+                if (existingIndex != -1) {
+                  currentToolCalls[existingIndex] = toolRecord;
+                } else {
+                  currentToolCalls.add(toolRecord);
+                }
               }
             } catch (_) {}
           }

@@ -82,6 +82,15 @@ const router = createRouter({
       },
     },
     {
+      path: '/knowledge',
+      name: 'knowledge',
+      component: () => import('../views/KnowledgeBase/index.vue'),
+      meta: {
+        title: 'RAG 知识库管理',
+        requiresAuth: true,
+      },
+    },
+    {
       path: '/account',
       name: 'account',
       component: () => import('../views/Account/index.vue'),

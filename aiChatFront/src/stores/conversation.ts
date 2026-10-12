@@ -147,6 +147,7 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
         reasoning,
         durationMs: msg.durationMs ?? undefined,
         sources: msg.sources || undefined,
+        toolCalls: (msg.toolCalls && msg.toolCalls.length > 0) ? msg.toolCalls : undefined,
       })
     }
   })

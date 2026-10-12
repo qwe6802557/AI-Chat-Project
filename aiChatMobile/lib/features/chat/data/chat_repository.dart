@@ -7,12 +7,25 @@ import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
 import '../domain/tool_model.dart';
+import '../domain/knowledge_base_model.dart';
 
 /// 聊天领域仓储层
 class ChatRepository {
   final DioClient _client;
 
   ChatRepository(this._client);
+
+  Future<List<KnowledgeBaseModel>> getKnowledgeBases() async {
+    final response = await _client.dio.get('/knowledge-bases');
+    final data = response.data;
+    if (data is Map<String, dynamic> && data['code'] == 0 && data['data'] != null) {
+      final list = data['data'] as List;
+      return list
+          .map((item) => KnowledgeBaseModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    }
+    return [];
+  }
 
   Future<List<ChatSessionModel>> getSessions(String userId) async {
     final response = await _client.dio.get(
@@ -144,6 +157,7 @@ class ChatRepository {
     List<String>? fileIds,
     bool webSearch = false,
     List<String>? enabledTools,
+    List<String>? knowledgeBaseIds,
     CancelToken? cancelToken,
   }) async {
     final response = await _client.dio.post<ResponseBody>(
@@ -157,6 +171,8 @@ class ChatRepository {
         if (webSearch) 'webSearch': true,
         if (enabledTools != null && enabledTools.isNotEmpty)
           'enabledTools': enabledTools,
+        if (knowledgeBaseIds != null && knowledgeBaseIds.isNotEmpty)
+          'knowledgeBaseIds': knowledgeBaseIds,
       },
       options: Options(
         responseType: ResponseType.stream,

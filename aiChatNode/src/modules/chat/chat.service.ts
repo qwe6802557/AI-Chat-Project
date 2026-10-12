@@ -18,6 +18,8 @@ import {
   ChatMessage,
   CompletionUsageStats,
   CompletionResponse,
+  CompletionOptions,
+  CompletionChunk,
   MultimodalContent,
 } from './types/completion.types';
 import { FilesService } from '../files/files.service';
@@ -39,6 +41,7 @@ import { WebSearchService } from '../web-search/web-search.service';
 import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
 import { ToolRegistryService } from '../tools/tools.registry.service';
 import type { ToolExecutionRecord } from '../tools/types/tools.types';
+import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
 
 export interface SessionMessageAttachmentDto {
   id: string;
@@ -125,6 +128,7 @@ export class ChatService {
     private readonly creditsService: CreditsService,
     private readonly webSearchService: WebSearchService,
     private readonly toolRegistryService: ToolRegistryService,
+    private readonly ragService: HybridRagService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -565,18 +569,32 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    const openAiTools = createChatDto.enabledTools?.length
+      ? this.toolRegistryService.toOpenAITools(createChatDto.enabledTools)
+      : [];
+
     let toolExecutionRecords: ToolExecutionRecord[] = [];
-    if (createChatDto.enabledTools?.length) {
-      toolExecutionRecords = await this.toolRegistryService.autoExecutePresetTools(
-        createChatDto.message,
-        createChatDto.enabledTools,
-        { userId, sessionId, userMessage: createChatDto.message },
-      );
+    let searchResult: WebSearchResult | null = null;
+    if (createChatDto.webSearch && !createChatDto.enabledTools?.includes('web_search_v2')) {
+      searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
-    let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch || createChatDto.enabledTools?.includes('web_search_v2')) {
-      searchResult = await this.webSearchService.search(createChatDto.message);
+    const ragContext = await this.resolveKnowledgeBaseContext({
+      userId,
+      message: createChatDto.message,
+      knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+    });
+
+    if (ragContext.sources.length > 0) {
+      if (!searchResult) {
+        searchResult = {
+          query: createChatDto.message,
+          sources: ragContext.sources,
+          contextPrompt: '',
+        };
+      } else {
+        searchResult.sources.unshift(...ragContext.sources);
+      }
     }
 
     const userContent = this.buildMultimodalContent(
@@ -585,28 +603,18 @@ export class ChatService {
     );
 
     let finalUserContent: string | MultimodalContent[] = userContent;
-    if (toolExecutionRecords.length > 0) {
-      const toolPrompt = toolExecutionRecords
-        .map(
-          (rec) =>
-            `【工具执行结果 - ${rec.title}】:\n${
-              rec.result.status === 'success'
-                ? rec.result.rawOutput || JSON.stringify(rec.result.output)
-                : `执行失败: ${rec.result.error}`
-            }`,
-        )
-        .join('\n\n');
+    if (ragContext.promptText) {
       if (typeof finalUserContent === 'string') {
-        finalUserContent = `${toolPrompt}\n\n${finalUserContent}`;
+        finalUserContent = `${ragContext.promptText}\n\n${finalUserContent}`;
       } else {
         finalUserContent = [
-          { type: 'text', text: `${toolPrompt}\n\n` },
+          { type: 'text', text: `${ragContext.promptText}\n\n` },
           ...finalUserContent,
         ];
       }
     }
 
-    if (searchResult?.sources?.length) {
+    if (searchResult?.contextPrompt) {
       if (typeof finalUserContent === 'string') {
         finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
       } else {
@@ -648,20 +656,82 @@ export class ChatService {
       reservedCharge = reserveResult.charge;
 
       const requestStartTime = Date.now();
-      const completion = await this.aiClientService.createChatCompletion(
-        chargeModel.modelId,
-        messages,
-        {
-          temperature: createChatDto.temperature,
-          maxTokens: createChatDto.maxTokens,
-        },
-      );
-      const durationMs = Date.now() - requestStartTime;
+      let loopCount = 0;
+      const MAX_REACT_LOOPS = 3;
+      let lastCompletion: CompletionResponse | null = null;
+      const accumulatedUsage: CompletionUsageStats = {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+      };
 
-      const finalizedAssistant = this.finalizeAssistantPayload(completion);
+      while (loopCount <= MAX_REACT_LOOPS) {
+        const roundTools = loopCount < MAX_REACT_LOOPS && openAiTools.length > 0 ? openAiTools : undefined;
+        const completion = await this.aiClientService.createChatCompletion(
+          chargeModel.modelId,
+          messages,
+          {
+            temperature: createChatDto.temperature,
+            maxTokens: createChatDto.maxTokens,
+            tools: roundTools,
+          },
+        );
+
+        lastCompletion = completion;
+        accumulatedUsage.promptTokens += completion.usage?.promptTokens || 0;
+        accumulatedUsage.completionTokens += completion.usage?.completionTokens || 0;
+        accumulatedUsage.totalTokens =
+          accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+
+        if (!completion.toolCalls || completion.toolCalls.length === 0) {
+          break;
+        }
+
+        messages.push({
+          role: 'assistant',
+          content: completion.content || '',
+          tool_calls: completion.toolCalls,
+        });
+
+        for (const tc of completion.toolCalls) {
+          const fnName = tc.function?.name || '';
+          let parsedArgs: Record<string, any> = {};
+          try {
+            parsedArgs = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+          } catch {
+            parsedArgs = { raw: tc.function?.arguments };
+          }
+
+          const execRecord = await this.toolRegistryService.executeTool(
+            fnName,
+            parsedArgs,
+            { userId, sessionId, userMessage: createChatDto.message },
+          );
+          execRecord.id = tc.id || execRecord.id;
+          execRecord.callType = 'model_function_call';
+          toolExecutionRecords.push(execRecord);
+
+          messages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            name: fnName,
+            content:
+              execRecord.result.status === 'success'
+                ? typeof execRecord.result.output === 'string'
+                  ? execRecord.result.output
+                  : JSON.stringify(execRecord.result.output)
+                : `工具执行失败: ${execRecord.result.error}`,
+          });
+        }
+
+        loopCount++;
+      }
+
+      const durationMs = Date.now() - requestStartTime;
+      const finalizedAssistant = this.finalizeAssistantPayload(lastCompletion!);
       const assistantMessage = finalizedAssistant.content;
       const actualCredits = this.estimateActualChargeCredits(
-        completion.usage,
+        accumulatedUsage,
         chargeModel,
       );
 
@@ -679,8 +749,8 @@ export class ChatService {
         userMessage: createChatDto.message,
         aiMessage: assistantMessage,
         reasoning: finalizedAssistant.reasoning,
-        model: completion.model,
-        usage: completion.usage,
+        model: lastCompletion!.model,
+        usage: accumulatedUsage,
         actualCredits,
         attachmentIds,
         durationMs,
@@ -696,8 +766,8 @@ export class ChatService {
         sessionId: persistedSessionId,
         message: assistantMessage,
         reasoning: finalizedAssistant.reasoning,
-        model: completion.model,
-        usage: completion.usage,
+        model: lastCompletion!.model,
+        usage: accumulatedUsage,
         durationMs,
         charge,
         creditsSnapshot,
@@ -831,6 +901,7 @@ export class ChatService {
         };
       })(),
       charge: chargeMap.get(msg.id) || null,
+      toolCalls: msg.toolCalls || null,
       attachments: (msg.attachments || []).map((att) => ({
         id: att.id,
         url: this.filesService.buildSignedFileUrl(att.id),
@@ -922,18 +993,32 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
+    const openAiTools = createChatDto.enabledTools?.length
+      ? this.toolRegistryService.toOpenAITools(createChatDto.enabledTools)
+      : [];
+
     let toolExecutionRecords: ToolExecutionRecord[] = [];
-    if (createChatDto.enabledTools?.length) {
-      toolExecutionRecords = await this.toolRegistryService.autoExecutePresetTools(
-        createChatDto.message,
-        createChatDto.enabledTools,
-        { userId, sessionId, userMessage: createChatDto.message },
-      );
+    let searchResult: WebSearchResult | null = null;
+    if (createChatDto.webSearch && !createChatDto.enabledTools?.includes('web_search_v2')) {
+      searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
-    let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch || createChatDto.enabledTools?.includes('web_search_v2')) {
-      searchResult = await this.webSearchService.search(createChatDto.message);
+    const ragContext = await this.resolveKnowledgeBaseContext({
+      userId,
+      message: createChatDto.message,
+      knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+    });
+
+    if (ragContext.sources.length > 0) {
+      if (!searchResult) {
+        searchResult = {
+          query: createChatDto.message,
+          sources: ragContext.sources,
+          contextPrompt: '',
+        };
+      } else {
+        searchResult.sources.unshift(...ragContext.sources);
+      }
     }
 
     const userContent = this.buildMultimodalContent(
@@ -942,28 +1027,18 @@ export class ChatService {
     );
 
     let finalUserContent: string | MultimodalContent[] = userContent;
-    if (toolExecutionRecords.length > 0) {
-      const toolPrompt = toolExecutionRecords
-        .map(
-          (rec) =>
-            `【工具执行结果 - ${rec.title}】:\n${
-              rec.result.status === 'success'
-                ? rec.result.rawOutput || JSON.stringify(rec.result.output)
-                : `执行失败: ${rec.result.error}`
-            }`,
-        )
-        .join('\n\n');
+    if (ragContext.promptText) {
       if (typeof finalUserContent === 'string') {
-        finalUserContent = `${toolPrompt}\n\n${finalUserContent}`;
+        finalUserContent = `${ragContext.promptText}\n\n${finalUserContent}`;
       } else {
         finalUserContent = [
-          { type: 'text', text: `${toolPrompt}\n\n` },
+          { type: 'text', text: `${ragContext.promptText}\n\n` },
           ...finalUserContent,
         ];
       }
     }
 
-    if (searchResult?.sources?.length) {
+    if (searchResult?.contextPrompt) {
       if (typeof finalUserContent === 'string') {
         finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
       } else {
@@ -1005,15 +1080,18 @@ export class ChatService {
       });
       hasReservedCharge = true;
 
-      const stream = await this.aiClientService.createStreamChatCompletion(
-        chargeModel.modelId,
-        messages,
-        {
+      const stream = this.executeReActStream({
+        modelId: chargeModel.modelId,
+        initialMessages: messages,
+        tools: openAiTools.length > 0 ? openAiTools : undefined,
+        options: {
           temperature: createChatDto.temperature,
           maxTokens: createChatDto.maxTokens,
           abortSignal: options?.abortSignal,
         },
-      );
+        context: { userId, sessionId, userMessage: createChatDto.message },
+        toolExecutionRecords,
+      });
 
       return {
         stream,
@@ -1039,6 +1117,168 @@ export class ChatService {
         });
       }
       throw error;
+    }
+  }
+
+  /**
+   * 执行具备 ReAct 闭环调度的流式补全
+   */
+  private async *executeReActStream(params: {
+    modelId: string;
+    initialMessages: ChatMessage[];
+    tools?: Array<{ type: 'function'; function: { name: string; description: string; parameters: any } }>;
+    options?: CompletionOptions;
+    context: { userId: string; sessionId: string; userMessage: string };
+    toolExecutionRecords: ToolExecutionRecord[];
+  }): AsyncIterable<CompletionChunk> {
+    const MAX_REACT_LOOPS = 3;
+    let loopCount = 0;
+    const currentMessages: ChatMessage[] = [...params.initialMessages];
+    let accumulatedPromptTokens = 0;
+    let accumulatedCompletionTokens = 0;
+    let lastFinishReason: string | null = null;
+
+    while (loopCount <= MAX_REACT_LOOPS) {
+      const isMaxLoop = loopCount >= MAX_REACT_LOOPS;
+      const roundTools = isMaxLoop ? undefined : params.tools;
+
+      const stream = await this.aiClientService.createStreamChatCompletion(
+        params.modelId,
+        currentMessages,
+        {
+          ...params.options,
+          tools: roundTools,
+        },
+      );
+
+      let roundContent = '';
+      const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>();
+
+      for await (const chunk of stream) {
+        if (chunk.finish_reason) {
+          lastFinishReason = chunk.finish_reason;
+        }
+
+        if (chunk.usage) {
+          accumulatedPromptTokens += Number(chunk.usage.promptTokens || 0);
+          accumulatedCompletionTokens += Number(chunk.usage.completionTokens || 0);
+        }
+
+        if (chunk.type === 'answer_delta' || (!chunk.type && chunk.delta?.content)) {
+          const deltaContent = chunk.delta?.content || '';
+          roundContent += deltaContent;
+        }
+
+        if (chunk.delta?.tool_calls && Array.isArray(chunk.delta.tool_calls)) {
+          for (const tc of chunk.delta.tool_calls) {
+            const index = tc.index ?? 0;
+            if (!toolCallMap.has(index)) {
+              toolCallMap.set(index, {
+                id: tc.id || '',
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+              });
+              const plugin = this.toolRegistryService.getPlugin(tc.function?.name || '');
+              yield {
+                type: 'tool_call_start',
+                toolCall: {
+                  id: tc.id || `call_${Date.now()}_${index}`,
+                  name: tc.function?.name || '',
+                  title: plugin?.metadata.title || tc.function?.name || '未知工具',
+                  icon: plugin?.metadata.icon || 'tool',
+                  status: 'calling',
+                  args: {},
+                },
+              };
+            } else {
+              const existing = toolCallMap.get(index)!;
+              if (tc.id) existing.id = tc.id;
+              if (tc.function?.name) existing.name = tc.function.name;
+              if (tc.function?.arguments) existing.arguments += tc.function.arguments;
+            }
+          }
+          continue;
+        }
+
+        yield chunk;
+      }
+
+      const toolCalls = Array.from(toolCallMap.values()).filter((c) => c.name);
+      if (toolCalls.length === 0) {
+        break;
+      }
+
+      currentMessages.push({
+        role: 'assistant',
+        content: roundContent || '',
+        tool_calls: toolCalls.map((c) => ({
+          id: c.id,
+          type: 'function',
+          function: {
+            name: c.name,
+            arguments: c.arguments,
+          },
+        })),
+      });
+
+      for (const call of toolCalls) {
+        let parsedArgs: Record<string, any> = {};
+        try {
+          parsedArgs = call.arguments ? JSON.parse(call.arguments) : {};
+        } catch {
+          parsedArgs = { raw: call.arguments };
+        }
+
+        const plugin = this.toolRegistryService.getPlugin(call.name);
+        const execRecord = await this.toolRegistryService.executeTool(
+          call.name,
+          parsedArgs,
+          params.context,
+        );
+        execRecord.id = call.id || execRecord.id;
+        execRecord.callType = 'model_function_call';
+        params.toolExecutionRecords.push(execRecord);
+
+        yield {
+          type: 'tool_call_result',
+          toolCall: {
+            id: call.id,
+            name: call.name,
+            title: plugin?.metadata.title || call.name,
+            icon: plugin?.metadata.icon || 'tool',
+            status: execRecord.result.status === 'success' ? 'success' : 'error',
+            durationMs: execRecord.result.durationMs,
+            args: parsedArgs,
+            output: execRecord.result.output,
+            error: execRecord.result.error,
+          },
+        };
+
+        currentMessages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          name: call.name,
+          content:
+            execRecord.result.status === 'success'
+              ? typeof execRecord.result.output === 'string'
+                ? execRecord.result.output
+                : JSON.stringify(execRecord.result.output)
+              : `工具执行失败: ${execRecord.result.error}`,
+        });
+      }
+
+      loopCount++;
+    }
+
+    if (accumulatedPromptTokens > 0 || accumulatedCompletionTokens > 0) {
+      yield {
+        finish_reason: lastFinishReason || 'stop',
+        usage: {
+          promptTokens: accumulatedPromptTokens,
+          completionTokens: accumulatedCompletionTokens,
+          totalTokens: accumulatedPromptTokens + accumulatedCompletionTokens,
+        },
+      };
     }
   }
 
@@ -1085,5 +1325,69 @@ export class ChatService {
       charge,
       creditsSnapshot,
     };
+  }
+
+  /**
+   * 检索知识库并生成 RAG 增强提示词与证据溯源
+   */
+  private async resolveKnowledgeBaseContext(params: {
+    userId: string;
+    message: string;
+    knowledgeBaseIds?: string[];
+  }): Promise<{ promptText: string; sources: SearchSource[] }> {
+    if (!params.knowledgeBaseIds?.length) {
+      return { promptText: '', sources: [] };
+    }
+
+    try {
+      const ragResults = await this.ragService.search({
+        userId: params.userId,
+        query: params.message,
+        knowledgeBaseIds: params.knowledgeBaseIds,
+        limit: 5,
+      });
+
+      if (ragResults.length === 0) {
+        return { promptText: '', sources: [] };
+      }
+
+      const promptText = this.buildRagContextPrompt(ragResults);
+      const sources: SearchSource[] = ragResults.map((r, idx) => ({
+        id: idx + 1,
+        title: r.documentTitle,
+        url: '',
+        snippet: r.content,
+        score: r.score,
+        isKnowledgeBase: true,
+        knowledgeBaseId: r.knowledgeBaseId,
+        documentId: r.documentId,
+        chunkIndex: r.chunkIndex,
+      }));
+
+      return { promptText, sources };
+    } catch (err: any) {
+      this.logger.warn(`知识库检索执行失败: ${err.message}`);
+      return { promptText: '', sources: [] };
+    }
+  }
+
+  /**
+   * 构造 RAG 结构化上下文与防幻觉指令
+   */
+  private buildRagContextPrompt(results: RagSearchResult[]): string {
+    const docChunks = results
+      .map(
+        (r, i) =>
+          `[${i + 1}] 《${r.documentTitle}》（匹配度 ${(r.score * 100).toFixed(0)}%）:\n${r.content}`,
+      )
+      .join('\n\n');
+
+    return `【关联知识库资料】：
+以下是从您关联的知识库中检索出的真实参考切片：
+${docChunks}
+
+【回答指引】：
+1. 优先依据上述知识库资料回答问题，并在引用的论断或信息末尾使用引用角标标注来源，如 [1] 或 [2]；
+2. 若参考资料未包含回答所需的内容，请明确指出“在当前知识库中未检索到相关内容”，切勿编造虚假信息。`;
   }
 }

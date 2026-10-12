@@ -23,7 +23,7 @@ describe('SearchSourceGallery', () => {
     })
 
     expect(wrapper.find('.searching-state').exists()).toBe(true)
-    expect(wrapper.text()).toContain('正在深度联网检索中...')
+    expect(wrapper.text()).toContain('正在检索相关参考来源与知识库...')
     expect(wrapper.text()).toContain('2026世界人工智能大会')
   })
 

@@ -1,69 +1,108 @@
-import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
 import ToolExecutionCard from '../ToolExecutionCard.vue'
-import type { ToolExecutionRecord } from '@/interface/tools'
+import type { ToolCallItem } from '@/interface/chat'
 
 describe('ToolExecutionCard', () => {
-  const mockTools: ToolExecutionRecord[] = [
-    {
-      id: 'exec-1',
-      name: 'code_interpreter',
-      title: '代码解释器',
-      callType: 'user_preset',
-      args: { language: 'python', code: 'print(42)' },
-      result: {
-        status: 'success',
-        output: { stdout: '42\n' },
-        rawOutput: '42',
-        durationMs: 120,
-      },
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'exec-2',
-      name: 'calculator',
-      title: '数学计算器',
-      callType: 'user_preset',
-      args: { expression: '100 / 0' },
-      result: {
-        status: 'error',
-        output: null,
-        error: '除数不能为0',
-        durationMs: 5,
-      },
-      createdAt: new Date().toISOString(),
-    },
-  ]
-
-  it('正确渲染工具卡片列表与状态标签', () => {
+  it('renders nothing when toolCalls is empty', () => {
     const wrapper = mount(ToolExecutionCard, {
       props: {
-        toolCalls: mockTools,
+        toolCalls: [],
       },
     })
-
-    expect(wrapper.text()).toContain('代码解释器')
-    expect(wrapper.text()).toContain('执行成功')
-    expect(wrapper.text()).toContain('120ms')
-
-    expect(wrapper.text()).toContain('数学计算器')
-    expect(wrapper.text()).toContain('执行失败')
+    expect(wrapper.find('.tool-execution-container').exists()).toBe(false)
   })
 
-  it('点击头部可展开/折叠查看执行结果与参数', async () => {
-    const wrapper = mount(ToolExecutionCard, {
-      props: {
-        toolCalls: mockTools,
+  it('renders calling state correctly', () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_1',
+        name: 'calculator',
+        status: 'calling',
+        arguments: { expression: '12 * 8' },
       },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
     })
+
+    expect(wrapper.text()).toContain('计算器')
+    expect(wrapper.text()).toContain('准备调用')
+    expect(wrapper.find('.badge-calling').exists()).toBe(true)
+  })
+
+  it('renders executing state correctly', () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_2',
+        name: 'web_search_v2',
+        status: 'executing',
+        arguments: { query: 'AI最新资讯' },
+      },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
+    })
+
+    expect(wrapper.text()).toContain('深度联网搜索')
+    expect(wrapper.text()).toContain('正在执行...')
+    expect(wrapper.find('.badge-executing').exists()).toBe(true)
+  })
+
+  it('renders completed state with duration and output upon expand', async () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_3',
+        name: 'calculator',
+        status: 'completed',
+        arguments: { expression: '12 * 8' },
+        result: { result: 96 },
+        durationMs: 42,
+      },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
+    })
+
+    expect(wrapper.text()).toContain('执行成功')
+    expect(wrapper.text()).toContain('42ms')
 
     expect(wrapper.find('.tool-card-body').exists()).toBe(false)
 
-    // 点击第一个卡片头部
-    const header = wrapper.find('.tool-card-header')
-    await header.trigger('click')
+    await wrapper.find('.tool-card-header').trigger('click')
 
     expect(wrapper.find('.tool-card-body').exists()).toBe(true)
-    expect(wrapper.text()).toContain('42')
+    expect(wrapper.text()).toContain('调用参数')
+    expect(wrapper.text()).toContain('12 * 8')
+    expect(wrapper.text()).toContain('执行输出')
+    expect(wrapper.text()).toContain('96')
+  })
+
+  it('renders failed state with error message upon expand', async () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_4',
+        name: 'weather',
+        status: 'failed',
+        arguments: { city: 'Mars' },
+        result: { error: 'City not found' },
+        durationMs: 85,
+      },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
+    })
+
+    expect(wrapper.text()).toContain('天气查询')
+    expect(wrapper.text()).toContain('执行失败')
+    expect(wrapper.text()).toContain('85ms')
+
+    await wrapper.find('.tool-card-header').trigger('click')
+
+    expect(wrapper.text()).toContain('City not found')
   })
 })

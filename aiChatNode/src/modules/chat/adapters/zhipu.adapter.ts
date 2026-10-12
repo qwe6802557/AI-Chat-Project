@@ -72,6 +72,8 @@ export class ZhipuAdapter implements IProviderAdapter {
           temperature: options?.temperature ?? 0.7,
           max_tokens: options?.maxTokens ?? 4096,
           stream: false,
+          ...(options?.tools?.length ? { tools: options.tools } : {}),
+          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -103,6 +105,8 @@ export class ZhipuAdapter implements IProviderAdapter {
           stream_options: {
             include_usage: true,
           },
+          ...(options?.tools?.length ? { tools: options.tools } : {}),
+          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -125,6 +129,8 @@ export class ZhipuAdapter implements IProviderAdapter {
             temperature: options?.temperature ?? 0.7,
             max_tokens: options?.maxTokens ?? 4096,
             stream: true,
+            ...(options?.tools?.length ? { tools: options.tools } : {}),
+            ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
           },
           options?.abortSignal ? { signal: options.abortSignal } : undefined,
         );
@@ -188,6 +194,7 @@ export class ZhipuAdapter implements IProviderAdapter {
         completionTokens,
         totalTokens: usage.total_tokens || promptTokens + completionTokens,
       },
+      toolCalls: firstChoice?.message?.tool_calls,
     };
   }
 
@@ -203,6 +210,7 @@ export class ZhipuAdapter implements IProviderAdapter {
         delta: {
           content: typeof delta?.content === 'string' ? delta.content : '',
           role: typeof delta?.role === 'string' ? delta.role : undefined,
+          tool_calls: delta?.tool_calls,
         },
         finish_reason: firstChoice?.finish_reason,
         usage: chunk.usage

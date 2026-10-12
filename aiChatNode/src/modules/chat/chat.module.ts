@@ -20,6 +20,7 @@ import { CreditsModule } from '../credits/credits.module';
 import { FilesModule } from '../files/files.module';
 import { WebSearchModule } from '../web-search/web-search.module';
 import { ToolsModule } from '../tools/tools.module';
+import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ToolsModule } from '../tools/tools.module';
     RedisModule,
     WebSearchModule,
     ToolsModule,
+    KnowledgeBaseModule,
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [

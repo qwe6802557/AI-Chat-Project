@@ -11,6 +11,11 @@ class SearchSourceModel {
   final String sitename;
   final String snippet;
   final String? icon;
+  final bool isKnowledgeBase;
+  final double? score;
+  final String? knowledgeBaseId;
+  final String? documentId;
+  final int? chunkIndex;
 
   const SearchSourceModel({
     required this.id,
@@ -19,6 +24,11 @@ class SearchSourceModel {
     this.sitename = '',
     this.snippet = '',
     this.icon,
+    this.isKnowledgeBase = false,
+    this.score,
+    this.knowledgeBaseId,
+    this.documentId,
+    this.chunkIndex,
   });
 
   factory SearchSourceModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +39,11 @@ class SearchSourceModel {
       sitename: json['sitename'] as String? ?? '',
       snippet: json['snippet'] as String? ?? '',
       icon: json['icon'] as String?,
+      isKnowledgeBase: json['isKnowledgeBase'] as bool? ?? false,
+      score: (json['score'] as num?)?.toDouble(),
+      knowledgeBaseId: json['knowledgeBaseId'] as String?,
+      documentId: json['documentId'] as String?,
+      chunkIndex: (json['chunkIndex'] as num?)?.toInt(),
     );
   }
 
@@ -39,6 +54,11 @@ class SearchSourceModel {
     'sitename': sitename,
     'snippet': snippet,
     if (icon != null) 'icon': icon,
+    'isKnowledgeBase': isKnowledgeBase,
+    if (score != null) 'score': score,
+    if (knowledgeBaseId != null) 'knowledgeBaseId': knowledgeBaseId,
+    if (documentId != null) 'documentId': documentId,
+    if (chunkIndex != null) 'chunkIndex': chunkIndex,
   };
 }
 

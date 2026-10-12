@@ -138,5 +138,71 @@ void main() {
       expect(record.name, 'weather');
       expect(record.result.durationMs, 35);
     });
+
+    test('ToolExecutionRecordModel 正确解析三段式渐进流式状态 (calling / executing / completed)', () {
+      final callingJson = {
+        'id': 'call-1',
+        'name': 'calculator',
+        'status': 'calling',
+        'arguments': '{"expression":"2^10"}',
+      };
+      final callingRecord = ToolExecutionRecordModel.fromJson(callingJson);
+      expect(callingRecord.isCalling, isTrue);
+      expect(callingRecord.isExecuting, isFalse);
+      expect(callingRecord.args['expression'], '2^10');
+
+      final executingJson = {
+        'id': 'call-1',
+        'name': 'calculator',
+        'status': 'executing',
+        'arguments': {'expression': '2^10'},
+      };
+      final executingRecord = ToolExecutionRecordModel.fromJson(executingJson);
+      expect(executingRecord.isExecuting, isTrue);
+      expect(executingRecord.isCalling, isFalse);
+
+      final completedJson = {
+        'id': 'call-1',
+        'name': 'calculator',
+        'status': 'completed',
+        'arguments': {'expression': '2^10'},
+        'result': {'result': 1024},
+        'durationMs': 45,
+      };
+      final completedRecord = ToolExecutionRecordModel.fromJson(completedJson);
+      expect(completedRecord.isCompleted, isTrue);
+      expect(completedRecord.effectiveDurationMs, 45);
+    });
+
+    test('SseChunk 正确解析 tool_call_start / tool_call_result 及 toolCalls 集合', () {
+      final startChunk = SseChunk.fromJson({
+        'type': 'tool_call_start',
+        'toolCall': {
+          'id': 'call-react-1',
+          'name': 'calculator',
+          'arguments': {'expression': '10+20'},
+          'status': 'calling',
+        },
+      });
+      expect(startChunk.type, 'tool_call_start');
+      expect(startChunk.rawTool, isNotNull);
+      expect(startChunk.rawTool!['name'], 'calculator');
+
+      final doneChunk = SseChunk.fromJson({
+        'type': 'done',
+        'toolCalls': [
+          {
+            'id': 'call-react-1',
+            'name': 'calculator',
+            'status': 'completed',
+            'result': 30,
+            'durationMs': 12,
+          }
+        ],
+      });
+      expect(doneChunk.rawToolCalls, isNotNull);
+      expect(doneChunk.rawToolCalls!.length, 1);
+      expect(doneChunk.rawToolCalls!.first['result'], 30);
+    });
   });
 }

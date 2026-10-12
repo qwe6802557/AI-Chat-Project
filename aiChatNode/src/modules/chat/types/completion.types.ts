@@ -36,11 +36,29 @@ export type MultimodalContent = TextContentPart | ImageUrlContentPart;
 export type ChatMessageContent = string | MultimodalContent[];
 
 /**
+ * 工具调用事件元数据
+ */
+export interface StreamingToolCallEvent {
+  id: string;
+  name: string;
+  title: string;
+  icon: string;
+  status: 'calling' | 'executing' | 'success' | 'error';
+  args?: Record<string, any>;
+  durationMs?: number;
+  output?: any;
+  error?: string;
+}
+
+/**
  * 聊天消息
  */
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: ChatMessageContent;
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: any[];
 }
 
 /**
@@ -50,6 +68,8 @@ export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
   abortSignal?: AbortSignal;
+  tools?: any[];
+  toolChoice?: any;
 }
 
 /**
@@ -77,6 +97,7 @@ export interface CompletionResponse {
     title?: string;
     content: string;
   } | null;
+  toolCalls?: any[];
 }
 
 /**
@@ -88,11 +109,14 @@ export interface CompletionChunk {
     | 'reasoning_delta'
     | 'reasoning_done'
     | 'answer_delta'
+    | 'tool_call_start'
+    | 'tool_call_result'
     | 'done'
     | 'error';
   delta?: {
     content?: string;
     role?: string;
+    tool_calls?: any[];
   };
   reasoning?: {
     mode?: AssistantReasoningMode;
@@ -103,4 +127,6 @@ export interface CompletionChunk {
   finish_reason?: string | null;
   usage?: CompletionUsageStats | null;
   error?: string;
+  toolCall?: StreamingToolCallEvent;
 }
+
