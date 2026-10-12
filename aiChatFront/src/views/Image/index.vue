@@ -1,8 +1,5 @@
 <template>
   <div class="image-workbench-layout">
-    <!-- 顶部模式切换导航栏 -->
-    <AppHeaderNav active-mode="image" />
-
     <!-- 主体区域：左侧纯净侧边栏 + 右侧画廊与悬浮控制台 -->
     <div class="image-main-container">
       <Sidebar
@@ -43,12 +40,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import axios from 'axios'
-import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import Sidebar from '@/views/Chat/components/Sidebar.vue'
 import ImageGallery from './components/ImageGallery.vue'
 import ImageControlBar from './components/ImageControlBar.vue'
@@ -263,6 +259,10 @@ onMounted(() => {
   refreshUserProfile()
 })
 
+onActivated(() => {
+  refreshUserProfile()
+})
+
 onUnmounted(() => {
   stopTimer()
 })
@@ -272,8 +272,8 @@ onUnmounted(() => {
 .image-workbench-layout {
   display: flex;
   flex-direction: column;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: #f8fafc;
   overflow: hidden;
 }

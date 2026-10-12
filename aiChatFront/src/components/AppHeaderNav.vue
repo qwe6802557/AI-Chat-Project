@@ -26,12 +26,14 @@
           <span>图片</span>
         </button>
 
-        <a-tooltip title="即将上线，敬请期待">
-          <button type="button" class="mode-tab disabled">
-            <VideoCameraOutlined class="tab-icon" />
-            <span>视频</span>
-          </button>
-        </a-tooltip>
+        <button
+          type="button"
+          :class="['mode-tab', { active: currentMode === 'video' }]"
+          @click="handleSwitchMode('video')"
+        >
+          <VideoCameraOutlined class="tab-icon" />
+          <span>视频</span>
+        </button>
 
         <button
           type="button"
@@ -145,6 +147,7 @@ const showAboutModal = ref(false)
 const currentMode = computed(() => {
   if (props.activeMode) return props.activeMode
   if (route.path.startsWith('/image')) return 'image'
+  if (route.path.startsWith('/video')) return 'video'
   if (route.path.startsWith('/voice')) return 'voice'
   if (route.path.startsWith('/knowledge')) return 'knowledge'
   return 'chat'
@@ -165,11 +168,13 @@ const creditsRemaining = computed(() => {
   return authStore.userProfile?.credits?.remaining ?? 0
 })
 
-const handleSwitchMode = (mode: 'chat' | 'image' | 'voice' | 'knowledge') => {
+const handleSwitchMode = (mode: 'chat' | 'image' | 'video' | 'voice' | 'knowledge') => {
   if (mode === 'chat' && route.path !== '/chat') {
     router.push('/chat')
   } else if (mode === 'image' && route.path !== '/image') {
     router.push('/image')
+  } else if (mode === 'video' && route.path !== '/video') {
+    router.push('/video')
   } else if (mode === 'voice' && route.path !== '/voice') {
     router.push('/voice')
   } else if (mode === 'knowledge' && route.path !== '/knowledge') {

@@ -52,43 +52,55 @@ const router = createRouter({
     },
     {
       path: '/',
+      component: () => import('../layouts/MainLayout.vue'),
       redirect: '/chat',
-    },
-    {
-      path: '/chat',
-      name: 'chat',
-      component: () => import('../views/Chat/index.vue'),
-      meta: {
-        title: 'ERJ Chat',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/image',
-      name: 'image',
-      component: () => import('../views/Image/index.vue'),
-      meta: {
-        title: 'AI 创作控制台',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/voice',
-      name: 'voice',
-      component: () => import('../views/Voice/index.vue'),
-      meta: {
-        title: 'AI 语音控制台',
-        requiresAuth: true,
-      },
-    },
-    {
-      path: '/knowledge',
-      name: 'knowledge',
-      component: () => import('../views/KnowledgeBase/index.vue'),
-      meta: {
-        title: 'RAG 知识库管理',
-        requiresAuth: true,
-      },
+      children: [
+        {
+          path: 'chat',
+          name: 'chat',
+          component: () => import('../views/Chat/index.vue'),
+          meta: {
+            title: 'ERJ Chat',
+            requiresAuth: true,
+          },
+        },
+        {
+          path: 'image',
+          name: 'image',
+          component: () => import('../views/Image/index.vue'),
+          meta: {
+            title: 'AI 创作控制台',
+            requiresAuth: true,
+          },
+        },
+        {
+          path: 'video',
+          name: 'video',
+          component: () => import('../views/Video/index.vue'),
+          meta: {
+            title: 'AI 视频控制台',
+            requiresAuth: true,
+          },
+        },
+        {
+          path: 'voice',
+          name: 'voice',
+          component: () => import('../views/Voice/index.vue'),
+          meta: {
+            title: 'AI 语音控制台',
+            requiresAuth: true,
+          },
+        },
+        {
+          path: 'knowledge',
+          name: 'knowledge',
+          component: () => import('../views/KnowledgeBase/index.vue'),
+          meta: {
+            title: 'RAG 知识库管理',
+            requiresAuth: true,
+          },
+        },
+      ],
     },
     {
       path: '/account',

@@ -1,7 +1,5 @@
 <template>
   <div class="kb-workbench-layout">
-    <AppHeaderNav active-mode="knowledge" />
-
     <div class="kb-main-container">
       <!-- 顶部信息与全局操作栏 -->
       <header class="kb-header-section">
@@ -376,7 +374,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onActivated } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   DatabaseOutlined,
@@ -396,7 +394,6 @@ import {
   ThunderboltOutlined,
   LoadingOutlined,
 } from '@ant-design/icons-vue'
-import AppHeaderNav from '@/components/AppHeaderNav.vue'
 import {
   getKnowledgeBases,
   createKnowledgeBase,
@@ -658,6 +655,10 @@ const getStatusLabel = (status: string): string => {
 onMounted(() => {
   fetchKnowledgeBases()
 })
+
+onActivated(() => {
+  fetchKnowledgeBases()
+})
 </script>
 
 <style scoped lang="scss">
@@ -673,7 +674,9 @@ onMounted(() => {
 .kb-workbench-layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   background-color: #f8fafc;
   color: #1e293b;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
