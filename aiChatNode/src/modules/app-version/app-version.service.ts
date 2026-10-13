@@ -47,7 +47,7 @@ export class AppVersionService {
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '55.1 MB',
+      packageSize: '18.6 MB',
       releaseNotes: [
         '全新发布 AI 视频创作工坊，全面对齐阿里通义万相 Wan2.2-14B 影视级大模型',
         '支持 16:9 / 9:16 / 1:1 多画幅文生视频与首帧参考图生视频',
