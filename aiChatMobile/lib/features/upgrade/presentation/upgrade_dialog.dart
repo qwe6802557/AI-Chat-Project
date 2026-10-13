@@ -16,13 +16,21 @@ class UpgradeDialog extends StatefulWidget {
     this.onDismiss,
   });
 
-  static Future<void> show(BuildContext context, AppVersionInfo versionInfo) {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: !versionInfo.forceUpdate,
-      barrierColor: Colors.black54,
-      builder: (context) => UpgradeDialog(versionInfo: versionInfo),
-    );
+  static bool _isShowing = false;
+
+  static Future<void> show(BuildContext context, AppVersionInfo versionInfo) async {
+    if (_isShowing) return;
+    _isShowing = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: !versionInfo.forceUpdate,
+        barrierColor: Colors.black54,
+        builder: (context) => UpgradeDialog(versionInfo: versionInfo),
+      );
+    } finally {
+      _isShowing = false;
+    }
   }
 
   @override
