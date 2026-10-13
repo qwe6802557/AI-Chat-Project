@@ -70,9 +70,11 @@
 
         <!-- 任务信息与控制脚标 -->
         <div class="task-info-bar">
-          <div class="prompt-text-container" :title="task.prompt">
-            <span class="task-prompt">{{ task.prompt }}</span>
-          </div>
+          <a-tooltip :title="task.prompt" placement="topLeft" :mouse-enter-delay="0.1">
+            <div class="prompt-text-container">
+              <span class="task-prompt">{{ task.prompt }}</span>
+            </div>
+          </a-tooltip>
 
           <div class="task-meta-and-actions">
             <div class="meta-tags-list">
@@ -559,17 +561,19 @@ const handleDownloadVideo = async (task: VideoGenerationTask) => {
 }
 
 .prompt-text-container {
-  max-height: 40px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  width: 100%;
+  cursor: default;
 }
 
 .task-prompt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: #0f172a;
   word-break: break-word;
 }
