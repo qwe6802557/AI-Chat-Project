@@ -71,4 +71,28 @@ describe('VideoGallery', () => {
     await promptPills[0].trigger('click')
     expect(wrapper.emitted('apply-prompt')).toBeTruthy()
   })
+
+  it('wraps task prompt with tooltip and displays prompt text', () => {
+    const wrapper = mount(VideoGallery, {
+      props: {
+        tasks: mockTasks,
+      },
+      global: {
+        stubs: {
+          'a-tooltip': {
+            template: '<div class="ant-tooltip-stub" :data-title="title"><slot /></div>',
+            props: ['title'],
+          },
+          'a-popconfirm': { template: '<div><slot /></div>' },
+        },
+      },
+    })
+
+    const promptTooltips = wrapper.findAll('.ant-tooltip-stub')
+    const match = promptTooltips.find(
+      (t) => t.attributes('data-title') === mockTasks[0].prompt,
+    )
+    expect(match).toBeDefined()
+    expect(wrapper.text()).toContain(mockTasks[0].prompt)
+  })
 })
