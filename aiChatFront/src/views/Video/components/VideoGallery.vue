@@ -1,32 +1,15 @@
 <template>
   <div class="video-gallery-container">
-    <!-- 生成中即时占位卡片 -->
-    <div v-if="props.isGenerating" class="generating-card">
-      <div class="skeleton-video-wrapper">
-        <div class="shimmer-effect"></div>
-        <div class="generating-overlay">
-          <div class="breathing-ring">
-            <LoadingOutlined class="spinner-icon" />
-          </div>
-          <span class="timer-text">
-            万相视频渲染中 · 已耗时 {{ formatTime(props.generatingElapsedSeconds) }}
-          </span>
-          <span class="tip-subtext">视频通常需要 30~90 秒计算与流式落盘</span>
-        </div>
-      </div>
-      <div class="generating-prompt-box">
-        <span class="prompt-label">当前镜头描述：</span>
-        <span class="prompt-text">{{ props.generatingPrompt }}</span>
-      </div>
-    </div>
-
     <!-- 任务卡片流 -->
     <div v-if="props.tasks.length > 0" class="video-masonry-grid">
       <div
-        v-for="task in props.tasks"
+        v-for="(task, index) in props.tasks"
         :key="task.id"
         class="video-task-card"
-        :class="{ 'is-failed': task.status === 'failed', 'is-processing': task.status === 'processing' || task.status === 'pending' }"
+        :class="{
+          'is-failed': task.status === 'failed',
+          'is-processing': task.status === 'processing' || task.status === 'pending',
+        }"
       >
         <!-- 视频主体画面区 -->
         <div
@@ -58,13 +41,19 @@
             <div class="media-corner-badge top-right">{{ task.duration || 5 }}s</div>
           </template>
 
-          <!-- 异步生成排队中 -->
+          <!-- 异步生成排队中：原地流式卡片 -->
           <template v-else-if="task.status === 'processing' || task.status === 'pending'">
             <div class="processing-placeholder">
               <div class="shimmer-effect"></div>
-              <LoadingOutlined class="processing-icon" />
-              <span class="processing-title">正在生成视频...</span>
-              <span class="processing-desc">上游正在计算扩散帧序列</span>
+              <div class="breathing-ring">
+                <LoadingOutlined class="spinner-icon" />
+              </div>
+              <span class="processing-title">
+                {{ props.isGenerating && index === 0
+                  ? `万相视频渲染中 · ${formatTime(props.generatingElapsedSeconds)}`
+                  : '万相视频渲染中...' }}
+              </span>
+              <span class="processing-desc">上游正在计算扩散帧序列 (通常需 30~90s)</span>
             </div>
           </template>
 
@@ -158,7 +147,7 @@
     </div>
 
     <!-- 空状态提示与灵感引导 -->
-    <div v-else-if="!props.isGenerating" class="empty-video-gallery">
+    <div v-else class="empty-video-gallery">
       <div class="empty-icon-wrapper">
         <VideoCameraOutlined class="empty-icon" />
       </div>
@@ -319,28 +308,7 @@ const handleDownloadVideo = async (task: VideoGenerationTask) => {
   box-sizing: border-box;
 }
 
-/* 生成中卡片 */
-.generating-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
-  margin-bottom: 24px;
-}
-
-.skeleton-video-wrapper {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 380px;
-  background: #0f172a;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
+/* 流光微质感动效 */
 .shimmer-effect {
   position: absolute;
   top: 0;
@@ -361,69 +329,9 @@ const handleDownloadVideo = async (task: VideoGenerationTask) => {
   100% { transform: translateX(100%); }
 }
 
-.generating-overlay {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  color: #f8fafc;
-}
-
-.breathing-ring {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: pulse-ring 2.4s infinite ease-in-out;
-
-  .spinner-icon {
-    font-size: 24px;
-    color: #818cf8;
-  }
-}
-
 @keyframes pulse-ring {
   0%, 100% { transform: scale(1); opacity: 0.8; }
   50% { transform: scale(1.08); opacity: 1; }
-}
-
-.timer-text {
-  font-size: 14px;
-  font-weight: 500;
-  font-family: monospace;
-  color: #e2e8f0;
-}
-
-.tip-subtext {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-.generating-prompt-box {
-  padding: 12px 16px;
-  background: #f8fafc;
-  border-top: 1px solid #f1f5f9;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 13px;
-
-  .prompt-label {
-    color: #64748b;
-    font-weight: 500;
-    flex-shrink: 0;
-  }
-
-  .prompt-text {
-    color: #1e293b;
-    word-break: break-word;
-  }
 }
 
 /* 瀑布流任务卡片列表 */
@@ -451,6 +359,11 @@ const handleDownloadVideo = async (task: VideoGenerationTask) => {
   &.is-failed {
     border-color: #fecaca;
     background: #fffafa;
+  }
+
+  &.is-processing {
+    border-color: #c7d2fe;
+    box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.15);
   }
 }
 
@@ -553,26 +466,49 @@ const handleDownloadVideo = async (task: VideoGenerationTask) => {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 200px;
+  min-height: 220px;
   background: #0f172a;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   color: #f8fafc;
+  padding: 20px 16px;
+  box-sizing: border-box;
 
-  .processing-icon {
-    font-size: 28px;
-    color: #f59e0b;
+  .breathing-ring {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.16);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse-ring 2.4s infinite ease-in-out;
+
+    .spinner-icon {
+      font-size: 22px;
+      color: #818cf8;
+    }
   }
+
   .processing-title {
-    font-size: 14px;
+    position: relative;
+    z-index: 2;
+    font-size: 13.5px;
     font-weight: 500;
+    color: #f1f5f9;
+    font-family: monospace;
   }
   .processing-desc {
+    position: relative;
+    z-index: 2;
     font-size: 12px;
     color: #94a3b8;
+    text-align: center;
   }
 }
 
