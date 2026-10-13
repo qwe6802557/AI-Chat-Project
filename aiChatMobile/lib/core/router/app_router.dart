@@ -5,6 +5,7 @@ import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/chat/presentation/chat_page.dart';
 import '../../features/history/presentation/history_page.dart';
+import '../../features/video/presentation/video_page.dart';
 import '../../features/voice/presentation/voice_page.dart';
 import '../../features/explore/presentation/explore_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
@@ -72,10 +73,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           int currentIndex = 0;
           if (location.startsWith('/history')) {
             currentIndex = 1;
-          } else if (location.startsWith('/voice')) {
+          } else if (location.startsWith('/video')) {
             currentIndex = 2;
-          } else if (location.startsWith('/explore')) {
+          } else if (location.startsWith('/voice')) {
             currentIndex = 3;
+          } else if (location.startsWith('/explore')) {
+            currentIndex = 4;
           }
 
           return Scaffold(
@@ -97,9 +100,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                           context.go('/history');
                           break;
                         case 2:
-                          context.go('/voice');
+                          context.go('/video');
                           break;
                         case 3:
+                          context.go('/voice');
+                          break;
+                        case 4:
                           context.go('/explore');
                           break;
                       }
@@ -118,6 +124,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/history',
             builder: (context, state) => const HistoryPage(),
+          ),
+          GoRoute(
+            path: '/video',
+            builder: (context, state) => const VideoPage(),
           ),
           GoRoute(
             path: '/voice',

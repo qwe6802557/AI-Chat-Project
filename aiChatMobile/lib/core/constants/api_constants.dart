@@ -43,6 +43,13 @@ class ApiConstants {
   static const String voiceHistory = '/voice/history';
   static const int voiceUnitCost = 20;
 
+  // 视频服务链路
+  static const String videoGenerations = '/videos/generations';
+  static const String videoHistory = '/videos/history';
+  static const String videoStatusPrefix = '/videos/status';
+  static const String videoDeletePrefix = '/videos';
+  static const int videoGenerationCost = 200;
+
   // 业务默认值与阈值
   static const String defaultChatModel = 'grok-chat-fast';
   static const int chatMessageCost = 10;
