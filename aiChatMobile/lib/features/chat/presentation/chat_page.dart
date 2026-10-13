@@ -13,6 +13,7 @@ import 'widgets/plugin_center_bottom_sheet.dart';
 import 'widgets/knowledge_base_bottom_sheet.dart';
 import '../../upgrade/presentation/upgrade_dialog.dart';
 import '../../upgrade/services/upgrade_service.dart';
+import '../../../core/constants/api_constants.dart';
 
 /// Stitch AI 智能对话工作台主页面
 class ChatPage extends ConsumerStatefulWidget {
@@ -37,7 +38,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Future<void> _checkVersionSilently() async {
-    final info = await UpgradeService().checkUpdate(currentVersion: '1.0.0');
+    final info = await UpgradeService().checkUpdate(currentVersion: ApiConstants.appVersion);
     if (!mounted || info == null || !info.hasUpdate) return;
     await UpgradeDialog.show(context, info);
   }

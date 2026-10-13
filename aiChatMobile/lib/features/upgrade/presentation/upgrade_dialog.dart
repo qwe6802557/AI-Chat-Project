@@ -64,13 +64,36 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
       setState(() {
         _isDownloading = false;
         _downloadedPath = path;
-        _statusText = '安装包下载完成，已准备就绪';
+        _statusText = '安装包下载完成，正在唤起应用安装...';
       });
+
+      final installed = await _upgradeService.installApk(path);
+      if (!installed && mounted) {
+        setState(() {
+          _statusText = '安装包已下载就绪，点击下方按钮开始安装';
+        });
+      }
     } else {
       setState(() {
         _isDownloading = false;
-        _statusText = '应用内下载受限，建议使用浏览器极速下载';
+        _statusText = '应用内下载受限，建议使用备选浏览器下载';
       });
+    }
+  }
+
+  Future<void> _handleInstall() async {
+    if (_downloadedPath == null) return;
+    setState(() {
+      _statusText = '正在唤起系统安装器...';
+    });
+    final success = await _upgradeService.installApk(_downloadedPath!);
+    if (!success && mounted) {
+      setState(() {
+        _statusText = '未获取应用内安装权限，请授予安装权限或使用备选浏览器';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('调起系统安装器失败，请检查是否允许安装应用')),
+      );
     }
   }
 
@@ -248,11 +271,11 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
                   variant: CyberButtonVariant.primary,
                   onPressed: _isDownloading
                       ? null
-                      : (_downloadedPath != null ? _launchBrowser : _startInAppDownload),
+                      : (_downloadedPath != null ? _handleInstall : _startInAppDownload),
                   child: Text(
                     _isDownloading
-                        ? '正在下载更新包...'
-                        : (_downloadedPath != null ? '安装包已就绪·点击安装' : '立即升级 (应用内下载)'),
+                        ? '正在应用内下载更新包...'
+                        : (_downloadedPath != null ? '安装包已就绪 · 点击立即安装' : '立即升级 (应用内直接下载)'),
                     style: const TextStyle(
                       fontSize: 14.0,
                       fontWeight: FontWeight.w600,
@@ -265,7 +288,7 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
                   onPressed: _launchBrowser,
                   icon: const Icon(Icons.open_in_browser_rounded, size: 16.0),
                   label: const Text(
-                    '免设置 · 浏览器极速直链下载',
+                    '备选方式 · 浏览器极速直链下载',
                     style: TextStyle(fontSize: 13.0),
                   ),
                   style: OutlinedButton.styleFrom(
