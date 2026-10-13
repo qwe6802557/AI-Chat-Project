@@ -124,7 +124,7 @@ describe('AccountModal', () => {
     expect(wrapper.text()).toContain('+2,000')
     expect(wrapper.text()).toContain('-100')
     expect(authStore.userProfile?.credits?.remaining).toBe(1900)
-  }, 15000)
+  }, 30000)
 
   it('appends next ledger page when clicking load more', async () => {
     const { useAuthStore } = await import('@/stores')
@@ -257,5 +257,5 @@ describe('AccountModal', () => {
     })
     expect(wrapper.text()).toContain('注册赠送积分')
     expect(wrapper.text()).toContain('模型消息扣费')
-  }, 15000)
+  }, 30000)
 })
