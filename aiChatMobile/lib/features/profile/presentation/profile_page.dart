@@ -9,6 +9,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../chat/providers/chat_provider.dart';
 import '../../upgrade/presentation/upgrade_dialog.dart';
 import '../../upgrade/services/upgrade_service.dart';
+import '../../../core/constants/api_constants.dart';
 
 /// Stitch 个人中心与账户设置页
 class ProfilePage extends ConsumerWidget {
@@ -243,7 +244,7 @@ class ProfilePage extends ConsumerWidget {
       ),
     );
 
-    final info = await UpgradeService().checkUpdate(currentVersion: '1.0.0');
+    final info = await UpgradeService().checkUpdate(currentVersion: ApiConstants.appVersion);
     if (!context.mounted) return;
 
     if (info != null && info.hasUpdate) {

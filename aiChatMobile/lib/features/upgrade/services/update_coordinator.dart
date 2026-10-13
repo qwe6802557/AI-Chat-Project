@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shorebird_code_push/shorebird_code_push.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/router/app_router.dart';
 import '../presentation/patch_ready_dialog.dart';
 import '../presentation/upgrade_dialog.dart';
@@ -26,7 +27,7 @@ class UpdateCoordinator {
   );
 
   /// 执行双轨更新巡检：优先静默下载热补丁，次选全量 APK 升级
-  Future<void> checkForUpdates({String currentVersion = '1.0.0'}) async {
+  Future<void> checkForUpdates({String currentVersion = ApiConstants.appVersion}) async {
     if (_shorebirdService.isAvailable) {
       final status = await _shorebirdService.checkUpdateStatus();
 
