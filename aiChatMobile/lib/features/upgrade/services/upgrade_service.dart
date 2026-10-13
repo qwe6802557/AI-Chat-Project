@@ -82,6 +82,30 @@ class UpgradeService {
     return null;
   }
 
+  /// 检查系统是否允许安装未知来源应用（Android 8.0+ 适配）
+  Future<bool> checkInstallPermission() async {
+    if (!Platform.isAndroid) return true;
+    try {
+      final allowed = await _installerChannel.invokeMethod<bool>('checkInstallPermission');
+      return allowed ?? true;
+    } catch (e) {
+      debugPrint('[UpgradeService] checkInstallPermission failed: $e');
+      return true;
+    }
+  }
+
+  /// 跳转系统“允许安装未知应用”权限设置页
+  Future<bool> openInstallPermissionSettings() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      final success = await _installerChannel.invokeMethod<bool>('openInstallPermissionSettings');
+      return success ?? false;
+    } catch (e) {
+      debugPrint('[UpgradeService] openInstallPermissionSettings failed: $e');
+      return false;
+    }
+  }
+
   /// 调起应用内原生 Android 安装器直接安装 APK
   Future<bool> installApk(String filePath) async {
     if (!Platform.isAndroid) return false;

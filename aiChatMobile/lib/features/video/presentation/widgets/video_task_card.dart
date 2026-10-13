@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/video_task_model.dart';
 
-/// AI 视频任务卡片组件（支持原地流式加载接管、两行省略与 Tooltip 完整提示词预览）
-class VideoTaskCard extends StatelessWidget {
+/// AI 视频任务卡片组件（支持原地流式加载接管、实时真实耗时跳动、两行省略与 Tooltip 完整提示词预览）
+class VideoTaskCard extends StatefulWidget {
   final VideoTaskModel task;
   final bool isLatestGenerating;
   final int elapsedSeconds;
@@ -25,6 +26,52 @@ class VideoTaskCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  @override
+  State<VideoTaskCard> createState() => _VideoTaskCardState();
+}
+
+class _VideoTaskCardState extends State<VideoTaskCard> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTicker();
+  }
+
+  @override
+  void didUpdateWidget(VideoTaskCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.task.status != widget.task.status ||
+        oldWidget.task.id != widget.task.id) {
+      _updateTicker();
+    }
+  }
+
+  void _updateTicker() {
+    if (widget.task.status.isRunning) {
+      _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  int get _realElapsedSeconds {
+    final diff = DateTime.now().difference(widget.task.createdAt).inSeconds;
+    if (diff > 0) return diff;
+    if (widget.elapsedSeconds > 0) return widget.elapsedSeconds;
+    return diff < 0 ? 0 : diff;
+  }
+
   String _formatElapsed(int seconds) {
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
@@ -38,7 +85,7 @@ class VideoTaskCard extends StatelessWidget {
   }
 
   Future<void> _handleDownloadOrOpen(BuildContext context) async {
-    final url = task.resolvedVideoUrl;
+    final url = widget.task.resolvedVideoUrl;
     if (url == null || url.isEmpty) return;
     final uri = Uri.tryParse(url);
     if (uri == null) return;
@@ -88,9 +135,17 @@ class VideoTaskCard extends StatelessWidget {
     );
 
     if (confirmed == true) {
-      onDelete();
+      widget.onDelete();
     }
   }
+
+  VideoTaskModel get task => widget.task;
+  bool get isLatestGenerating => widget.isLatestGenerating;
+  int get elapsedSeconds => widget.elapsedSeconds;
+  bool get isDeleting => widget.isDeleting;
+  VoidCallback get onSelectPreview => widget.onSelectPreview;
+  VoidCallback get onReuse => widget.onReuse;
+  VoidCallback get onDelete => widget.onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -336,9 +391,7 @@ class VideoTaskCard extends StatelessWidget {
             ),
             const SizedBox(height: 12.0),
             Text(
-              isLatestGenerating
-                  ? '万相视频渲染中 · ${_formatElapsed(elapsedSeconds)}'
-                  : '万相视频渲染中...',
+              '万相视频渲染中 · ${_formatElapsed(_realElapsedSeconds)}',
               style: const TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w600,
