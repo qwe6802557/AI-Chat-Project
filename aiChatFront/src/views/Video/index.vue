@@ -225,6 +225,22 @@ const handleGenerate = async (params: CreateVideoGenerationParams) => {
   isGenerating.value = true
   generatingPrompt.value = params.prompt
   startTimer()
+
+  const tempId = `temp_${Date.now()}`
+  const optimisticTask: VideoGenerationTask = {
+    id: tempId,
+    prompt: params.prompt,
+    modelId: params.model || 'wanx2.1-t2v-turbo',
+    status: 'pending',
+    aspectRatio: params.aspect_ratio || '16:9',
+    duration: 5,
+    costCredits: creditsNeeded,
+    imageUrl: params.image,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  tasks.value.unshift(optimisticTask)
+
   scrollToTop(true)
   nextTick(() => {
     scrollToTop(true)
@@ -233,16 +249,19 @@ const handleGenerate = async (params: CreateVideoGenerationParams) => {
   try {
     const res = await generateVideoApi(params)
     if (res.data) {
-      tasks.value.unshift(res.data)
+      const idx = tasks.value.findIndex((t) => t.id === tempId)
+      if (idx !== -1) {
+        tasks.value.splice(idx, 1, res.data)
+      } else {
+        tasks.value.unshift(res.data)
+      }
       controlBarRef.value?.clearPrompt()
-      nextTick(() => {
-        scrollToTop(false)
-      })
       message.success('视频任务已提交至上游万相模型，正在后台生成中')
       refreshUserProfile()
       checkAndStartPolling()
     }
   } catch (error: any) {
+    tasks.value = tasks.value.filter((t) => t.id !== tempId)
     const msg = error?.message || '视频任务提交失败'
     message.error(msg)
     isGenerating.value = false

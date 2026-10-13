@@ -3,11 +3,22 @@
     :open="props.open"
     :footer="null"
     :centered="true"
+    :closable="false"
     :width="920"
     wrap-class-name="video-preview-modal-wrap"
     @cancel="handleClose"
   >
     <div v-if="props.task" class="theater-preview-container">
+      <button
+        type="button"
+        class="theater-close-btn"
+        title="关闭预览"
+        aria-label="关闭预览"
+        @click="handleClose"
+      >
+        <CloseOutlined />
+      </button>
+
       <!-- 视频播放区域 -->
       <div class="theater-video-box" :class="`aspect-${props.task.aspectRatio.replace(':', '-')}`">
         <video
@@ -86,6 +97,7 @@ import {
   RedoOutlined,
   DownloadOutlined,
   LoadingOutlined,
+  CloseOutlined,
 } from '@ant-design/icons-vue'
 import type { VideoGenerationTask } from '@/interface/video'
 import { getApiBaseUrl } from '@/utils/common'
@@ -177,12 +189,41 @@ const handleDownloadVideo = async () => {
 
 <style scoped lang="scss">
 .theater-preview-container {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #0f172a;
   border-radius: 12px;
   overflow: hidden;
   color: #f8fafc;
+}
+
+.theater-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 30;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(8px);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: scale(1.08);
+    color: #ffffff;
+  }
 }
 
 .theater-video-box {
@@ -329,6 +370,21 @@ const handleDownloadVideo = async () => {
   &:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+  }
+}
+</style>
+
+<style lang="scss">
+.video-preview-modal-wrap {
+  .ant-modal-content {
+    padding: 0 !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    background: #0f172a !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+  }
+  .ant-modal-body {
+    padding: 0 !important;
   }
 }
 </style>
