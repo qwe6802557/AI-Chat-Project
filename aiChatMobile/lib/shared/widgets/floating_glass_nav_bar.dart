@@ -26,7 +26,7 @@ class FloatingGlassNavBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
       onTap: () => onTabSelected(index),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -93,12 +93,18 @@ class FloatingGlassNavBar extends StatelessWidget {
                   ),
                   _buildNavItem(
                     index: 2,
+                    icon: Icons.videocam_outlined,
+                    activeIcon: Icons.videocam_rounded,
+                    label: '视频',
+                  ),
+                  _buildNavItem(
+                    index: 3,
                     icon: Icons.mic_none_rounded,
                     activeIcon: Icons.mic_rounded,
                     label: '语音',
                   ),
                   _buildNavItem(
-                    index: 3,
+                    index: 4,
                     icon: Icons.explore_outlined,
                     activeIcon: Icons.explore_rounded,
                     label: '探索',

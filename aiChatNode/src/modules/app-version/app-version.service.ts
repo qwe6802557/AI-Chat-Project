@@ -41,22 +41,22 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.0.0',
-      latestVersionCode: 1,
+      latestVersion: '1.1.0',
+      latestVersionCode: 2,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '46.8 MB',
+      packageSize: '55.1 MB',
       releaseNotes: [
-        '正式发布 Stage 3 插件化工具中心，内置 6 大高可用扩展工具',
-        '支持网络搜索、代码解释器、高精度计算器、网页正文提取、实时天气与时钟日历',
-        '大模型自主决策工具调用，流式卡片毫秒级耗时追踪与参数折叠查看',
-        'Stitch 风格深色拟物玻璃态设计，输入栏即插即用胶囊标签与全屏插件中心',
-        '全链路端到端性能调优与移动端触感升级',
+        '全新发布 AI 视频创作工坊，全面对齐阿里通义万相 Wan2.2-14B 影视级大模型',
+        '支持 16:9 / 9:16 / 1:1 多画幅文生视频与首帧参考图生视频',
+        '原地卡片流式渲染接管与 4 秒智能状态轮询，失败自动全额退还积分',
+        '暗色影院级全屏沉浸预览弹窗与高清 MP4 流式播放下载',
+        '底部悬浮毛玻璃主导航栏升级，全模态交互体验深度优化',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-11T04:00:00.000Z',
+      publishedAt: '2026-10-13T07:13:00.000Z',
     };
   }
 
