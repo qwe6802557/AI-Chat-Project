@@ -76,5 +76,40 @@ void main() {
       expect(find.textContaining('未开启安装权限？点击去开启安装权限'), findsOneWidget);
       expect(find.textContaining('立即升级 (应用内直接下载)'), findsOneWidget);
     });
+
+    testWidgets('UpgradeDialog.show 具备防重入互斥机制，并发调用仅弹窗一次', (tester) async {
+      final info = AppVersionInfo(
+        latestVersion: '1.2.0',
+        latestVersionCode: 3,
+        minSupportedVersion: '1.0.0',
+        downloadUrl: 'https://aichat.yanggenbwebsite.site/downloads/aichat-latest.apk',
+        packageSize: '18.6 MB',
+        releaseNotes: ['防重入测试'],
+        forceUpdate: false,
+        hasUpdate: true,
+        currentVersion: '1.1.0',
+        publishedAt: '2026-10-13T10:00:00.000Z',
+      );
+
+      late BuildContext testContext;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (ctx) {
+              testContext = ctx;
+              return const Scaffold(body: SizedBox());
+            },
+          ),
+        ),
+      );
+
+      // 并发触发两次 show，第二批调用将被静态锁直接拦截
+      UpgradeDialog.show(testContext, info);
+      UpgradeDialog.show(testContext, info);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(UpgradeDialog), findsOneWidget);
+    });
   });
 }
