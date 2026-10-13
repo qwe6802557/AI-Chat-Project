@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ai_chat_mobile/features/upgrade/domain/app_version_model.dart';
+import 'package:ai_chat_mobile/features/upgrade/presentation/upgrade_dialog.dart';
 
 void main() {
   group('AppVersionInfo Model Tests', () {
@@ -47,6 +49,32 @@ void main() {
 
       expect(info.latestVersion, equals('1.1.0'));
       expect(info.hasUpdate, isTrue);
+    });
+
+    testWidgets('UpgradeDialog 渲染单独一行的安装权限引导文字', (tester) async {
+      final info = AppVersionInfo(
+        latestVersion: '1.2.0',
+        latestVersionCode: 3,
+        minSupportedVersion: '1.0.0',
+        downloadUrl: 'https://aichat.yanggenbwebsite.site/downloads/aichat-latest.apk',
+        packageSize: '55.1 MB',
+        releaseNotes: ['修复实时秒数', '增加安装权限引导'],
+        forceUpdate: false,
+        hasUpdate: true,
+        currentVersion: '1.1.0',
+        publishedAt: '2026-10-13T10:00:00.000Z',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: UpgradeDialog(versionInfo: info),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('未开启安装权限？点击去开启安装权限'), findsOneWidget);
+      expect(find.textContaining('立即升级 (应用内直接下载)'), findsOneWidget);
     });
   });
 }

@@ -29,12 +29,51 @@ class UpgradeDialog extends StatefulWidget {
   State<UpgradeDialog> createState() => _UpgradeDialogState();
 }
 
-class _UpgradeDialogState extends State<UpgradeDialog> {
+class _UpgradeDialogState extends State<UpgradeDialog> with WidgetsBindingObserver {
   final UpgradeService _upgradeService = UpgradeService();
   bool _isDownloading = false;
   String? _downloadedPath;
   double _progress = 0.0;
   String _statusText = '';
+  bool _hasInstallPermission = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkPermission();
+    }
+  }
+
+  Future<void> _checkPermission() async {
+    final hasPermission = await _upgradeService.checkInstallPermission();
+    if (mounted) {
+      setState(() {
+        _hasInstallPermission = hasPermission;
+      });
+    }
+  }
+
+  Future<void> _openPermissionSettings() async {
+    final opened = await _upgradeService.openInstallPermissionSettings();
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法打开系统设置，请手动前往设置开启安装应用权限')),
+      );
+    }
+  }
 
   Future<void> _startInAppDownload() async {
     setState(() {
@@ -67,10 +106,19 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
         _statusText = '安装包下载完成，正在唤起应用安装...';
       });
 
-      final installed = await _upgradeService.installApk(path);
-      if (!installed && mounted) {
+      final hasPerm = await _upgradeService.checkInstallPermission();
+      if (mounted) setState(() => _hasInstallPermission = hasPerm);
+
+      if (hasPerm) {
+        final installed = await _upgradeService.installApk(path);
+        if (!installed && mounted) {
+          setState(() {
+            _statusText = '安装包已下载就绪，点击下方按钮开始安装';
+          });
+        }
+      } else if (mounted) {
         setState(() {
-          _statusText = '安装包已下载就绪，点击下方按钮开始安装';
+          _statusText = '安装包已下载就绪，请先开启安装权限';
         });
       }
     } else {
@@ -83,13 +131,22 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
 
   Future<void> _handleInstall() async {
     if (_downloadedPath == null) return;
+
+    if (!_hasInstallPermission) {
+      setState(() {
+        _statusText = '请先开启安装未知应用权限后开始安装';
+      });
+      await _openPermissionSettings();
+      return;
+    }
+
     setState(() {
       _statusText = '正在唤起系统安装器...';
     });
     final success = await _upgradeService.installApk(_downloadedPath!);
     if (!success && mounted) {
       setState(() {
-        _statusText = '未获取应用内安装权限，请授予安装权限或使用备选浏览器';
+        _statusText = '唤起系统安装器失败，请检查安装权限';
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('调起系统安装器失败，请检查是否允许安装应用')),
@@ -145,12 +202,16 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                '版本更新 v${info.latestVersion}',
-                                style: const TextStyle(
-                                  fontSize: 17.0,
-                                  fontWeight: FontWeight.w700,
-                                  color: StitchTokens.onSurface,
+                              Flexible(
+                                child: Text(
+                                  '版本更新 v${info.latestVersion}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 16.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: StitchTokens.onSurface,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8.0),
@@ -283,6 +344,44 @@ class _UpgradeDialogState extends State<UpgradeDialog> {
                     ),
                   ),
                 ),
+                if (!_isDownloading) ...[
+                  const SizedBox(height: 10.0),
+                  GestureDetector(
+                    onTap: _openPermissionSettings,
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            _hasInstallPermission
+                                ? Icons.shield_outlined
+                                : Icons.warning_amber_rounded,
+                            size: 14.0,
+                            color: _hasInstallPermission
+                                ? StitchTokens.primary
+                                : const Color(0xFFE11D48),
+                          ),
+                          const SizedBox(width: 4.0),
+                          Text(
+                            _hasInstallPermission
+                                ? '未开启安装权限？点击去开启安装权限'
+                                : '提示：未开启安装权限，点击去开启安装权限',
+                            style: TextStyle(
+                              fontSize: 12.0,
+                              fontWeight: FontWeight.w500,
+                              color: _hasInstallPermission
+                                  ? StitchTokens.primary
+                                  : const Color(0xFFE11D48),
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10.0),
                 OutlinedButton.icon(
                   onPressed: _launchBrowser,
