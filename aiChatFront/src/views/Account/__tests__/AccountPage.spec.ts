@@ -21,7 +21,13 @@ vi.mock('vue-router', () => ({
   }),
 }))
 
-vi.mock('../../Chat/components/AccountModal.vue', () => ({
+vi.mock('@/views/Chat/components/AccountModal.vue', () => ({
+  default: defineComponent({
+    name: 'AccountModalStub',
+    template: '<div class="account-modal-inline-stub" />',
+  }),
+}))
+vi.mock('../Chat/components/AccountModal.vue', () => ({
   default: defineComponent({
     name: 'AccountModalStub',
     template: '<div class="account-modal-inline-stub" />',

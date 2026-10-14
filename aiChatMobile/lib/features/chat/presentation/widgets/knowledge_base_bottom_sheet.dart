@@ -27,6 +27,8 @@ class KnowledgeBaseBottomSheet extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => KnowledgeBaseBottomSheet(
         selectedIds: selectedIds,
@@ -72,6 +74,9 @@ class _KnowledgeBaseBottomSheetState extends State<KnowledgeBaseBottomSheet> {
     final activeCount = widget.selectedIds.length;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(
@@ -207,6 +212,7 @@ class _KnowledgeBaseBottomSheetState extends State<KnowledgeBaseBottomSheet> {
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 340.0),
               child: ListView.separated(
+                padding: const EdgeInsets.only(bottom: 24.0),
                 shrinkWrap: true,
                 itemCount: _knowledgeBases.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8.0),

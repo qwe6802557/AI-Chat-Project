@@ -105,6 +105,7 @@ export interface BackendChatSession {
   createdAt: string
   updatedAt: string
   chatMessages?: BackendChatMessage[]
+  knowledgeBaseIds?: string[]
 }
 
 /**
@@ -160,13 +161,32 @@ export interface ChatMessageResponse {
  * 流式聊天数据块
  */
 export interface StreamChunk {
-  type?: 'search_start' | 'search_sources' | 'tool_call_start' | 'tool_call_result' | 'tool_start' | 'tool_result' | 'reasoning_start' | 'reasoning_delta' | 'reasoning_done' | 'answer_delta' | 'done' | 'error'
+  type?:
+    | 'search_start'
+    | 'search_sources'
+    | 'tool_call_start'
+    | 'tool_call_result'
+    | 'tool_start'
+    | 'tool_result'
+    | 'reasoning_start'
+    | 'reasoning_delta'
+    | 'reasoning_done'
+    | 'answer_delta'
+    | 'failover_notice'
+    | 'done'
+    | 'error'
   delta?: string
   finish_reason: string | null
   sessionId?: string
   message?: string
   reasoning?: BackendReasoning | null
   model?: string
+  failover?: {
+    primaryModelId: string
+    activeModelId: string
+    providerName: string
+    reason?: string
+  } | null
   usage?: UsageStats
   durationMs?: number | null
   query?: string
@@ -259,7 +279,9 @@ export interface SessionMessagesResponse {
  */
 export interface UpdateSessionTitleParams {
   id: string
-  title: string
+  title?: string
+  isArchived?: boolean
+  knowledgeBaseIds?: string[]
 }
 
 /**

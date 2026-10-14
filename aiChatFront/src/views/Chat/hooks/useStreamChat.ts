@@ -401,6 +401,16 @@ export function useStreamChat() {
                   latestReasoning,
                 )
                 return
+              case 'failover_notice': {
+                const messageId = ensureAssistantMessage()
+                if (chunk.failover) {
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    failover: chunk.failover,
+                    model: chunk.failover.activeModelId,
+                  })
+                }
+                return
+              }
               case 'answer_delta':
               default:
                 ensureAssistantMessage()
@@ -453,6 +463,7 @@ export function useStreamChat() {
                 timestamp: Date.now(),
                 streaming: false,
                 model: finalModel,
+                failover: chunk.failover || undefined,
                 usage: mapUsage(usage),
                 charge: mapCharge(charge),
                 reasoning,
@@ -471,6 +482,7 @@ export function useStreamChat() {
               conversationStore.patchMessageById(sessionId, assistantMessageId, {
                 streaming: false,
                 model: finalModel,
+                ...(chunk.failover ? { failover: chunk.failover } : {}),
                 usage: mapUsage(usage),
                 charge: mapCharge(charge),
                 reasoning,

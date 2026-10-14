@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import ChatArea from '../ChatArea.vue'
 
 const uploadMockState = vi.hoisted(() => ({
@@ -76,6 +77,7 @@ const globalStubs = {
 
 describe('ChatArea', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     vi.clearAllMocks()
     uploadMockState.files.value = []
     uploadMockState.isProcessing.value = false

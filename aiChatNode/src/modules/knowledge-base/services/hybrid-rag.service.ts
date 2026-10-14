@@ -84,6 +84,7 @@ export class HybridRagService {
           const sim = this.cosineSimilarity(queryVector, c.embedding!);
           return { id: c.id, sim };
         })
+        .filter((item) => item.sim >= 0.35)
         .sort((a, b) => b.sim - a.sim);
 
       denseScored.slice(0, 30).forEach((item, index) => {
@@ -121,9 +122,9 @@ export class HybridRagService {
       ...sparseRankMap.keys(),
     ]);
 
-    // 若双路均未命中，退化为候选前若干条
+    // 若双路均未命中任何高相关切片，返回空列表，避免无关提问强塞切片导致幻觉
     if (candidateIds.size === 0) {
-      candidateChunks.slice(0, limit).forEach((c) => candidateIds.add(c.id));
+      return [];
     }
 
     const fusedResults: { id: string; rrfScore: number }[] = [];

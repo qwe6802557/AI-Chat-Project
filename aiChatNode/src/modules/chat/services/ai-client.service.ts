@@ -6,6 +6,7 @@ import { Grok2APIAdapter } from '../adapters/grok2api.adapter';
 import { ZhipuAdapter } from '../adapters/zhipu.adapter';
 import { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
+import { AiModel } from '../../ai-provider/entities/ai-model.entity';
 import { AiModelService } from '../../ai-provider/ai-model.service';
 import { AiProviderService } from '../../ai-provider/ai-provider.service';
 import { RedisService } from '../../../common/redis/redis.service';
@@ -25,6 +26,11 @@ import {
   resolveReasoningPanelTitle,
   type ModelReasoningProfile,
 } from '../utils/reasoning-profile.util';
+
+export interface CircuitBreakerState {
+  failureCount: number;
+  circuitOpenUntil: number;
+}
 
 export interface ProviderHealthStatus {
   providerId: string;
@@ -50,6 +56,9 @@ export interface ProviderHealthStatus {
 export class AIClientService {
   private readonly logger = new Logger(AIClientService.name);
   private readonly THINK_TAG_PATTERN = /<think\b|<\/think>/i;
+  private readonly circuitBreakers = new Map<string, CircuitBreakerState>();
+  private static readonly CIRCUIT_FAILURE_THRESHOLD = 3;
+  private static readonly CIRCUIT_COOLING_PERIOD_MS = 60 * 1000;
 
   constructor(
     private readonly claudeAdapter: ClaudeAdapter,
@@ -62,6 +71,102 @@ export class AIClientService {
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * 判断指定供应商当前是否处于熔断冷却态
+   */
+  isProviderCircuitOpen(providerName: string): boolean {
+    const state = this.circuitBreakers.get(providerName.toLowerCase());
+    if (!state) return false;
+    return Date.now() < state.circuitOpenUntil;
+  }
+
+  /**
+   * 记录供应商异常失败，并在连续失败达到阈值时触发熔断
+   */
+  recordProviderFailure(providerName: string): void {
+    const key = providerName.toLowerCase();
+    const current = this.circuitBreakers.get(key) || {
+      failureCount: 0,
+      circuitOpenUntil: 0,
+    };
+    current.failureCount++;
+    if (current.failureCount >= AIClientService.CIRCUIT_FAILURE_THRESHOLD) {
+      current.circuitOpenUntil =
+        Date.now() + AIClientService.CIRCUIT_COOLING_PERIOD_MS;
+      this.logger.warn(
+        `[熔断防护] 供应商 ${providerName} 连续故障 ${current.failureCount} 次，触发熔断，冷却至 ${new Date(current.circuitOpenUntil).toISOString()}`,
+      );
+    }
+    this.circuitBreakers.set(key, current);
+  }
+
+  /**
+   * 记录供应商调用成功并重置熔断计数器
+   */
+  recordProviderSuccess(providerName: string): void {
+    const key = providerName.toLowerCase();
+    const current = this.circuitBreakers.get(key);
+    if (current && (current.failureCount > 0 || current.circuitOpenUntil > 0)) {
+      this.circuitBreakers.set(key, { failureCount: 0, circuitOpenUntil: 0 });
+      this.logger.log(`[熔断防护] 供应商 ${providerName} 调用成功，重置熔断状态`);
+    }
+  }
+
+  /**
+   * 判定错误是否属于上游基础设施暂时性异常（429限流、502/503/504网关故障、网络超时）
+   */
+  isTransientProviderError(error: any): boolean {
+    if (!error) return false;
+    const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    const status = error.status || error.statusCode || error.response?.status;
+
+    if (status === 429 || status === 502 || status === 503 || status === 504) {
+      return true;
+    }
+
+    const transientKeywords = [
+      'rate limit',
+      'too many requests',
+      '429',
+      '502 bad gateway',
+      '503 service unavailable',
+      '504 gateway timeout',
+      'quota exceeded',
+      'overloaded',
+      'econnrefused',
+      'etimedout',
+      'fetch failed',
+      'network error',
+    ];
+
+    return transientKeywords.some((kw) => msg.includes(kw));
+  }
+
+  /**
+   * 查找同级别且健康的备用模型
+   */
+  async findFallbackModel(
+    primaryModelId: string,
+    primaryProviderName: string,
+  ): Promise<AiModel | null> {
+    try {
+      const activeModels = await this.aiModelService.findActiveModels(true, 'chat');
+      const candidates = activeModels.filter(
+        (m) =>
+          m.modelId !== primaryModelId &&
+          m.provider &&
+          m.provider.isActive &&
+          m.provider.name.toLowerCase() !== primaryProviderName.toLowerCase() &&
+          !this.isProviderCircuitOpen(m.provider.name),
+      );
+
+      return candidates.length > 0 ? candidates[0] : null;
+    } catch (err: any) {
+      this.logger.warn(`寻找备用模型失败: ${err.message}`);
+      return null;
+    }
+  }
 
   private readonly DEFAULT_PROVIDER_HEALTH_CACHE_TTL_SECONDS = 60;
 
@@ -365,7 +470,7 @@ export class AIClientService {
   }
 
   /**
-   * 创建聊天补全（非流式）
+   * 创建聊天补全（非流式，支持熔断与热降级）
    * @param modelId 模型ID（如 claude-opus-4-5-20251101）
    * @param messages 消息数组
    * @param options 可选配置
@@ -375,10 +480,8 @@ export class AIClientService {
     messages: ChatMessage[],
     options?: CompletionOptions,
   ): Promise<CompletionResponse> {
-    // 从数据库查询模型信息
     const model = await this.aiModelService.findByModelId(modelId, true);
 
-    // 检查模型和供应商是否启用
     if (!model.isActive) {
       throw new BadRequestException(`模型 ${modelId} 未启用`);
     }
@@ -387,38 +490,122 @@ export class AIClientService {
       throw new BadRequestException(`供应商 ${model.provider.name} 未启用`);
     }
 
-    this.logger.log(
-      `使用供应商: ${model.provider.name}, 模型: ${model.modelName} (${modelId})`,
-    );
+    const providerName = model.provider.name;
 
-    const adapter = this.resolveAdapter(model.provider.name);
+    if (this.isProviderCircuitOpen(providerName)) {
+      this.logger.warn(`供应商 ${providerName} 处于熔断冷却中，自动调度备用通道`);
+      const fallback = await this.findFallbackModel(modelId, providerName);
+      if (fallback) {
+        return this.executeChatCompletionWithFailover(
+          fallback,
+          messages,
+          options,
+          {
+            primaryModelId: modelId,
+            primaryProviderName: providerName,
+            reason: `供应商 ${providerName} 处于熔断冷却中`,
+          },
+        );
+      }
+    }
+
+    try {
+      this.logger.log(
+        `使用供应商: ${providerName}, 模型: ${model.modelName} (${modelId})`,
+      );
+
+      const adapter = this.resolveAdapter(providerName);
+      const reasoningProfile = resolveModelReasoningProfile({
+        providerName,
+        modelId,
+      });
+
+      const completion = await adapter.createChatCompletion(
+        messages,
+        modelId,
+        options,
+      );
+
+      this.recordProviderSuccess(providerName);
+      await this.aiProviderService.incrementAccessCount(model.provider.id);
+
+      return {
+        ...this.normalizeCompletionResponse(completion, reasoningProfile),
+        usage: this.buildUsageWithEstimatedCost(completion.usage, {
+          inputPrice: Number(model.inputPrice || 0),
+          outputPrice: Number(model.outputPrice || 0),
+        }),
+      };
+    } catch (error: any) {
+      if (this.isTransientProviderError(error)) {
+        this.recordProviderFailure(providerName);
+        const fallback = await this.findFallbackModel(modelId, providerName);
+        if (fallback) {
+          this.logger.warn(
+            `主模型 ${modelId} (${providerName}) 异常: ${error.message}，启动热切换降级至 ${fallback.modelName} (${fallback.modelId})`,
+          );
+          return this.executeChatCompletionWithFailover(
+            fallback,
+            messages,
+            options,
+            {
+              primaryModelId: modelId,
+              primaryProviderName: providerName,
+              reason: error.message,
+            },
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async executeChatCompletionWithFailover(
+    fallbackModel: AiModel,
+    messages: ChatMessage[],
+    options?: CompletionOptions,
+    failoverMeta?: {
+      primaryModelId: string;
+      primaryProviderName: string;
+      reason: string;
+    },
+  ): Promise<CompletionResponse> {
+    const adapter = this.resolveAdapter(fallbackModel.provider.name);
     const reasoningProfile = resolveModelReasoningProfile({
-      providerName: model.provider.name,
-      modelId,
+      providerName: fallbackModel.provider.name,
+      modelId: fallbackModel.modelId,
     });
 
-    // 调用适配器
     const completion = await adapter.createChatCompletion(
       messages,
-      modelId,
+      fallbackModel.modelId,
       options,
     );
 
-    // 更新供应商访问量统计
-    await this.aiProviderService.incrementAccessCount(model.provider.id);
+    this.recordProviderSuccess(fallbackModel.provider.name);
+    await this.aiProviderService.incrementAccessCount(fallbackModel.provider.id);
 
-    // 返回结果
+    const normalized = this.normalizeCompletionResponse(completion, reasoningProfile);
     return {
-      ...this.normalizeCompletionResponse(completion, reasoningProfile),
+      ...normalized,
+      model: fallbackModel.modelId,
       usage: this.buildUsageWithEstimatedCost(completion.usage, {
-        inputPrice: Number(model.inputPrice || 0),
-        outputPrice: Number(model.outputPrice || 0),
+        inputPrice: Number(fallbackModel.inputPrice || 0),
+        outputPrice: Number(fallbackModel.outputPrice || 0),
       }),
+      failover: failoverMeta
+        ? {
+            primaryModelId: failoverMeta.primaryModelId,
+            activeModelId: fallbackModel.modelId,
+            providerName: fallbackModel.provider.name,
+            reason: failoverMeta.reason,
+          }
+        : null,
     };
   }
 
   /**
-   * 创建流式聊天补全
+   * 创建流式聊天补全（支持熔断与热降级）
    * @param modelId 模型ID
    * @param messages 消息数组
    * @param options 可选配置
@@ -428,10 +615,8 @@ export class AIClientService {
     messages: ChatMessage[],
     options?: CompletionOptions,
   ): Promise<AsyncIterable<CompletionChunk>> {
-    // 查询模型信息
     const model = await this.aiModelService.findByModelId(modelId, true);
 
-    // 模型和供应商是否启用
     if (!model.isActive) {
       throw new BadRequestException(`模型 ${modelId} 未启用`);
     }
@@ -440,33 +625,126 @@ export class AIClientService {
       throw new BadRequestException(`供应商 ${model.provider.name} 未启用`);
     }
 
-    this.logger.log(
-      `使用供应商: ${model.provider.name}, 模型: ${model.modelName} (${modelId}) - 流式模式`,
-    );
+    const providerName = model.provider.name;
 
-    const adapter = this.resolveAdapter(model.provider.name);
+    if (this.isProviderCircuitOpen(providerName)) {
+      this.logger.warn(`供应商 ${providerName} 处于熔断冷却中，流式自动调度备用通道`);
+      const fallback = await this.findFallbackModel(modelId, providerName);
+      if (fallback) {
+        return this.executeStreamChatCompletionWithFailover(
+          fallback,
+          messages,
+          options,
+          {
+            primaryModelId: modelId,
+            primaryProviderName: providerName,
+            reason: `供应商 ${providerName} 处于熔断冷却中`,
+          },
+        );
+      }
+    }
+
+    try {
+      this.logger.log(
+        `使用供应商: ${providerName}, 模型: ${model.modelName} (${modelId}) - 流式模式`,
+      );
+
+      const adapter = this.resolveAdapter(providerName);
+      const reasoningProfile = resolveModelReasoningProfile({
+        providerName,
+        modelId,
+      });
+
+      await this.aiProviderService.incrementAccessCount(model.provider.id);
+
+      const stream = await adapter.createStreamChatCompletion(
+        messages,
+        modelId,
+        options,
+      );
+
+      this.recordProviderSuccess(providerName);
+
+      return this.decorateStreamWithEstimatedCost(
+        this.normalizeStreamWithReasoning(stream, reasoningProfile),
+        {
+          inputPrice: Number(model.inputPrice || 0),
+          outputPrice: Number(model.outputPrice || 0),
+        },
+      );
+    } catch (error: any) {
+      if (this.isTransientProviderError(error)) {
+        this.recordProviderFailure(providerName);
+        const fallback = await this.findFallbackModel(modelId, providerName);
+        if (fallback) {
+          this.logger.warn(
+            `主模型 ${modelId} (${providerName}) 流式调用异常: ${error.message}，启动热切换降级至 ${fallback.modelName} (${fallback.modelId})`,
+          );
+          return this.executeStreamChatCompletionWithFailover(
+            fallback,
+            messages,
+            options,
+            {
+              primaryModelId: modelId,
+              primaryProviderName: providerName,
+              reason: error.message,
+            },
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async *executeStreamChatCompletionWithFailover(
+    fallbackModel: AiModel,
+    messages: ChatMessage[],
+    options?: CompletionOptions,
+    failoverMeta?: {
+      primaryModelId: string;
+      primaryProviderName: string;
+      reason: string;
+    },
+  ): AsyncIterable<CompletionChunk> {
+    if (failoverMeta) {
+      yield {
+        type: 'failover_notice',
+        failover: {
+          primaryModelId: failoverMeta.primaryModelId,
+          activeModelId: fallbackModel.modelId,
+          providerName: fallbackModel.provider.name,
+          reason: failoverMeta.reason,
+        },
+      };
+    }
+
+    const adapter = this.resolveAdapter(fallbackModel.provider.name);
     const reasoningProfile = resolveModelReasoningProfile({
-      providerName: model.provider.name,
-      modelId,
+      providerName: fallbackModel.provider.name,
+      modelId: fallbackModel.modelId,
     });
 
-    // 更新供应商访问量统计
-    await this.aiProviderService.incrementAccessCount(model.provider.id);
+    await this.aiProviderService.incrementAccessCount(fallbackModel.provider.id);
 
-    // 调用适配器
     const stream = await adapter.createStreamChatCompletion(
       messages,
-      modelId,
+      fallbackModel.modelId,
       options,
     );
 
-    return this.decorateStreamWithEstimatedCost(
+    this.recordProviderSuccess(fallbackModel.provider.name);
+
+    const decorated = this.decorateStreamWithEstimatedCost(
       this.normalizeStreamWithReasoning(stream, reasoningProfile),
       {
-        inputPrice: Number(model.inputPrice || 0),
-        outputPrice: Number(model.outputPrice || 0),
+        inputPrice: Number(fallbackModel.inputPrice || 0),
+        outputPrice: Number(fallbackModel.outputPrice || 0),
       },
     );
+
+    for await (const chunk of decorated) {
+      yield chunk;
+    }
   }
 
   private async *decorateStreamWithEstimatedCost(

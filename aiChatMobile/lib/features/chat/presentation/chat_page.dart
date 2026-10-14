@@ -11,6 +11,7 @@ import 'widgets/chat_user_message_bubble.dart';
 import 'widgets/model_switcher_bottom_sheet.dart';
 import 'widgets/plugin_center_bottom_sheet.dart';
 import 'widgets/knowledge_base_bottom_sheet.dart';
+import 'widgets/stitch_offline_banner.dart';
 
 /// Stitch AI 智能对话工作台主页面
 class ChatPage extends ConsumerStatefulWidget {
@@ -20,9 +21,12 @@ class ChatPage extends ConsumerStatefulWidget {
   ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends ConsumerState<ChatPage> {
+class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClientMixin {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -160,7 +164,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final chatState = ref.watch(chatProvider);
+
+    // 监听底栏重复点击或跨页跳转事件并平滑吸底
+    ref.listen<int>(chatScrollToBottomTriggerProvider, (_, __) {
+      _scrollToBottom(animate: true, retries: 3);
+    });
 
     // 监听会话切换、消息数量变动或流式输出增量并吸底滚动
     ref.listen(chatProvider, (previous, next) {
@@ -193,6 +203,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               model: chatState.selectedModel,
               onTap: _openModelSwitcher,
             ),
+            const StitchOfflineBanner(),
             if (chatState.errorMessage != null)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
@@ -231,7 +242,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       itemBuilder: (context, index) {
                         final msg = chatState.messages[index];
                         return msg.isUser
-                            ? ChatUserMessageBubble(msg: msg)
+                            ? ChatUserMessageBubble(
+                                msg: msg,
+                                onRetry: () => ref.read(chatProvider.notifier).retryMessage(msg.id),
+                              )
                             : ChatAssistantMessageBubble(msg: msg);
                       },
                     ),

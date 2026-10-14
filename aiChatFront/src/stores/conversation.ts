@@ -177,7 +177,8 @@ const transformBackendSession = (session: BackendChatSession): Conversation => {
     updatedAt: session.lastActiveAt
       ? new Date(session.lastActiveAt).getTime()
       : new Date(session.updatedAt).getTime(),
-    sessionId: session.id
+    sessionId: session.id,
+    knowledgeBaseIds: session.knowledgeBaseIds || [],
   }
 }
 
@@ -602,6 +603,29 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /**
+   * 更新会话绑定的知识库
+   */
+  const updateConversationKnowledgeBases = async (id: string, knowledgeBaseIds: string[]): Promise<boolean> => {
+    const conversation = conversations.value.find(c => c.id === id)
+    if (!conversation) return false
+
+    conversation.knowledgeBaseIds = [...knowledgeBaseIds]
+    conversation.updatedAt = Date.now()
+    saveConversations()
+
+    if (!conversation.sessionId || conversation.id.startsWith('temp-')) {
+      return true
+    }
+
+    try {
+      const response = await updateSessionTitle({ id, knowledgeBaseIds })
+      return response.code === 0
+    } catch {
+      return false
+    }
+  }
+
   // 消息管理
 
   /**
@@ -763,6 +787,7 @@ export const useConversationStore = defineStore('conversation', () => {
     deleteConversation,
     clearAllConversations,
     updateConversationTitle,
+    updateConversationKnowledgeBases,
     ensureServerSession,
     cleanupEmptyTemporaryConversations,
     getConversationById,

@@ -103,8 +103,9 @@
             <ToolQuickCapsules :disabled="loading" />
 
             <KnowledgeBaseCapsule
-              v-model:selected-ids="selectedKnowledgeBaseIds"
+              :selected-ids="selectedKnowledgeBaseIds"
               :disabled="loading"
+              @update:selected-ids="handleKnowledgeBaseUpdate"
             />
 
             <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
@@ -139,7 +140,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import {
   CloudUploadOutlined,
@@ -149,6 +151,7 @@ import {
   ThunderboltFilled,
 } from '@ant-design/icons-vue'
 import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
+import { useConversationStore } from '@/stores'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import WebSearchToggle from './WebSearchToggle.vue'
@@ -218,6 +221,27 @@ const webSearchEnabled = ref(false)
 const selectedKnowledgeBaseIds = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const scrollSignal = ref(0)
+
+const conversationStore = useConversationStore()
+const { currentConversation } = storeToRefs(conversationStore)
+
+// 切换对话时，自动恢复当前会话持久化绑定的知识库
+watch(
+  () => currentConversation.value?.id,
+  () => {
+    selectedKnowledgeBaseIds.value = currentConversation.value?.knowledgeBaseIds
+      ? [...currentConversation.value.knowledgeBaseIds]
+      : []
+  },
+  { immediate: true },
+)
+
+const handleKnowledgeBaseUpdate = (ids: string[]) => {
+  selectedKnowledgeBaseIds.value = ids
+  if (currentConversation.value) {
+    conversationStore.updateConversationKnowledgeBases(currentConversation.value.id, ids)
+  }
+}
 
 const isDragging = ref(false)
 let dragCounter = 0

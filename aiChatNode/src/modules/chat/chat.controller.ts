@@ -213,6 +213,7 @@ export class ChatController {
         | null
         | undefined;
       let reasoningBuffer = '';
+      let activeFailover: Record<string, unknown> | null = null;
       let finalCharge:
         | {
             id: string;
@@ -246,6 +247,17 @@ export class ChatController {
         let sseData: Record<string, unknown> | null = null;
 
         switch ((chunk as CompletionChunk).type) {
+          case 'failover_notice':
+            activeFailover = (chunk.failover as any) || null;
+            if (chunk.failover?.activeModelId) {
+              modelId = chunk.failover.activeModelId;
+            }
+            sseData = {
+              type: 'failover_notice',
+              sessionId,
+              failover: chunk.failover,
+            };
+            break;
           case 'tool_call_start':
             sseData = {
               type: 'tool_call_start',
@@ -364,6 +376,7 @@ export class ChatController {
           message: fullMessage,
           reasoning: finalReasoning || null,
           model: modelId,
+          failover: activeFailover || null,
           usage: finalUsage,
           durationMs,
           charge: finalCharge,

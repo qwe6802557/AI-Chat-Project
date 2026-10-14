@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/stitch_theme.dart';
 
+import 'core/storage/hive_storage_service.dart';
 import 'features/upgrade/services/update_coordinator.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final hiveStorageService = HiveStorageService();
+  await hiveStorageService.init();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -19,8 +23,11 @@ void main() {
   );
 
   runApp(
-    const ProviderScope(
-      child: AiChatMobileApp(),
+    ProviderScope(
+      overrides: [
+        hiveStorageServiceProvider.overrideWithValue(hiveStorageService),
+      ],
+      child: const AiChatMobileApp(),
     ),
   );
 }

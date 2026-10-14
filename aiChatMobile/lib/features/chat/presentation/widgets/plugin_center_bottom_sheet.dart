@@ -24,6 +24,8 @@ class PluginCenterBottomSheet extends StatelessWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => PluginCenterBottomSheet(
         enabledTools: enabledTools,
@@ -70,6 +72,9 @@ class PluginCenterBottomSheet extends StatelessWidget {
     final tools = BuiltinTools.defaults;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(StitchTokens.radius2Xl)),
@@ -197,6 +202,7 @@ class PluginCenterBottomSheet extends StatelessWidget {
           // 工具列表
           Flexible(
             child: ListView.separated(
+              padding: const EdgeInsets.only(bottom: 24.0),
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               itemCount: tools.length,

@@ -64,6 +64,13 @@ export interface MessageAttachment {
   extractedText?: string | null
 }
 
+export interface FailoverInfo {
+  primaryModelId: string
+  activeModelId: string
+  providerName: string
+  reason?: string
+}
+
 /**
  * 消息接口
  */
@@ -74,6 +81,7 @@ export interface Message {
   timestamp: number
   streaming?: boolean
   model?: string
+  failover?: FailoverInfo | null
   usage?: MessageUsageStats
   charge?: MessageChargeSummary
   reasoning?: MessageReasoning
@@ -97,4 +105,5 @@ export interface Conversation {
   createdAt: number
   updatedAt: number
   sessionId?: string
+  knowledgeBaseIds?: string[]
 }

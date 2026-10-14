@@ -64,6 +64,11 @@ describe('ImagesService', () => {
     );
   });
 
+  afterEach(() => {
+    service.onModuleDestroy();
+    jest.clearAllMocks();
+  });
+
   it('非管理员余额不足时应抛出 BadRequestException 拦截', async () => {
     await expect(
       service.generateImages('user-1', {
@@ -169,6 +174,60 @@ describe('ImagesService', () => {
       const res = await service.deleteImageTask('user-1', 'task-123');
       expect(imageRepoMock.remove).toHaveBeenCalledWith(mockTask);
       expect(res.success).toBe(true);
+    });
+  });
+
+  describe('超时自愈与积分回滚', () => {
+    it('对超过 3 分钟仍处于 pending 的生图任务自动标记失败并全额退还积分', async () => {
+      const expiredCreatedAt = new Date(Date.now() - 4 * 60 * 1000);
+      const pendingTask = {
+        id: 'image-task-timeout',
+        userId: 'user-1',
+        modelId: 'grok-imagine-image-2.0',
+        status: 'pending',
+        costCredits: 100,
+        createdAt: expiredCreatedAt,
+      } as ImageGeneration;
+
+      imageRepoMock.save = jest.fn().mockImplementation(async (entity) => entity);
+
+      const healed = await service.healTimeoutTask(pendingTask);
+
+      expect(healed.status).toBe('failed');
+      expect(healed.errorMessage).toContain('生图任务超时');
+      expect(creditsServiceMock.refundDirectCredits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          amount: 100,
+          businessType: CreditBusinessType.IMAGE_GENERATION,
+          businessId: 'image-task-timeout',
+        }),
+      );
+    });
+
+    it('getHistory 分页拉取时对超时的 pending 记录触发惰性自愈', async () => {
+      const expiredCreatedAt = new Date(Date.now() - 5 * 60 * 1000);
+      const expiredTask = {
+        id: 'image-task-history',
+        userId: 'user-1',
+        modelId: 'grok-imagine-image-2.0',
+        status: 'pending',
+        costCredits: 100,
+        createdAt: expiredCreatedAt,
+      } as ImageGeneration;
+
+      imageRepoMock.findAndCount = jest.fn().mockResolvedValue([[expiredTask], 1]);
+      imageRepoMock.save = jest.fn().mockImplementation(async (entity) => entity);
+
+      const result = await service.getHistory('user-1', 1, 10);
+
+      expect(result.items[0].status).toBe('failed');
+      expect(creditsServiceMock.refundDirectCredits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessId: 'image-task-history',
+          amount: 100,
+        }),
+      );
     });
   });
 });

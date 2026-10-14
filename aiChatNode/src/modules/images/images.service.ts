@@ -4,9 +4,11 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -28,8 +30,11 @@ export interface UpstreamImageResponse {
 }
 
 @Injectable()
-export class ImagesService {
+export class ImagesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ImagesService.name);
+  private timeoutSweepTimer?: NodeJS.Timeout;
+  private isDestroyed = false;
+  private static readonly IMAGE_TIMEOUT_MS = 3 * 60 * 1000;
 
   constructor(
     @InjectRepository(ImageGeneration)
@@ -39,6 +44,81 @@ export class ImagesService {
     private readonly aiModelService: AiModelService,
     private readonly userService: UserService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.sweepTimeoutTasks();
+      this.timeoutSweepTimer = setInterval(() => {
+        this.sweepTimeoutTasks().catch((err) =>
+          this.logger.warn(`生图定时巡检执行异常: ${err.message}`),
+        );
+      }, 60000);
+    } catch (err: any) {
+      this.logger.warn(`初始化生图超时巡检失败: ${err.message}`);
+    }
+  }
+
+  onModuleDestroy() {
+    this.isDestroyed = true;
+    if (this.timeoutSweepTimer) {
+      clearInterval(this.timeoutSweepTimer);
+    }
+  }
+
+  /**
+   * 检测并自愈超时生图任务
+   */
+  async healTimeoutTask(task: ImageGeneration): Promise<ImageGeneration> {
+    if (task.status !== 'pending') {
+      return task;
+    }
+
+    const elapsed = Date.now() - new Date(task.createdAt).getTime();
+    if (elapsed <= ImagesService.IMAGE_TIMEOUT_MS) {
+      return task;
+    }
+
+    task.status = 'failed';
+    task.errorMessage = '生图任务超时，已自动退还积分';
+    const updated = await this.imageRepo.save(task);
+
+    if (task.costCredits > 0) {
+      await this.creditsService.refundDirectCredits({
+        userId: task.userId,
+        amount: task.costCredits,
+        businessType: CreditBusinessType.IMAGE_GENERATION,
+        businessId: task.id,
+        modelId: task.modelId,
+        remark: '生图超时退款',
+      });
+      this.logger.warn(`生图任务 ${task.id} 超时，已自愈为失败并退还 ${task.costCredits} 积分`);
+    }
+
+    return updated;
+  }
+
+  /**
+   * 定时巡检自愈所有超时的僵尸生图任务
+   */
+  async sweepTimeoutTasks(): Promise<void> {
+    if (this.isDestroyed) return;
+    try {
+      const threshold = new Date(Date.now() - ImagesService.IMAGE_TIMEOUT_MS);
+      const timeoutTasks = await this.imageRepo.find({
+        where: {
+          status: 'pending',
+          createdAt: LessThan(threshold),
+        },
+        take: 50,
+      });
+
+      for (const task of timeoutTasks) {
+        await this.healTimeoutTask(task);
+      }
+    } catch (err: any) {
+      this.logger.warn(`生图超时巡检失败: ${err.message}`);
+    }
+  }
 
   /**
    * 获取本地图片转存目录
@@ -250,8 +330,12 @@ export class ImagesService {
       take,
     });
 
+    const healedItems = await Promise.all(
+      items.map((item) => this.healTimeoutTask(item)),
+    );
+
     return {
-      items,
+      items: healedItems,
       total,
       page,
       pageSize: take,

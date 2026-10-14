@@ -64,6 +64,18 @@
           </a-image-preview-group>
         </div>
 
+        <!-- 失败状态占位卡片 -->
+        <div
+          v-else-if="task.status === 'failed'"
+          class="failed-placeholder"
+          :class="`aspect-${task.aspectRatio.replace(':', '-')}`"
+        >
+          <CloseCircleOutlined class="failed-icon" />
+          <span class="failed-title">生成未能完成</span>
+          <span class="failed-reason">{{ task.errorMessage || '未知异常' }}</span>
+          <span class="failed-refund-tag">{{ task.costCredits }} 积分已全额退还</span>
+        </div>
+
         <!-- 任务信息与快捷操作 -->
         <div class="task-footer">
           <div class="prompt-display">
@@ -161,6 +173,7 @@ import {
   RedoOutlined,
   EyeOutlined,
   DeleteOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import { getApiBaseUrl } from '@/utils/common'
@@ -527,6 +540,45 @@ const handleDownload = async (url: string, prompt: string, index: number) => {
 
 .action-icon-btn:hover {
   background: rgba(0, 0, 0, 0.85);
+}
+
+.failed-placeholder {
+  width: 100%;
+  min-height: 180px;
+  background: #fff5f5;
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 16px;
+  box-sizing: border-box;
+
+  .failed-icon {
+    font-size: 28px;
+    color: #ef4444;
+  }
+  .failed-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: #b91c1c;
+  }
+  .failed-reason {
+    font-size: 12px;
+    color: #ef4444;
+    text-align: center;
+    max-width: 90%;
+  }
+  .failed-refund-tag {
+    font-size: 11px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #dc2626;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+  }
 }
 
 .task-footer {

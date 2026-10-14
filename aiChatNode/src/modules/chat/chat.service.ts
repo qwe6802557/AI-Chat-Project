@@ -301,6 +301,7 @@ export class ChatService {
     durationMs?: number | null;
     sources?: SearchSource[] | null;
     toolCalls?: ToolExecutionRecord[] | null;
+    knowledgeBaseIds?: string[];
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
       let targetSessionId = params.sessionId;
@@ -310,6 +311,7 @@ export class ChatService {
           userId: params.userId,
           title: '新对话',
           lastActiveAt: new Date(),
+          knowledgeBaseIds: params.knowledgeBaseIds || [],
         });
         const savedSession = await chatSessionRepository.save(session);
         targetSessionId = savedSession.id;
@@ -531,9 +533,19 @@ export class ChatService {
     }
 
     const sessionId = createChatDto.sessionId;
+    let boundSession: ChatSession | null = null;
     if (sessionId) {
-      await this.chatSessionService.findByIdForUser(sessionId, userId);
+      boundSession = await this.chatSessionService.findByIdForUser(sessionId, userId);
+      if (createChatDto.knowledgeBaseIds !== undefined) {
+        await this.chatSessionService.update(sessionId, {
+          knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+        });
+      }
     }
+
+    const effectiveKnowledgeBaseIds = createChatDto.knowledgeBaseIds?.length
+      ? createChatDto.knowledgeBaseIds
+      : (boundSession?.knowledgeBaseIds || []);
 
     const clientRequestId = this.createClientRequestId(
       createChatDto.clientRequestId,
@@ -582,7 +594,7 @@ export class ChatService {
     const ragContext = await this.resolveKnowledgeBaseContext({
       userId,
       message: createChatDto.message,
-      knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+      knowledgeBaseIds: effectiveKnowledgeBaseIds,
     });
 
     if (ragContext.sources.length > 0) {
@@ -756,6 +768,7 @@ export class ChatService {
         durationMs,
         sources: searchResult?.sources || null,
         toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
+        knowledgeBaseIds: effectiveKnowledgeBaseIds,
       });
 
       reservedSessionId = persistedSessionId;
@@ -951,16 +964,28 @@ export class ChatService {
     }
 
     let sessionId = createChatDto.sessionId;
+    let boundSession: ChatSession | null = null;
     if (!sessionId) {
       this.logger.log('未提供会话ID，创建新会话');
       const newSession = await this.chatSessionService.create({
         userId,
         title: '新对话',
+        knowledgeBaseIds: createChatDto.knowledgeBaseIds || [],
       });
       sessionId = newSession.id;
+      boundSession = newSession;
     } else {
-      await this.chatSessionService.findByIdForUser(sessionId, userId);
+      boundSession = await this.chatSessionService.findByIdForUser(sessionId, userId);
+      if (createChatDto.knowledgeBaseIds !== undefined) {
+        await this.chatSessionService.update(sessionId, {
+          knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+        });
+      }
     }
+
+    const effectiveKnowledgeBaseIds = createChatDto.knowledgeBaseIds?.length
+      ? createChatDto.knowledgeBaseIds
+      : (boundSession?.knowledgeBaseIds || []);
 
     const clientRequestId = this.createClientRequestId(
       createChatDto.clientRequestId,
@@ -1006,7 +1031,7 @@ export class ChatService {
     const ragContext = await this.resolveKnowledgeBaseContext({
       userId,
       message: createChatDto.message,
-      knowledgeBaseIds: createChatDto.knowledgeBaseIds,
+      knowledgeBaseIds: effectiveKnowledgeBaseIds,
     });
 
     if (ragContext.sources.length > 0) {

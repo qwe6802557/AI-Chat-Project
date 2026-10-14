@@ -184,4 +184,56 @@ describe('VideoService', () => {
       ForbiddenException,
     );
   });
+
+  it('heals timeout task and refunds credits when older than 10 minutes', async () => {
+    const expiredCreatedAt = new Date(Date.now() - 11 * 60 * 1000);
+    const timeoutTask = {
+      id: 'task-timeout-1',
+      userId: 'user-1',
+      modelId: 'Wan-AI/Wan2.2-T2V-A14B',
+      status: 'processing',
+      costCredits: 200,
+      createdAt: expiredCreatedAt,
+    } as VideoGeneration;
+
+    videoRepoMock.save = jest.fn().mockImplementation(async (entity) => entity);
+
+    const healed = await service.healTimeoutTask(timeoutTask);
+
+    expect(healed.status).toBe('failed');
+    expect(healed.errorMessage).toContain('视频生成任务排队超时');
+    expect(creditsServiceMock.refundDirectCredits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        amount: 200,
+        businessType: CreditBusinessType.VIDEO_GENERATION,
+        businessId: 'task-timeout-1',
+      }),
+    );
+  });
+
+  it('lazily heals timeout task on getTaskStatus', async () => {
+    const expiredCreatedAt = new Date(Date.now() - 15 * 60 * 1000);
+    const timeoutTask = {
+      id: 'task-lazy-1',
+      userId: 'user-1',
+      modelId: 'Wan-AI/Wan2.2-T2V-A14B',
+      status: 'pending',
+      costCredits: 200,
+      createdAt: expiredCreatedAt,
+    } as VideoGeneration;
+
+    videoRepoMock.findOne = jest.fn().mockResolvedValue(timeoutTask);
+    videoRepoMock.save = jest.fn().mockImplementation(async (entity) => entity);
+
+    const result = await service.getTaskStatus('user-1', 'task-lazy-1');
+
+    expect(result.status).toBe('failed');
+    expect(creditsServiceMock.refundDirectCredits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        businessId: 'task-lazy-1',
+        amount: 200,
+      }),
+    );
+  });
 });

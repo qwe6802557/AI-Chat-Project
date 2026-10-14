@@ -16,6 +16,8 @@ class ChatDocumentPreviewSheet extends StatelessWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ChatDocumentPreviewSheet(item: item),
     );

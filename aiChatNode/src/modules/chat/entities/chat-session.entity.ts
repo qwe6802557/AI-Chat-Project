@@ -74,6 +74,12 @@ export class ChatSession {
   lastActiveAt: Date;
 
   /**
+   * 关联挂载的知识库 ID 列表
+   */
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  knowledgeBaseIds: string[];
+
+  /**
    * 创建时间
    */
   @CreateDateColumn()

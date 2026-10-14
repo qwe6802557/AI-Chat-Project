@@ -10,10 +10,12 @@ import 'chat_image_lightbox.dart';
 /// 用户消息气泡组件（支持多模态图片自适应网格、全屏手势缩放灯箱与文档附件）
 class ChatUserMessageBubble extends StatelessWidget {
   final ChatMessageModel msg;
+  final VoidCallback? onRetry;
 
   const ChatUserMessageBubble({
     super.key,
     required this.msg,
+    this.onRetry,
   });
 
   Widget _buildSingleImage(
@@ -215,10 +217,46 @@ class ChatUserMessageBubble extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4.0),
+            if (msg.status == MessageStatus.failedOffline)
+              GestureDetector(
+                onTap: onRetry,
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 2.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFFECACA), width: 0.8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh_rounded, size: 12, color: Color(0xFFDC2626)),
+                      SizedBox(width: 4),
+                      Text(
+                        '离线暂存 · 点击重发',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFDC2626),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.done_all_rounded, size: 14.0, color: StitchTokens.playbackEmerald),
+                Icon(
+                  msg.status == MessageStatus.failedOffline
+                      ? Icons.cloud_off_rounded
+                      : Icons.done_all_rounded,
+                  size: 14.0,
+                  color: msg.status == MessageStatus.failedOffline
+                      ? const Color(0xFFDC2626)
+                      : StitchTokens.playbackEmerald,
+                ),
                 const SizedBox(width: 4.0),
                 Text(
                   '${msg.createdAt.hour.toString().padLeft(2, '0')}:${msg.createdAt.minute.toString().padLeft(2, '0')}',

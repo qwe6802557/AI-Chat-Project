@@ -45,6 +45,7 @@ export class ChatSessionService {
       userId: createSessionDto.userId,
       title: createSessionDto.title || '新对话',
       lastActiveAt: new Date(),
+      knowledgeBaseIds: createSessionDto.knowledgeBaseIds || [],
     });
 
     this.logger.log(`准备保存会话: ${JSON.stringify(session)}`);
@@ -232,6 +233,9 @@ export class ChatSessionService {
     }
     if (updateSessionDto.isArchived !== undefined) {
       session.isArchived = updateSessionDto.isArchived;
+    }
+    if (updateSessionDto.knowledgeBaseIds !== undefined) {
+      session.knowledgeBaseIds = updateSessionDto.knowledgeBaseIds;
     }
 
     const savedSession = await this.chatSessionRepository.save(session);

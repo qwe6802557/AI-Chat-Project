@@ -179,7 +179,7 @@ const handleFileSelected = async (event: Event) => {
   uploadingImage.value = true
   try {
     const res = await uploadFiles([file])
-    if (res.data && res.data.length > 0) {
+    if (res.data && res.data.length > 0 && res.data[0]?.url) {
       const uploadedUrl = res.data[0].url
       referenceImageUrl.value = uploadedUrl
       message.success('参考图上传成功，已切换至图生视频模式')
