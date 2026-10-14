@@ -38,6 +38,14 @@
         <!-- 正常模式 -->
         <div v-else class="conversation-content">
           <span class="conversation-title">{{ conversation.title }}</span>
+          <span
+            v-if="conversation.knowledgeBaseIds && conversation.knowledgeBaseIds.length > 0"
+            class="kb-session-badge"
+            :title="`已关联 ${conversation.knowledgeBaseIds.length} 个知识库`"
+          >
+            <DatabaseOutlined class="kb-badge-icon" />
+            <span class="kb-badge-count">{{ conversation.knowledgeBaseIds.length }}</span>
+          </span>
         </div>
 
         <!-- 操作按钮 -->
@@ -82,7 +90,8 @@ import {
   MessageOutlined,
   DeleteOutlined,
   MoreOutlined,
-  EditOutlined
+  EditOutlined,
+  DatabaseOutlined
 } from '@ant-design/icons-vue'
 import type { Conversation } from '@/interface/conversation'
 
@@ -282,14 +291,42 @@ const handleDeleteConversation = (conversation: Conversation) => {
       .conversation-content {
         flex: 1;
         min-width: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
       }
 
       .conversation-title {
         display: block;
-        width: 100%;
+        flex: 1;
+        min-width: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .kb-session-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        padding: 1px 5px;
+        font-size: 11px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-weight: 500;
+        color: #2563eb;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 4px;
+        margin-left: 6px;
+        flex-shrink: 0;
+
+        .kb-badge-icon {
+          font-size: 10px;
+        }
+
+        .kb-badge-count {
+          line-height: 1;
+        }
       }
 
       .conversation-title-input {

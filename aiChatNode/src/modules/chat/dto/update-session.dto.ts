@@ -24,4 +24,15 @@ export class UpdateSessionDto {
     required: false,
   })
   isArchived?: boolean;
+
+  /**
+   * 关联挂载的知识库 ID 列表
+   */
+  @ApiProperty({
+    description: '关联挂载的知识库 ID 列表',
+    example: ['b94b0f90-1234-4567-89ab-cdef01234567'],
+    required: false,
+    type: [String],
+  })
+  knowledgeBaseIds?: string[];
 }

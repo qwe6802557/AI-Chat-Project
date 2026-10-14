@@ -229,6 +229,7 @@ const handleGenerate = async (params: CreateVideoGenerationParams) => {
   const tempId = `temp_${Date.now()}`
   const optimisticTask: VideoGenerationTask = {
     id: tempId,
+    userId: authStore.userId || '',
     prompt: params.prompt,
     modelId: params.model || 'wanx2.1-t2v-turbo',
     status: 'pending',

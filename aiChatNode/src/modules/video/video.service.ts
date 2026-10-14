@@ -8,7 +8,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -42,7 +42,9 @@ export interface SiliconFlowStatusResponse {
 export class VideoService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(VideoService.name);
   private readonly activePollers = new Map<string, NodeJS.Timeout>();
+  private timeoutSweepTimer?: NodeJS.Timeout;
   private isDestroyed = false;
+  private static readonly VIDEO_TIMEOUT_MS = 10 * 60 * 1000;
 
   constructor(
     @InjectRepository(VideoGeneration)
@@ -53,10 +55,12 @@ export class VideoService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   /**
-   * 服务启动时恢复所有未完结任务的状态轮询
+   * 服务启动时执行超时任务清理并恢复活跃任务状态轮询
    */
   async onModuleInit() {
     try {
+      await this.sweepTimeoutTasks();
+
       const pendingTasks = await this.videoRepo.find({
         where: [
           { status: 'pending' },
@@ -72,20 +76,90 @@ export class VideoService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
+
+      this.timeoutSweepTimer = setInterval(() => {
+        this.sweepTimeoutTasks().catch((err) =>
+          this.logger.warn(`视频定时巡检执行异常: ${err.message}`),
+        );
+      }, 60000);
     } catch (err: any) {
       this.logger.warn(`初始化视频轮询失败: ${err.message}`);
     }
   }
 
   /**
-   * 模块卸载/测试清理时停止所有活跃轮询
+   * 模块卸载/测试清理时停止所有活跃轮询与定时器
    */
   onModuleDestroy() {
     this.isDestroyed = true;
+    if (this.timeoutSweepTimer) {
+      clearInterval(this.timeoutSweepTimer);
+    }
     for (const timer of this.activePollers.values()) {
       clearTimeout(timer);
     }
     this.activePollers.clear();
+  }
+
+  /**
+   * 检测并自愈超时视频任务
+   */
+  async healTimeoutTask(task: VideoGeneration): Promise<VideoGeneration> {
+    if (task.status !== 'pending' && task.status !== 'processing') {
+      return task;
+    }
+
+    const elapsed = Date.now() - new Date(task.createdAt).getTime();
+    if (elapsed <= VideoService.VIDEO_TIMEOUT_MS) {
+      return task;
+    }
+
+    const poller = this.activePollers.get(task.id);
+    if (poller) {
+      clearTimeout(poller);
+      this.activePollers.delete(task.id);
+    }
+
+    task.status = 'failed';
+    task.errorMessage = '视频生成任务排队超时，已自动退还积分';
+    const updated = await this.videoRepo.save(task);
+
+    if (task.costCredits > 0) {
+      await this.creditsService.refundDirectCredits({
+        userId: task.userId,
+        amount: task.costCredits,
+        businessType: CreditBusinessType.VIDEO_GENERATION,
+        businessId: task.id,
+        modelId: task.modelId,
+        remark: '视频生成超时退款',
+      });
+      this.logger.warn(`视频任务 ${task.id} 超时，已自愈为失败并退还 ${task.costCredits} 积分`);
+    }
+
+    return updated;
+  }
+
+  /**
+   * 定时巡检自愈所有超时的僵尸视频任务
+   */
+  async sweepTimeoutTasks(): Promise<void> {
+    if (this.isDestroyed) return;
+    try {
+      const threshold = new Date(Date.now() - VideoService.VIDEO_TIMEOUT_MS);
+      const timeoutTasks = await this.videoRepo.find({
+        where: [
+          { status: 'pending', createdAt: LessThan(threshold) },
+          { status: 'processing', createdAt: LessThan(threshold) },
+        ],
+        take: 50,
+      });
+
+      for (const task of timeoutTasks) {
+        await this.healTimeoutTask(task);
+      }
+    } catch (err: any) {
+      this.logger.warn(`视频超时巡检失败: ${err.message}`);
+    }
   }
 
   /**
@@ -424,18 +498,22 @@ export class VideoService implements OnModuleInit, OnModuleDestroy {
       take: pageSize,
     });
 
-    return { list, total, page, pageSize };
+    const healedList = await Promise.all(
+      list.map((task) => this.healTimeoutTask(task)),
+    );
+
+    return { list: healedList, total, page, pageSize };
   }
 
   /**
-   * 查询指定任务状态
+   * 查询指定任务状态（惰性自愈）
    */
   async getTaskStatus(userId: string, taskId: string): Promise<VideoGeneration> {
     const task = await this.videoRepo.findOne({ where: { id: taskId, userId } });
     if (!task) {
       throw new NotFoundException('视频任务不存在');
     }
-    return task;
+    return this.healTimeoutTask(task);
   }
 
   /**

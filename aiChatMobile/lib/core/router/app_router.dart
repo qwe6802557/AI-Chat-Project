@@ -9,10 +9,11 @@ import '../../features/video/presentation/video_page.dart';
 import '../../features/voice/presentation/voice_page.dart';
 import '../../features/explore/presentation/explore_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
+import '../../features/chat/providers/chat_provider.dart';
+import '../../shared/widgets/animated_branch_fade.dart';
 import '../../shared/widgets/floating_glass_nav_bar.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
-final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// 路由监听器：桥接 Riverpod 认证状态与 GoRouter 的 refreshListenable 机制
 class RouterNotifier extends ChangeNotifier {
@@ -66,48 +67,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/profile',
         builder: (context, state) => const ProfilePage(),
       ),
-      ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) {
-          final location = state.uri.path;
-          int currentIndex = 0;
-          if (location.startsWith('/history')) {
-            currentIndex = 1;
-          } else if (location.startsWith('/video')) {
-            currentIndex = 2;
-          } else if (location.startsWith('/voice')) {
-            currentIndex = 3;
-          } else if (location.startsWith('/explore')) {
-            currentIndex = 4;
-          }
-
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
           return Scaffold(
             body: Stack(
               children: [
-                Positioned.fill(child: child),
+                Positioned.fill(
+                  child: AnimatedBranchFade(
+                    currentIndex: navigationShell.currentIndex,
+                    child: navigationShell,
+                  ),
+                ),
                 Positioned(
                   left: 0,
                   right: 0,
                   bottom: 0,
                   child: FloatingGlassNavBar(
-                    currentIndex: currentIndex,
+                    currentIndex: navigationShell.currentIndex,
                     onTabSelected: (index) {
-                      switch (index) {
-                        case 0:
-                          context.go('/chat');
-                          break;
-                        case 1:
-                          context.go('/history');
-                          break;
-                        case 2:
-                          context.go('/video');
-                          break;
-                        case 3:
-                          context.go('/voice');
-                          break;
-                        case 4:
-                          context.go('/explore');
-                          break;
+                      if (index == navigationShell.currentIndex) {
+                        // 重复点击当前已激活的 Tab
+                        if (index == 0) {
+                          ref.read(chatScrollToBottomTriggerProvider.notifier).state++;
+                        }
+                      } else {
+                        navigationShell.goBranch(
+                          index,
+                          initialLocation: index == navigationShell.currentIndex,
+                        );
                       }
                     },
                   ),
@@ -116,26 +103,46 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           );
         },
-        routes: [
-          GoRoute(
-            path: '/chat',
-            builder: (context, state) => const ChatPage(),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/chat',
+                builder: (context, state) => const ChatPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/history',
-            builder: (context, state) => const HistoryPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/history',
+                builder: (context, state) => const HistoryPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/video',
-            builder: (context, state) => const VideoPage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/video',
+                builder: (context, state) => const VideoPage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/voice',
-            builder: (context, state) => const VoicePage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/voice',
+                builder: (context, state) => const VoicePage(),
+              ),
+            ],
           ),
-          GoRoute(
-            path: '/explore',
-            builder: (context, state) => const ExplorePage(),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/explore',
+                builder: (context, state) => const ExplorePage(),
+              ),
+            ],
           ),
         ],
       ),

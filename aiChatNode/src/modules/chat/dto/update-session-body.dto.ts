@@ -6,6 +6,7 @@ import {
   IsString,
   IsBoolean,
   MaxLength,
+  IsArray,
 } from 'class-validator';
 
 /**
@@ -49,4 +50,18 @@ export class UpdateSessionBodyDto {
   @IsOptional()
   @IsBoolean({ message: 'isArchived 必须是布尔值' })
   isArchived?: boolean;
+
+  /**
+   * 关联挂载的知识库 ID 列表（可选）
+   */
+  @ApiProperty({
+    description: '关联挂载的知识库 ID 列表',
+    example: ['b94b0f90-1234-4567-89ab-cdef01234567'],
+    required: false,
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray({ message: 'knowledgeBaseIds 必须是数组' })
+  @IsUUID('4', { each: true, message: 'knowledgeBaseIds 元素必须是 UUID' })
+  knowledgeBaseIds?: string[];
 }

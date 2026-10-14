@@ -41,22 +41,22 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.0',
-      latestVersionCode: 2,
+      latestVersion: '1.1.4',
+      latestVersionCode: 6,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '18.6 MB',
+      packageSize: '19.5 MB',
       releaseNotes: [
-        '全新发布 AI 视频创作工坊，全面对齐阿里通义万相 Wan2.2-14B 影视级大模型',
-        '支持 16:9 / 9:16 / 1:1 多画幅文生视频与首帧参考图生视频',
-        '原地卡片流式渲染接管与 4 秒智能状态轮询，失败自动全额退还积分',
-        '暗色影院级全屏沉浸预览弹窗与高清 MP4 流式播放下载',
-        '底部悬浮毛玻璃主导航栏升级，全模态交互体验深度优化',
+        '彻底修复插件工具中心与知识库底部抽屉被悬浮底栏（FloatingNavBar）遮挡的层级缺陷',
+        '全局模态底栏升级为根导航器挂载（useRootNavigator），确保弹窗完全置顶于毛玻璃底栏之上',
+        '优化抽屉高度约束与底部安全距离（SafeArea + 24px），彻底杜绝尾部选项被裁切截断',
+        '底栏架构保活（Keep-Alive）与 150ms 优雅淡入过渡持续生效，秒开无白屏',
+        '延续超轻量 ARM64 混淆优化构建，安装包严格保持 ~19.5 MB',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-13T07:13:00.000Z',
+      publishedAt: '2026-10-14T08:55:00.000Z',
     };
   }
 

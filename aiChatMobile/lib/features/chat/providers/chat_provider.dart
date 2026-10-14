@@ -15,6 +15,8 @@ import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
 import '../domain/tool_model.dart';
 import '../domain/knowledge_base_model.dart';
+import '../../../core/storage/hive_storage_service.dart';
+import '../../../core/network/connectivity_provider.dart';
 
 class ChatState {
   final String? activeSessionId;
@@ -75,18 +77,26 @@ class ChatState {
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
   final client = ref.watch(dioClientProvider);
-  return ChatRepository(client);
+  final hiveStorage = ref.watch(hiveStorageServiceProvider);
+  return ChatRepository(client, hiveStorage);
 });
 
 final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
   final repo = ref.watch(chatRepositoryProvider);
   final fileUploadRepo = ref.watch(fileUploadRepositoryProvider);
+  final hiveStorage = ref.watch(hiveStorageServiceProvider);
   final authState = ref.watch(authProvider);
-  final notifier = ChatNotifier(repo, fileUploadRepo, authState.user?.id);
+  final notifier = ChatNotifier(repo, fileUploadRepo, hiveStorage, ref, authState.user?.id);
   if (authState.user != null) {
     notifier.updateCredits(authState.user!.credits.remaining);
     notifier.loadSessions();
   }
+  ref.listen<NetworkState>(connectivityProvider, (prev, next) {
+    if (prev != null && !prev.isOnline && next.isOnline) {
+      notifier.flushOfflineQueue();
+      notifier.loadSessions();
+    }
+  });
   return notifier;
 });
 
@@ -94,11 +104,19 @@ final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
 class ChatNotifier extends StateNotifier<ChatState> {
   final ChatRepository _repository;
   final FileUploadRepository _fileUploadRepo;
+  final HiveStorageService _hiveStorage;
+  final Ref _ref;
   final String? _currentUserId;
   CancelToken? _cancelToken;
   StreamSubscription? _streamSubscription;
 
-  ChatNotifier(this._repository, this._fileUploadRepo, this._currentUserId) : super(const ChatState());
+  ChatNotifier(
+    this._repository,
+    this._fileUploadRepo,
+    this._hiveStorage,
+    this._ref,
+    this._currentUserId,
+  ) : super(const ChatState());
 
   void updateCredits(int remaining) {
     state = state.copyWith(creditsRemaining: remaining);
@@ -404,6 +422,15 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   Future<void> loadSessions() async {
     if (_currentUserId == null) return;
+    // 优先加载本地快照 (SWR) 秒开
+    final cached = _repository.getCachedSessions();
+    if (cached.isNotEmpty && state.sessions.isEmpty) {
+      state = state.copyWith(sessions: cached);
+      if (state.activeSessionId == null) {
+        selectSession(cached.first.id);
+      }
+    }
+
     try {
       final sessions = await _repository.getSessions(_currentUserId);
       state = state.copyWith(sessions: sessions);
@@ -414,7 +441,19 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }
 
   Future<void> selectSession(String sessionId) async {
-    state = state.copyWith(activeSessionId: sessionId);
+    final matches = state.sessions.where((s) => s.id == sessionId);
+    final session = matches.isNotEmpty ? matches.first : null;
+    state = state.copyWith(
+      activeSessionId: sessionId,
+      selectedKnowledgeBaseIds: session?.knowledgeBaseIds ?? [],
+    );
+
+    // 优先读取本地会话消息快照 (SWR) 秒开
+    final cachedMessages = _repository.getCachedMessages(sessionId);
+    if (cachedMessages.isNotEmpty) {
+      state = state.copyWith(messages: cachedMessages);
+    }
+
     try {
       final messages = await _repository.getSessionMessages(sessionId);
       state = state.copyWith(messages: messages);
@@ -426,6 +465,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
       activeSessionId: null,
       messages: [],
       pendingAttachments: [],
+      selectedKnowledgeBaseIds: [],
     );
   }
 
@@ -485,6 +525,23 @@ class ChatNotifier extends StateNotifier<ChatState> {
       createdAt: DateTime.now(),
       searchStatus: state.isWebSearchEnabled ? 'searching' : null,
     );
+
+    final isOnline = _ref.read(connectivityProvider).isOnline;
+    if (!isOnline) {
+      final offlineUserMsg = userMessage.copyWith(status: MessageStatus.failedOffline);
+      final updatedMsgs = [...state.messages, offlineUserMsg];
+      state = state.copyWith(
+        messages: updatedMsgs,
+        pendingAttachments: [],
+        isGenerating: false,
+        errorMessage: '处于离线模式，消息已暂存至待发队列',
+      );
+      await _hiveStorage.enqueueOfflineMessage(offlineUserMsg);
+      if (state.activeSessionId != null) {
+        await _hiveStorage.saveMessages(state.activeSessionId!, updatedMsgs);
+      }
+      return;
+    }
 
     state = state.copyWith(
       messages: [...state.messages, userMessage, assistantPlaceholder],
@@ -634,6 +691,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
         return msg;
       }).toList(),
     );
+    if (state.activeSessionId != null) {
+      _hiveStorage.saveMessages(state.activeSessionId!, state.messages);
+    }
   }
 
   void _handleStreamError(String assistantMessageId, String error) {
@@ -649,6 +709,42 @@ class ChatNotifier extends StateNotifier<ChatState> {
         return msg;
       }).toList(),
     );
+    if (state.activeSessionId != null) {
+      _hiveStorage.saveMessages(state.activeSessionId!, state.messages);
+    }
+  }
+
+  /// 手动重发离线暂存消息
+  Future<void> retryMessage(String messageId) async {
+    final matches = state.messages.where((m) => m.id == messageId);
+    if (matches.isEmpty) return;
+    final target = matches.first;
+
+    // 从离线队列与当前列表中清除该消息
+    await _hiveStorage.dequeueOfflineMessage(messageId);
+    state = state.copyWith(
+      messages: state.messages.where((m) => m.id != messageId).toList(),
+    );
+
+    // 重新发起发送
+    await sendMessage(target.content);
+  }
+
+  /// 网络恢复时自动冲刷离线待发队列
+  Future<void> flushOfflineQueue() async {
+    final queue = _hiveStorage.getOfflineQueue();
+    if (queue.isEmpty || state.isGenerating) return;
+
+    for (final offlineMsg in queue) {
+      if (offlineMsg.sessionId == state.activeSessionId) {
+        await _hiveStorage.dequeueOfflineMessage(offlineMsg.id);
+        state = state.copyWith(
+          messages: state.messages.where((m) => m.id != offlineMsg.id).toList(),
+        );
+        await sendMessage(offlineMsg.content);
+        break; // 保持串行单次流式发送
+      }
+    }
   }
 
   Future<void> deleteSession(String sessionId) async {
@@ -667,3 +763,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     super.dispose();
   }
 }
+
+/// 底栏再次点击“对话”Tab 或跨页跳转吸底事件通知 Provider
+final chatScrollToBottomTriggerProvider = StateProvider<int>((ref) => 0);
+

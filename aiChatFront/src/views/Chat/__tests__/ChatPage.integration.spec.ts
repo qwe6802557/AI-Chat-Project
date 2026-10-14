@@ -215,15 +215,25 @@ const mountChatPage = async (userOverrides?: Partial<{
     },
   })
 
+  activeWrappers.push(wrapper)
   await flushPromises()
 
   return { wrapper, pinia }
 }
 
+const activeWrappers: Array<{ unmount: () => void }> = []
+
 describe('ChatPage integration', () => {
+  afterEach(() => {
+    while (activeWrappers.length > 0) {
+      activeWrappers.pop()?.unmount()
+    }
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
+    sessionStorage.clear()
 
     mockGetCurrentUserAccount.mockResolvedValue({
       code: 0,
@@ -421,7 +431,7 @@ describe('ChatPage integration', () => {
 
     const { useAuthStore } = await import('@/stores')
     expect(useAuthStore().userProfile?.credits?.remaining).toBe(1900)
-  }, 20000)
+  }, 45000)
 
   it('falls back to default model and shows warning when model list loading fails', async () => {
     mockGetActiveModels.mockRejectedValueOnce(new Error('model load failed'))

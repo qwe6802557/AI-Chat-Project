@@ -58,6 +58,13 @@
             </a-avatar>
           </div>
           <div class="message-content">
+            <div
+              v-if="message.role === 'assistant' && message.failover"
+              class="failover-notice-bar"
+            >
+              <ThunderboltOutlined class="failover-icon" />
+              <span>主服务繁忙，已自动无感接入高可用备用通道</span>
+            </div>
             <SearchSourceGallery
               v-if="message.role === 'assistant' && (message.sources?.length || message.searchStatus === 'searching')"
               :sources="message.sources || []"
@@ -104,6 +111,9 @@
               v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage || message.durationMs)"
               class="assistant-meta"
             >
+              <span v-if="message.failover" class="meta-chip failover-chip">
+                <ThunderboltOutlined class="failover-chip-icon" /> 高可用备用通道
+              </span>
               <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
               <span v-if="message.usage" class="meta-chip">
                 输入 {{ message.usage.promptTokens }} tok
@@ -1008,6 +1018,24 @@ $avatar-size: 32px;
         }
       }
 
+      .failover-notice-bar {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1d4ed8;
+        font-size: 11.5px;
+        margin-bottom: 8px;
+
+        .failover-icon {
+          font-size: 13px;
+          color: #2563eb;
+        }
+      }
+
       .assistant-meta {
         display: flex;
         flex-wrap: wrap;
@@ -1025,6 +1053,19 @@ $avatar-size: 32px;
           font-size: 11px;
           line-height: 1.4;
           font-variant-numeric: tabular-nums;
+
+          &.failover-chip {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+            font-weight: 500;
+
+            .failover-chip-icon {
+              font-size: 11px;
+              color: #2563eb;
+              margin-right: 4px;
+            }
+          }
         }
       }
 

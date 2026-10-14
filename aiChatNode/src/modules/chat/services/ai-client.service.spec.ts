@@ -107,8 +107,10 @@ describe('AIClientService', () => {
     healthCheck: jest.fn(),
   };
   const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
-  const aiModelService: Pick<AiModelService, 'findByModelId'> = {
+  const findActiveModelsMock = jest.fn<AiModelService['findActiveModels']>();
+  const aiModelService: Pick<AiModelService, 'findByModelId' | 'findActiveModels'> = {
     findByModelId: findByModelIdMock,
+    findActiveModels: findActiveModelsMock,
   };
   const incrementAccessCountMock =
     jest.fn<AiProviderService['incrementAccessCount']>();
@@ -441,6 +443,135 @@ describe('AIClientService', () => {
       cached: false,
       message:
         'Zaiwen 健康检查接口不可用：当前 BASE_URL 不支持 /models，请检查兼容路径配置',
+    });
+  });
+
+  describe('供应商智能熔断与无感热降级', () => {
+    it('连续 3 次暂时性故障触发供应商熔断', () => {
+      expect(service.isProviderCircuitOpen('Zaiwen')).toBe(false);
+
+      service.recordProviderFailure('Zaiwen');
+      service.recordProviderFailure('Zaiwen');
+      expect(service.isProviderCircuitOpen('Zaiwen')).toBe(false);
+
+      service.recordProviderFailure('Zaiwen');
+      expect(service.isProviderCircuitOpen('Zaiwen')).toBe(true);
+
+      // 调用成功后重置
+      service.recordProviderSuccess('Zaiwen');
+      expect(service.isProviderCircuitOpen('Zaiwen')).toBe(false);
+    });
+
+    it('主模型发生 429 限流时自动无感降级至同级备用模型并返回 failover 标识', async () => {
+      findByModelIdMock.mockResolvedValue({
+        isActive: true,
+        inputPrice: 0.5,
+        outputPrice: 2,
+        provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
+        modelName: 'GLM-5',
+        modelId: 'GLM-5',
+      });
+
+      // 主通道抛出 429 限流异常
+      zaiwenCreateChatCompletionMock.mockRejectedValueOnce(
+        new Error('429 Too Many Requests: Rate limit exceeded'),
+      );
+
+      // 备用模型池
+      findActiveModelsMock.mockResolvedValueOnce([
+        {
+          id: 'model-claude',
+          modelId: 'claude-3-5-sonnet',
+          modelName: 'Claude 3.5 Sonnet',
+          isActive: true,
+          inputPrice: 1,
+          outputPrice: 3,
+          provider: { id: 'provider-claude', name: 'Claude', isActive: true },
+        } as any,
+      ]);
+
+      // 备用通道成功返回
+      claudeCreateChatCompletionMock.mockResolvedValueOnce({
+        content: 'Fallback response from Claude',
+        model: 'claude-3-5-sonnet',
+        usage: {
+          promptTokens: 50,
+          completionTokens: 20,
+          totalTokens: 70,
+        },
+      });
+
+      const result = await service.createChatCompletion('GLM-5', [
+        { role: 'user', content: 'hello' },
+      ]);
+
+      expect(result.content).toBe('Fallback response from Claude');
+      expect(result.model).toBe('claude-3-5-sonnet');
+      expect(result.failover).toEqual(
+        expect.objectContaining({
+          primaryModelId: 'GLM-5',
+          activeModelId: 'claude-3-5-sonnet',
+          providerName: 'Claude',
+        }),
+      );
+    });
+
+    it('流式模式下主模型故障时通过 failover_notice 无感热切换至备用通道', async () => {
+      findByModelIdMock.mockResolvedValue({
+        isActive: true,
+        inputPrice: 0.5,
+        outputPrice: 2,
+        provider: { id: 'provider-1', name: 'Zaiwen', isActive: true },
+        modelName: 'GLM-5',
+        modelId: 'GLM-5',
+      });
+
+      // 主通道抛出 502 Bad Gateway 异常
+      zaiwenCreateStreamChatCompletionMock.mockRejectedValueOnce(
+        new Error('502 Bad Gateway'),
+      );
+
+      // 备用模型池
+      findActiveModelsMock.mockResolvedValueOnce([
+        {
+          id: 'model-claude',
+          modelId: 'claude-3-5-sonnet',
+          modelName: 'Claude 3.5 Sonnet',
+          isActive: true,
+          inputPrice: 1,
+          outputPrice: 3,
+          provider: { id: 'provider-claude', name: 'Claude', isActive: true },
+        } as any,
+      ]);
+
+      // 备用流式通道
+      claudeCreateStreamChatCompletionMock.mockResolvedValueOnce(
+        createAsyncChunks([
+          { type: 'answer_delta', delta: { content: 'Fallback ' } },
+          { type: 'answer_delta', delta: { content: 'stream' } },
+        ]),
+      );
+
+      const stream = await service.createStreamChatCompletion('GLM-5', [
+        { role: 'user', content: 'hello' },
+      ]);
+
+      const chunks: CompletionChunk[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      // 首个 chunk 为 failover_notice
+      expect(chunks[0].type).toBe('failover_notice');
+      expect(chunks[0].failover).toMatchObject({
+        primaryModelId: 'GLM-5',
+        activeModelId: 'claude-3-5-sonnet',
+        providerName: 'Claude',
+      });
+
+      // 后续 chunk 为备用模型实际流式内容
+      expect(chunks[1].delta?.content).toBe('Fallback ');
+      expect(chunks[2].delta?.content).toBe('stream');
     });
   });
 });

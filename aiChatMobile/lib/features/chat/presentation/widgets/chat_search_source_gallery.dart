@@ -60,6 +60,8 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: const BoxDecoration(

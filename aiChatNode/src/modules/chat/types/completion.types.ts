@@ -85,6 +85,16 @@ export interface CompletionUsageStats {
 }
 
 /**
+ * 供应商熔断降级事件
+ */
+export interface FailoverEvent {
+  primaryModelId: string;
+  activeModelId: string;
+  providerName: string;
+  reason: string;
+}
+
+/**
  * 补全响应
  */
 export interface CompletionResponse {
@@ -98,6 +108,7 @@ export interface CompletionResponse {
     content: string;
   } | null;
   toolCalls?: any[];
+  failover?: FailoverEvent | null;
 }
 
 /**
@@ -111,6 +122,7 @@ export interface CompletionChunk {
     | 'answer_delta'
     | 'tool_call_start'
     | 'tool_call_result'
+    | 'failover_notice'
     | 'done'
     | 'error';
   delta?: {
@@ -128,5 +140,7 @@ export interface CompletionChunk {
   usage?: CompletionUsageStats | null;
   error?: string;
   toolCall?: StreamingToolCallEvent;
+  failover?: FailoverEvent;
 }
+
 

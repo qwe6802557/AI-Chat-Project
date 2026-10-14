@@ -1,11 +1,14 @@
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/video_task_model.dart';
+import 'embedded_video_player.dart';
 
 /// 影院级沉浸式视频详情预览弹窗
-class VideoPreviewModal extends StatelessWidget {
+class VideoPreviewModal extends StatefulWidget {
   final VideoTaskModel task;
   final VoidCallback onReuse;
 
@@ -31,6 +34,14 @@ class VideoPreviewModal extends StatelessWidget {
     );
   }
 
+  @override
+  State<VideoPreviewModal> createState() => _VideoPreviewModalState();
+}
+
+class _VideoPreviewModalState extends State<VideoPreviewModal> {
+  bool _isDownloading = false;
+  double _downloadProgress = 0.0;
+
   String _formatDateTime(DateTime dt) {
     final y = dt.year;
     final m = dt.month.toString().padLeft(2, '0');
@@ -40,21 +51,73 @@ class VideoPreviewModal extends StatelessWidget {
     return '$y-$m-$d $hh:$mm';
   }
 
-  Future<void> _openVideoExternally(BuildContext context) async {
-    final url = task.resolvedVideoUrl;
-    if (url == null || url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法唤起系统播放器打开该视频链接')),
+  Future<void> _downloadVideoLocally(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final url = widget.task.resolvedVideoUrl;
+    if (url == null || url.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('视频地址为空，无法下载')),
       );
+      return;
+    }
+
+    if (_isDownloading) return;
+
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0.0;
+    });
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final filename = 'video_${widget.task.id}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+      final savePath = '${dir.path}/$filename';
+
+      final dio = Dio();
+      final response = await dio.download(
+        url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total > 0 && mounted) {
+            setState(() {
+              _downloadProgress = received / total;
+            });
+          }
+        },
+      );
+
+      if (response.statusCode == 200 && mounted) {
+        final file = File(savePath);
+        final sizeMb = ((await file.length()) / (1024 * 1024)).toStringAsFixed(2);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('视频已成功下载至本地 ($sizeMb MB)'),
+            backgroundColor: StitchTokens.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('下载失败: $e'),
+            backgroundColor: StitchTokens.crimsonStop,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final task = widget.task;
+
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -82,71 +145,10 @@ class VideoPreviewModal extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 顶部暗黑影院播放舞台
-                GestureDetector(
-                  onTap: () => _openVideoExternally(context),
-                  child: Container(
-                    height: 230.0,
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF020617),
-                          Color(0xFF1E1B4B),
-                          Color(0xFF0F172A),
-                        ],
-                      ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 60.0,
-                              height: 60.0,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF6366F1).withValues(alpha: 0.9),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF6366F1).withValues(alpha: 0.45),
-                                    blurRadius: 20.0,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                size: 36.0,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 12.0),
-                            const Text(
-                              '点击唤起原生硬件加速播放器全屏观看',
-                              style: TextStyle(
-                                fontSize: 13.0,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFF8FAFC),
-                              ),
-                            ),
-                            const SizedBox(height: 4.0),
-                            Text(
-                              '画幅 ${task.aspectRatio} · 时长 ${task.duration}s · H.264 MP4',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                fontFamily: 'monospace',
-                                color: Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+                // 顶部暗黑影院原生流式播放舞台
+                EmbeddedVideoPlayer(
+                  videoUrl: task.resolvedVideoUrl ?? '',
+                  aspectRatio: task.aspectRatio,
                 ),
 
                 // 详情参数与完整提示词区
@@ -248,7 +250,7 @@ class VideoPreviewModal extends StatelessWidget {
                               child: OutlinedButton.icon(
                                 onPressed: () {
                                   Navigator.of(context).pop();
-                                  onReuse();
+                                  widget.onReuse();
                                 },
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: const Color(0xFFE2E8F0),
@@ -268,7 +270,7 @@ class VideoPreviewModal extends StatelessWidget {
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: () => _openVideoExternally(context),
+                            onPressed: _isDownloading ? null : () => _downloadVideoLocally(context),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF4F46E5),
                               foregroundColor: Colors.white,
@@ -278,10 +280,21 @@ class VideoPreviewModal extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
                               ),
                             ),
-                            icon: const Icon(Icons.download_rounded, size: 17.0),
-                            label: const Text(
-                              '流式播放 / 下载高清 MP4',
-                              style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.w600),
+                            icon: _isDownloading
+                                ? const SizedBox(
+                                    width: 16.0,
+                                    height: 16.0,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.0,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.download_rounded, size: 17.0),
+                            label: Text(
+                              _isDownloading
+                                  ? '正在下载 ${(_downloadProgress * 100).toInt()}%'
+                                  : '流式播放 / 下载高清 MP4',
+                              style: const TextStyle(fontSize: 13.0, fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -292,7 +305,7 @@ class VideoPreviewModal extends StatelessWidget {
               ],
             ),
 
-            // 右上角高对比度毛玻璃圆形关闭按钮（完全置于圆角容器内部，杜绝裁切遮挡）
+            // 右上角高对比度毛玻璃圆形关闭按钮
             Positioned(
               top: 14.0,
               right: 14.0,
