@@ -91,6 +91,7 @@ export interface Message {
   searchQuery?: string
   toolCalls?: ToolCallItem[]
   attachments?: MessageAttachment[]
+  artifacts?: import('@/views/Chat/utils/assistantContent').ExtractedArtifactTag[]
   error?: string
 }
 

@@ -80,6 +80,11 @@
               :message-id="message.id"
               :reasoning="message.reasoning"
             />
+            <ArtifactCapsuleCard
+              v-for="art in getMessageArtifacts(message)"
+              :key="art.identifier"
+              :artifact="art"
+            />
             <MarkdownMessage
               v-if="message.role === 'assistant' && (message.content || !message.error)"
               class="markdown-content"
@@ -234,11 +239,46 @@ import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
+import ArtifactCapsuleCard from './Artifact/ArtifactCapsuleCard.vue'
+import { extractVisibleAssistantContent, type ExtractedArtifactTag } from '../utils/assistantContent'
+import { useArtifactStore } from '../stores/useArtifactStore'
+import { getActivePinia } from 'pinia'
 import type { Message, MessageAttachment } from '@/interface/conversation'
 
 defineOptions({
   name: 'ChatMessageViewport',
 })
+
+/**
+ * 获取消息中携带或解析出的 Artifacts，并在需要时同步注册到状态树
+ */
+const getMessageArtifacts = (messageItem: Message): ExtractedArtifactTag[] => {
+  if (messageItem.role !== 'assistant' || !messageItem.content) return []
+  if (messageItem.artifacts && messageItem.artifacts.length > 0) {
+    return messageItem.artifacts
+  }
+
+  const { artifacts } = extractVisibleAssistantContent(messageItem.content)
+  if (artifacts && artifacts.length > 0) {
+    if (getActivePinia()) {
+      const artifactStore = useArtifactStore()
+      artifacts.forEach((art) => {
+        artifactStore.registerOrUpdateArtifact({
+          identifier: art.identifier,
+          type: art.type,
+          title: art.title,
+          language: art.language,
+          content: art.content,
+          messageId: messageItem.id,
+          autoOpen: !!messageItem.streaming,
+        })
+      })
+    }
+    return artifacts
+  }
+
+  return []
+}
 
 interface Props {
   messages: Message[]
@@ -848,6 +888,13 @@ $avatar-size: 32px;
               font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
             }
 
+            .code-header-actions {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }
+
+            .open-artifact-btn,
             .copy-btn {
               background: rgba(255, 255, 255, 0.1);
               border: none;
@@ -862,6 +909,11 @@ $avatar-size: 32px;
                 background: rgba(255, 255, 255, 0.2);
                 color: #fff;
               }
+            }
+
+            .open-artifact-btn:hover {
+              background: #2563eb;
+              color: #ffffff;
             }
           }
 

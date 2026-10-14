@@ -39,10 +39,10 @@ function createRenderer(options: RenderMarkdownOptions) {
         ignoreIllegals: true,
       }).value
 
-      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" type="button">复制</button></div><code class="hljs language-${validLanguage}">${highlighted}</code></pre>`
+      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><div class="code-header-actions"><button class="open-artifact-btn" type="button" title="在右侧画布中打开">画布打开</button><button class="copy-btn" type="button">复制</button></div></div><code class="hljs language-${validLanguage}">${highlighted}</code></pre>`
     } catch {
       // 高亮失败返回原始代码
-      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><button class="copy-btn" type="button">复制</button></div><code>${escapeHtml(text)}</code></pre>`
+      return `<pre class="code-block"><div class="code-header"><span class="code-language">${languageLabel}</span><div class="code-header-actions"><button class="open-artifact-btn" type="button" title="在右侧画布中打开">画布打开</button><button class="copy-btn" type="button">复制</button></div></div><code>${escapeHtml(text)}</code></pre>`
     }
   }
 

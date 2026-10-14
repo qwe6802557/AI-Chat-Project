@@ -13,22 +13,55 @@ import { shallowRef, ref, computed, watch, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import { renderMarkdown, renderStreamingMarkdown } from '@/utils/markdown'
 import { sanitizeVisibleAssistantContent } from '../utils/assistantContent'
+import { useArtifactStore } from '../stores/useArtifactStore'
+import { getActivePinia } from 'pinia'
 
 const containerRef = ref<HTMLElement | null>(null)
 
 /**
- * 事件委托处理复制按钮点击
+ * 事件委托处理代码块按钮点击（复制 或 画布打开）
  */
 const handleClick = async (event: MouseEvent) => {
   const target = event.target as HTMLElement
-  if (!target.classList.contains('copy-btn')) return
+  const isCopy = target.classList.contains('copy-btn')
+  const isOpenArtifact = target.classList.contains('open-artifact-btn')
+  if (!isCopy && !isOpenArtifact) return
 
-  // 找到对应的code元素
+  // 找到对应的code元素与语言标签
   const codeBlock = target.closest('.code-block')
   const codeElement = codeBlock?.querySelector('code')
+  const langElement = codeBlock?.querySelector('.code-language')
   if (!codeElement) return
 
   const text = codeElement.textContent || ''
+  const lang = (langElement?.textContent || '').trim().toLowerCase()
+
+  if (isOpenArtifact) {
+    let artifactType = 'application/vnd.ant.code'
+    if (lang === 'html' || text.trim().startsWith('<html') || text.trim().startsWith('<!DOCTYPE')) {
+      artifactType = 'text/html'
+    } else if (lang === 'svg' || text.trim().startsWith('<svg')) {
+      artifactType = 'image/svg+xml'
+    } else if (lang === 'mermaid' || text.trim().startsWith('graph') || text.trim().startsWith('flowchart')) {
+      artifactType = 'application/vnd.ant.mermaid'
+    }
+
+    const shortId = `snippet-${props.messageId.slice(0, 8)}-${Math.random().toString(36).slice(2, 6)}`
+    if (getActivePinia()) {
+      const artifactStore = useArtifactStore()
+      artifactStore.registerOrUpdateArtifact({
+        identifier: shortId,
+        type: artifactType,
+        title: `${lang ? lang.toUpperCase() + ' ' : ''}代码片段`,
+        language: lang,
+        content: text,
+        messageId: props.messageId,
+        autoOpen: true,
+      })
+    }
+    message.success('已升格为 Artifact 并在右侧画布打开')
+    return
+  }
 
   try {
     await navigator.clipboard.writeText(text)
