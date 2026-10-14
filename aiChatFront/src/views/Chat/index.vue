@@ -13,6 +13,7 @@
         @logout="handleLogout"
       />
       <ChatArea
+        :style="chatAreaStyle"
         :messages="currentMessages"
         :loading="loading"
         :selected-model="selectedModel"
@@ -33,6 +34,10 @@
         @stop-generation="handleStopGeneration"
         @retry-message="handleRetryMessage"
       />
+      <ArtifactWorkspace
+        v-if="isWorkspaceOpen"
+        :style="workspaceStyle"
+      />
     </div>
   </div>
 </template>
@@ -44,9 +49,11 @@ import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatArea from './components/ChatArea.vue'
+import ArtifactWorkspace from './components/Artifact/ArtifactWorkspace.vue'
 import logger from '@/utils/logger'
 import { useStreamChat } from './hooks/useStreamChat'
 import { useAuthStore, useConversationStore } from '@/stores'
+import { useArtifactStore } from './stores/useArtifactStore'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { getActiveModels } from '@/api/model'
 import { getCurrentUserAccount } from '@/api/user'
@@ -104,6 +111,29 @@ const {
   currentConversationId,
   currentMessages
 } = storeToRefs(conversationStore)
+
+// Artifact 工作区状态
+const artifactStore = useArtifactStore()
+const { isWorkspaceOpen, isMaximized, splitRatio } = storeToRefs(artifactStore)
+
+const chatAreaStyle = computed(() => {
+  if (!isWorkspaceOpen.value || isMaximized.value) {
+    return { flex: '1 1 auto', width: '100%', minWidth: 0 }
+  }
+  return {
+    width: `${splitRatio.value * 100}%`,
+    flex: 'none',
+    minWidth: '320px',
+  }
+})
+
+const workspaceStyle = computed(() => {
+  if (isMaximized.value) return {}
+  return {
+    width: `${(1 - splitRatio.value) * 100}%`,
+    flex: 'none',
+  }
+})
 
 // 流式聊天
 const { loading, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
@@ -310,6 +340,7 @@ const handleModelChange = (modelId: string) => {
  */
 const handleNewConversation = () => {
   cancelCurrentStream()
+  artifactStore.clearArtifacts()
   conversationStore.createConversation()
   hasMoreMessages.value = false
 }
@@ -321,6 +352,7 @@ const handleSelectConversation = async (conversationId: string) => {
   if (conversationId === currentConversationId.value) return
 
   cancelCurrentStream()
+  artifactStore.clearArtifacts()
   const paginationInfo = await conversationStore.selectConversation(conversationId)
 
   if (paginationInfo) {

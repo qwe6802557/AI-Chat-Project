@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import '../../domain/artifact_model.dart';
 import '../../domain/chat_message_model.dart';
+import 'artifact_capsule_card.dart';
 import 'chat_reasoning_card.dart';
 import 'chat_search_source_gallery.dart';
 import 'chat_tool_execution_card.dart';
@@ -14,6 +16,19 @@ class ChatAssistantMessageBubble extends StatelessWidget {
     super.key,
     required this.msg,
   });
+
+  List<Widget> _buildArtifactCards(String rawContent) {
+    final result = ArtifactModel.extractFromText(rawContent);
+    if (result.artifacts.isEmpty) return const [];
+    return result.artifacts
+        .map((art) => ArtifactCapsuleCard(artifact: art))
+        .toList();
+  }
+
+  String _getCleanedContent(String rawContent) {
+    if (!rawContent.contains('<antArtifact')) return rawContent;
+    return ArtifactModel.extractFromText(rawContent).cleanedText;
+  }
 
   Widget _buildAssistantErrorCard() {
     return Container(
@@ -116,17 +131,18 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                   ChatToolExecutionGallery(toolCalls: msg.toolCalls),
                 if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty)
                   ChatReasoningCard(msg: msg),
+                ..._buildArtifactCards(msg.content),
                 if (msg.status == MessageStatus.error)
                   _buildAssistantErrorCard()
-                else
+                else if (_getCleanedContent(msg.content).isNotEmpty || msg.status == MessageStatus.streaming)
                   Text(
-                    msg.content.isEmpty && msg.status == MessageStatus.streaming
+                    _getCleanedContent(msg.content).isEmpty && msg.status == MessageStatus.streaming
                         ? '正在构思回复...'
-                        : msg.content,
+                        : _getCleanedContent(msg.content),
                     style: TextStyle(
                       fontSize: 14.0,
                       height: 1.5,
-                      color: msg.content.isEmpty ? StitchTokens.outline : StitchTokens.onSurface,
+                      color: _getCleanedContent(msg.content).isEmpty ? StitchTokens.outline : StitchTokens.onSurface,
                     ),
                   ),
               ],
