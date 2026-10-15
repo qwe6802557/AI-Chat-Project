@@ -47,6 +47,7 @@ export class AppVersionService {
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
+      packageSize: '21.0 MB',
       releaseNotes: [
         '全新上线 Artifacts 3.0：沙箱微 IDE 运行时控制台（实时捕获报错/警告/日志），SVG 支持 2x Retina 高清图片与矢量源码导出',
         '移动端升级产物多版本药丸快速回溯切换（支持一键回溯旧版与最新版）',
