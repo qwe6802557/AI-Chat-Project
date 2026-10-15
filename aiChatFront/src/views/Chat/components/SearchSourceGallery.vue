@@ -27,7 +27,7 @@
           <!-- 知识库来源卡片 (点击抽屉预览切片) -->
           <div
             v-if="source.isKnowledgeBase"
-            class="source-card kb-source-card"
+            :class="['source-card', 'kb-source-card', { highlighted: (source.id ?? (index + 1)) === highlightedSourceId }]"
             :title="source.snippet || source.title"
             @click="handleOpenKbDrawer(source)"
           >
@@ -50,7 +50,7 @@
             :href="source.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="source-card"
+            :class="['source-card', { highlighted: (source.id ?? (index + 1)) === highlightedSourceId }]"
             :title="source.snippet || source.title"
           >
             <div class="card-top-row">
@@ -82,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { GlobalOutlined, DatabaseOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import type { SearchSource } from '@/interface/chat'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
@@ -103,9 +103,14 @@ const props = withDefaults(defineProps<Props>(), {
   searchQuery: '',
 })
 
+const emit = defineEmits<{
+  'open-source': [source: SearchSource]
+}>()
+
 const failedIcons = ref<Set<number>>(new Set())
 const drawerOpen = ref(false)
 const selectedKbSource = ref<SearchSource | null>(null)
+const highlightedSourceId = ref<number | null>(null)
 
 const markIconFailed = (id: number) => {
   failedIcons.value.add(id)
@@ -114,7 +119,25 @@ const markIconFailed = (id: number) => {
 const handleOpenKbDrawer = (source: SearchSource) => {
   selectedKbSource.value = source
   drawerOpen.value = true
+  emit('open-source', source)
 }
+
+const onHighlightSource = (event: Event) => {
+  const customEvent = event as CustomEvent<{ sourceId: number | null }>
+  highlightedSourceId.value = customEvent.detail?.sourceId ?? null
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('aichat:highlight-source', onHighlightSource)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('aichat:highlight-source', onHighlightSource)
+  }
+})
 
 const isSearching = computed(() => props.searchStatus === 'searching')
 const shouldRender = computed(() => isSearching.value || (props.sources && props.sources.length > 0))
@@ -273,6 +296,18 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
 
     .card-title {
       color: #1d4ed8;
+    }
+  }
+
+  &.highlighted {
+    border-color: #2563eb !important;
+    background: #eff6ff !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25), 0 4px 12px rgba(37, 99, 235, 0.12) !important;
+    transform: translateY(-2px);
+
+    .card-title {
+      color: #1d4ed8;
+      font-weight: 600;
     }
   }
 

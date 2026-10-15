@@ -1,10 +1,26 @@
 <template>
-  <div ref="containerRef" @click="handleClick">
+  <div
+    ref="containerRef"
+    @click="handleClick"
+    @mouseover="handleMouseOver"
+    @mouseout="handleMouseOut"
+  >
     <div v-if="streaming" class="streaming-markdown">
       <div v-html="streamingHtml" />
       <span class="streaming-cursor" aria-hidden="true" />
     </div>
     <div v-else v-html="html" />
+
+    <!-- 行内引用切片浮窗预览 -->
+    <CitationPopover
+      :visible="hoveredCitation.visible"
+      :citation-id="hoveredCitation.citationId"
+      :source="hoveredCitation.source"
+      :anchor-rect="hoveredCitation.anchorRect"
+      @open-detail="handleOpenSourceDetail"
+      @mouseenter="handlePopoverMouseEnter"
+      @mouseleave="handlePopoverMouseLeave"
+    />
   </div>
 </template>
 
@@ -15,14 +31,146 @@ import { renderMarkdown, renderStreamingMarkdown } from '@/utils/markdown'
 import { sanitizeVisibleAssistantContent } from '../utils/assistantContent'
 import { useArtifactStore } from '../stores/useArtifactStore'
 import { getActivePinia } from 'pinia'
+import type { SearchSource } from '@/interface/chat'
+import CitationPopover from './CitationPopover.vue'
 
 const containerRef = ref<HTMLElement | null>(null)
 
+interface Props {
+  messageId: string
+  content: string
+  /**
+   * 是否处于流式输出中
+   * - 流式中会关闭代码高亮-并用 RAF 节流渲染，减少主线程压力
+   */
+  streaming?: boolean
+  sources?: SearchSource[]
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  streaming: false,
+  sources: () => [],
+})
+
+const emit = defineEmits<{
+  'open-source': [source: SearchSource]
+}>()
+
+const hoveredCitation = ref<{
+  visible: boolean
+  citationId: number | string
+  source: SearchSource | null
+  anchorRect: DOMRect | null
+}>({
+  visible: false,
+  citationId: 1,
+  source: null,
+  anchorRect: null,
+})
+
+let hideCitationTimer: ReturnType<typeof setTimeout> | null = null
+
+const findSourceByCitation = (citationNum: number | string): SearchSource | null => {
+  if (!props.sources || props.sources.length === 0) return null
+  const id = Number(citationNum)
+  return props.sources.find((s) => s.id === id) || props.sources[id - 1] || null
+}
+
+const handleBadgeMouseEnter = (badge: HTMLElement) => {
+  if (hideCitationTimer) {
+    clearTimeout(hideCitationTimer)
+    hideCitationTimer = null
+  }
+
+  const citationAttr = badge.getAttribute('data-citation')
+  if (!citationAttr) return
+
+  const citationId = Number(citationAttr) || citationAttr
+  const source = findSourceByCitation(citationId)
+
+  hoveredCitation.value = {
+    visible: true,
+    citationId,
+    source,
+    anchorRect: badge.getBoundingClientRect(),
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('aichat:highlight-source', {
+        detail: { sourceId: typeof citationId === 'number' ? citationId : Number(citationId) },
+      }),
+    )
+  }
+}
+
+const handleBadgeMouseLeave = () => {
+  hideCitationTimer = setTimeout(() => {
+    hoveredCitation.value.visible = false
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('aichat:highlight-source', { detail: { sourceId: null } }),
+      )
+    }
+  }, 180)
+}
+
+const handlePopoverMouseEnter = () => {
+  if (hideCitationTimer) {
+    clearTimeout(hideCitationTimer)
+    hideCitationTimer = null
+  }
+}
+
+const handlePopoverMouseLeave = () => {
+  handleBadgeMouseLeave()
+}
+
+const handleOpenSourceDetail = (source: SearchSource) => {
+  hoveredCitation.value.visible = false
+  emit('open-source', source)
+}
+
+const handleMouseOver = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  const badge = target.closest('.citation-ref-badge') as HTMLElement | null
+  if (badge) {
+    handleBadgeMouseEnter(badge)
+  }
+}
+
+const handleMouseOut = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  const related = event.relatedTarget as HTMLElement | null
+  if (target.closest('.citation-ref-badge') && (!related || !related.closest('.citation-ref-badge'))) {
+    handleBadgeMouseLeave()
+  }
+}
+
 /**
- * 事件委托处理代码块按钮点击（复制 或 画布打开）
+ * 事件委托处理代码块与引用徽章点击
  */
 const handleClick = async (event: MouseEvent) => {
   const target = event.target as HTMLElement
+
+  // 处理引用角标点击
+  const citationBadge = target.closest('.citation-ref-badge') as HTMLElement | null
+  if (citationBadge) {
+    const citationAttr = citationBadge.getAttribute('data-citation')
+    if (citationAttr) {
+      const citationId = Number(citationAttr) || citationAttr
+      const source = findSourceByCitation(citationId)
+      if (source) {
+        if (source.isKnowledgeBase) {
+          handleOpenSourceDetail(source)
+        } else if (source.url) {
+          window.open(source.url, '_blank', 'noopener,noreferrer')
+        }
+      }
+    }
+    return
+  }
+
   const isCopy = target.classList.contains('copy-btn')
   const isOpenArtifact = target.classList.contains('open-artifact-btn')
   if (!isCopy && !isOpenArtifact) return
@@ -86,17 +234,6 @@ const handleClick = async (event: MouseEvent) => {
   }
 }
 
-interface Props {
-  messageId: string
-  content: string
-  /**
-   * 是否处于流式输出中
-   * - 流式中会关闭代码高亮-并用 RAF 节流渲染，减少主线程压力
-   */
-  streaming?: boolean
-}
-
-const props = defineProps<Props>()
 const streaming = computed(() => !!props.streaming)
 const getRenderableContent = (): string => {
   return sanitizeVisibleAssistantContent(props.content || '')
@@ -256,6 +393,10 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (hideCitationTimer) {
+    clearTimeout(hideCitationTimer)
+    hideCitationTimer = null
+  }
   if (rafId !== null) {
     cancelAnimationFrame(rafId)
     rafId = null

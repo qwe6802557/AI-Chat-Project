@@ -70,6 +70,7 @@
               :sources="message.sources || []"
               :search-status="message.searchStatus"
               :search-query="message.searchQuery"
+              @open-source="handleOpenKnowledgeSource"
             />
             <ToolExecutionCard
               v-if="message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0"
@@ -91,6 +92,8 @@
               :message-id="message.id"
               :content="message.content"
               :streaming="message.streaming"
+              :sources="message.sources || []"
+              @open-source="handleOpenKnowledgeSource"
             />
             <div
               v-if="message.role === 'assistant' && message.error"
@@ -214,6 +217,12 @@
       :document="activePreviewDoc"
       @close="activePreviewDoc = null"
     />
+
+    <!-- 知识库切片全局预览抽屉 -->
+    <KnowledgeSourceDrawer
+      v-model:open="isSourceDrawerOpen"
+      :source="activeDrawerSource"
+    />
   </div>
 </template>
 
@@ -239,15 +248,25 @@ import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
+import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
 import ArtifactCapsuleCard from './Artifact/ArtifactCapsuleCard.vue'
 import { extractVisibleAssistantContent, type ExtractedArtifactTag } from '../utils/assistantContent'
 import { useArtifactStore } from '../stores/useArtifactStore'
 import { getActivePinia } from 'pinia'
 import type { Message, MessageAttachment } from '@/interface/conversation'
+import type { SearchSource } from '@/interface/chat'
 
 defineOptions({
   name: 'ChatMessageViewport',
 })
+
+const isSourceDrawerOpen = ref(false)
+const activeDrawerSource = ref<SearchSource | null>(null)
+
+const handleOpenKnowledgeSource = (source: SearchSource) => {
+  activeDrawerSource.value = source
+  isSourceDrawerOpen.value = true
+}
 
 /**
  * 获取消息中携带或解析出的 Artifacts，并在需要时同步注册到状态树
