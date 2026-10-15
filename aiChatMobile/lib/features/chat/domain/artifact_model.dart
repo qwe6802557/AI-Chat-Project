@@ -62,10 +62,53 @@ class ArtifactModel {
     );
   }
 
+  /// 从纯文本中提取常规 Markdown 代码块升格为候选产物（当未显式包含 antArtifact 时）
+  static List<ArtifactModel> extractPromotableCodeBlocks(String rawText) {
+    if (rawText.contains('<antArtifact')) {
+      return const [];
+    }
+
+    final codeBlockRegex = RegExp(r'```([a-zA-Z0-9_-]*)\r?\n([\s\S]*?)```');
+    final matches = codeBlockRegex.allMatches(rawText);
+    if (matches.isEmpty) return const [];
+
+    final artifacts = <ArtifactModel>[];
+    for (final match in matches) {
+      final lang = (match.group(1) ?? '').trim().toLowerCase();
+      final content = (match.group(2) ?? '').trim();
+      if (content.isEmpty) continue;
+
+      String type = 'application/vnd.ant.code';
+      String title = '${lang.isEmpty ? 'CODE' : lang.toUpperCase()} 产物';
+
+      if (lang == 'html' || lang == 'htm' || content.startsWith('<!DOCTYPE') || content.startsWith('<html')) {
+        type = 'text/html';
+        title = 'HTML 交互应用';
+      } else if (lang == 'svg' || content.startsWith('<svg')) {
+        type = 'image/svg+xml';
+        title = 'SVG 矢量图形';
+      } else if (lang == 'mermaid' || content.startsWith('graph') || content.startsWith('flowchart')) {
+        type = 'application/vnd.ant.mermaid';
+        title = 'Mermaid 架构图';
+      }
+
+      artifacts.add(ArtifactModel(
+        identifier: 'snippet-${artifacts.length + 1}',
+        title: title,
+        type: type,
+        language: lang.isEmpty ? null : lang,
+        content: content,
+        isComplete: true,
+      ));
+    }
+    return artifacts;
+  }
+
   /// 从助手的文本中提取出全部 `<antArtifact>` 标签及清洗后的纯正文
   static ExtractedArtifactsResult extractFromText(String rawText) {
     if (!rawText.contains('<antArtifact')) {
-      return ExtractedArtifactsResult(cleanedText: rawText, artifacts: const []);
+      final promotable = extractPromotableCodeBlocks(rawText);
+      return ExtractedArtifactsResult(cleanedText: rawText, artifacts: promotable);
     }
 
     final artifacts = <ArtifactModel>[];

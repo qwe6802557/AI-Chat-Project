@@ -37,6 +37,7 @@ const handleClick = async (event: MouseEvent) => {
   const lang = (langElement?.textContent || '').trim().toLowerCase()
 
   if (isOpenArtifact) {
+    const isVisual = target.classList.contains('visual-btn') || target.getAttribute('data-action') === 'preview'
     let artifactType = 'application/vnd.ant.code'
     if (lang === 'html' || text.trim().startsWith('<html') || text.trim().startsWith('<!DOCTYPE')) {
       artifactType = 'text/html'
@@ -58,8 +59,9 @@ const handleClick = async (event: MouseEvent) => {
         messageId: props.messageId,
         autoOpen: true,
       })
+      artifactStore.setActiveTab(isVisual ? 'preview' : 'code')
     }
-    message.success('已升格为 Artifact 并在右侧画布打开')
+    message.success(isVisual ? '已升格为 Artifact 并在沙箱中实时预览' : '已升格为 Artifact 并在工作区高亮查看')
     return
   }
 
