@@ -141,10 +141,21 @@ export function canRenderSafely(content: string): boolean {
 
 function injectCitationBadges(rawHtml: string): string {
   return rawHtml.replace(
-    /(<code[\s\S]*?<\/code>|<pre[\s\S]*?<\/pre>)|\[(\d+)\]/g,
-    (match, codeBlock, citationNum) => {
-      if (codeBlock) return codeBlock
-      return `<button type="button" class="citation-ref-badge" data-citation="${citationNum}">[${citationNum}]</button>`
+    /(<code[\s\S]*?<\/code>|<pre[\s\S]*?<\/pre>|<a[\s\S]*?<\/a>)|(?:\[|【|［)(\d+(?:\s*[,，]\s*\d+)*)(?:\]|】|］)/g,
+    (match, protectedTag, citations) => {
+      if (protectedTag) return protectedTag
+      if (!citations) return match
+      const nums = citations
+        .split(/[,，]/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+      if (nums.length === 0) return match
+      return nums
+        .map(
+          (num: string) =>
+            `<button type="button" class="citation-ref-badge" data-citation="${num}">[${num}]</button>`,
+        )
+        .join('')
     },
   )
 }
