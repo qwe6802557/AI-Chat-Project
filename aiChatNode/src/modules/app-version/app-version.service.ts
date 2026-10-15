@@ -41,22 +41,22 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.4',
-      latestVersionCode: 6,
+      latestVersion: '1.1.5',
+      latestVersionCode: 7,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '19.5 MB',
+      packageSize: '20.8 MB',
       releaseNotes: [
-        '彻底修复插件工具中心与知识库底部抽屉被悬浮底栏（FloatingNavBar）遮挡的层级缺陷',
-        '全局模态底栏升级为根导航器挂载（useRootNavigator），确保弹窗完全置顶于毛玻璃底栏之上',
-        '优化抽屉高度约束与底部安全距离（SafeArea + 24px），彻底杜绝尾部选项被裁切截断',
-        '底栏架构保活（Keep-Alive）与 150ms 优雅淡入过渡持续生效，秒开无白屏',
-        '延续超轻量 ARM64 混淆优化构建，安装包严格保持 ~19.5 MB',
+        '新增深度 Agent 与 Artifacts 动态交互工作区',
+        '支持消息流内代码高亮与毛玻璃胶囊卡片（ArtifactCapsuleCard）',
+        '新增沉浸式全屏预览抽屉（ArtifactPreviewSheet），支持代码与产物分离查看',
+        '多版本视口模拟与安全沙箱渲染环境升级',
+        '延续极简 ARM64 单架构混淆与符号剥离深度优化，保持轻量体积',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-14T08:55:00.000Z',
+      publishedAt: '2026-10-15T02:00:00.000Z',
     };
   }
 
