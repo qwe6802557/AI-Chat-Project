@@ -9,6 +9,7 @@ class ArtifactModel {
   final String content;
   final bool isComplete;
   final int version;
+  final List<ArtifactModel> versions;
 
   const ArtifactModel({
     required this.identifier,
@@ -18,9 +19,17 @@ class ArtifactModel {
     required this.content,
     this.isComplete = true,
     this.version = 1,
+    this.versions = const [],
   });
 
+  List<ArtifactModel> get effectiveVersions => versions.isNotEmpty ? versions : [this];
+
   factory ArtifactModel.fromJson(Map<String, dynamic> json) {
+    final rawVersions = json['versions'] as List<dynamic>?;
+    final versionsList = rawVersions != null
+        ? rawVersions.map((e) => ArtifactModel.fromJson(e as Map<String, dynamic>)).toList()
+        : const <ArtifactModel>[];
+
     return ArtifactModel(
       identifier: json['identifier'] as String? ?? 'artifact',
       title: json['title'] as String? ?? '生成产物',
@@ -29,6 +38,7 @@ class ArtifactModel {
       content: json['content'] as String? ?? '',
       isComplete: json['isComplete'] as bool? ?? true,
       version: (json['version'] as num?)?.toInt() ?? 1,
+      versions: versionsList,
     );
   }
 
@@ -40,6 +50,7 @@ class ArtifactModel {
     'content': content,
     'isComplete': isComplete,
     'version': version,
+    if (versions.isNotEmpty) 'versions': versions.map((v) => v.toJson()).toList(),
   };
 
   ArtifactModel copyWith({
@@ -50,6 +61,7 @@ class ArtifactModel {
     String? content,
     bool? isComplete,
     int? version,
+    List<ArtifactModel>? versions,
   }) {
     return ArtifactModel(
       identifier: identifier ?? this.identifier,
@@ -59,6 +71,7 @@ class ArtifactModel {
       content: content ?? this.content,
       isComplete: isComplete ?? this.isComplete,
       version: version ?? this.version,
+      versions: versions ?? this.versions,
     );
   }
 
@@ -129,30 +142,68 @@ class ArtifactModel {
       final attrs = _parseAttributes(attrString);
       final contentStartIndex = match.end;
 
+      final identifier = attrs['identifier'] ?? 'artifact-${artifacts.length + 1}';
+      final title = attrs['title'] ?? '代码生成产物';
+      final type = attrs['type'] ?? 'application/vnd.ant.code';
+      final language = attrs['language'];
+
       final closeMatch = closeTagRegex.firstMatch(remaining.substring(contentStartIndex));
       if (closeMatch == null) {
         // 未闭合（流式输出中）
         final partialContent = remaining.substring(contentStartIndex);
-        artifacts.add(ArtifactModel(
-          identifier: attrs['identifier'] ?? 'artifact-${artifacts.length + 1}',
-          title: attrs['title'] ?? '代码生成产物',
-          type: attrs['type'] ?? 'application/vnd.ant.code',
-          language: attrs['language'],
-          content: partialContent,
-          isComplete: false,
-        ));
+        final existingIndex = artifacts.indexWhere((a) => a.identifier == identifier);
+        if (existingIndex >= 0) {
+          final existing = artifacts[existingIndex];
+          artifacts[existingIndex] = existing.copyWith(
+            content: partialContent,
+            isComplete: false,
+          );
+        } else {
+          final initial = ArtifactModel(
+            identifier: identifier,
+            title: title,
+            type: type,
+            language: language,
+            content: partialContent,
+            isComplete: false,
+            version: 1,
+          );
+          artifacts.add(initial.copyWith(versions: [initial]));
+        }
         break;
       }
 
       final content = remaining.substring(contentStartIndex, contentStartIndex + closeMatch.start);
-      artifacts.add(ArtifactModel(
-        identifier: attrs['identifier'] ?? 'artifact-${artifacts.length + 1}',
-        title: attrs['title'] ?? '代码生成产物',
-        type: attrs['type'] ?? 'application/vnd.ant.code',
-        language: attrs['language'],
-        content: content.trim(),
-        isComplete: true,
-      ));
+      final existingIndex = artifacts.indexWhere((a) => a.identifier == identifier);
+      if (existingIndex >= 0) {
+        final existing = artifacts[existingIndex];
+        final nextVer = existing.versions.length + 1;
+        final newModel = ArtifactModel(
+          identifier: identifier,
+          title: title,
+          type: type,
+          language: language,
+          content: content.trim(),
+          isComplete: true,
+          version: nextVer,
+        );
+        final updatedVersions = [...existing.versions, newModel];
+        artifacts[existingIndex] = newModel.copyWith(
+          versions: updatedVersions,
+          version: nextVer,
+        );
+      } else {
+        final initial = ArtifactModel(
+          identifier: identifier,
+          title: title,
+          type: type,
+          language: language,
+          content: content.trim(),
+          isComplete: true,
+          version: 1,
+        );
+        artifacts.add(initial.copyWith(versions: [initial]));
+      }
 
       final tagEnd = contentStartIndex + closeMatch.end;
       remaining = remaining.substring(tagEnd);
