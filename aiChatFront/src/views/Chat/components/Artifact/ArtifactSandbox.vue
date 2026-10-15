@@ -1,35 +1,45 @@
 <template>
   <div class="artifact-sandbox-container" :class="[`viewport-${viewportMode}`, { 'dark-theme': isDarkCanvas }]">
-    <!-- 视口模拟器外壳容器 -->
-    <div class="viewport-stage" :style="stageStyle">
-      <!-- 1. HTML 渲染（采用严格隔离沙箱 iframe） -->
-      <iframe
-        v-if="isHtml"
-        ref="iframeRef"
-        class="sandbox-iframe"
-        :srcdoc="safeHtmlSrcdoc"
-        sandbox="allow-scripts allow-modals"
-        title="Artifact Sandbox"
-      />
+    <!-- 中间滚动舞台区域 -->
+    <div class="viewport-stage-scroll-area">
+      <div class="viewport-stage" :style="stageStyle">
+        <!-- 1. HTML 渲染（采用严格隔离沙箱 iframe） -->
+        <iframe
+          v-if="isHtml"
+          ref="iframeRef"
+          class="sandbox-iframe"
+          :srcdoc="safeHtmlSrcdoc"
+          sandbox="allow-scripts allow-modals"
+          title="Artifact Sandbox"
+        />
 
-      <!-- 2. SVG 矢量图形渲染 -->
-      <div v-else-if="isSvg" class="svg-stage">
-        <div class="svg-wrapper" v-html="sanitizedSvg" />
-      </div>
+        <!-- 2. SVG 矢量图形渲染 -->
+        <div v-else-if="isSvg" class="svg-stage">
+          <div class="svg-wrapper" v-html="sanitizedSvg" />
+        </div>
 
-      <!-- 3. Mermaid 图表或其它产物降级渲染 -->
-      <div v-else class="generic-preview-stage">
-        <div class="generic-content" v-html="genericHtml" />
+        <!-- 3. Mermaid 图表或其它产物降级渲染 -->
+        <div v-else class="generic-preview-stage">
+          <div class="generic-content" v-html="genericHtml" />
+        </div>
       </div>
     </div>
+
+    <!-- 运行时虚拟控制台（仅在 HTML 交互渲染时挂载于底部） -->
+    <ArtifactConsoleDrawer
+      v-if="isHtml"
+      :entries="consoleEntries"
+      @clear="clearConsole"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import DOMPurify from 'dompurify'
 import { renderMarkdown } from '@/utils/markdown'
 import type { ViewportMode, ArtifactType } from '../../types/artifact'
+import ArtifactConsoleDrawer, { type ConsoleEntry } from './ArtifactConsoleDrawer.vue'
 
 defineOptions({
   name: 'ArtifactSandbox',
@@ -43,6 +53,67 @@ const props = defineProps<{
 
 const isDarkCanvas = ref(false)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
+const consoleEntries = ref<ConsoleEntry[]>([])
+let logIdCounter = 0
+
+const CONSOLE_INTERCEPTOR_SCRIPT = `<script>
+(function() {
+  function serializeArg(arg) {
+    if (arg === null) return 'null';
+    if (arg === undefined) return 'undefined';
+    if (typeof arg === 'string') return arg;
+    if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+    if (arg instanceof Error) return arg.stack || arg.message || String(arg);
+    try {
+      return JSON.stringify(arg);
+    } catch (e) {
+      return String(arg);
+    }
+  }
+
+  function sendLog(level, args) {
+    try {
+      var serialized = Array.prototype.slice.call(args).map(serializeArg).join(' ');
+      window.parent.postMessage({
+        type: 'artifact-console-log',
+        level: level,
+        message: serialized,
+        time: Date.now()
+      }, '*');
+    } catch(e) {}
+  }
+
+  var origLog = console.log;
+  var origWarn = console.warn;
+  var origError = console.error;
+  var origInfo = console.info;
+
+  console.log = function() {
+    sendLog('log', arguments);
+    if (origLog) origLog.apply(console, arguments);
+  };
+  console.warn = function() {
+    sendLog('warn', arguments);
+    if (origWarn) origWarn.apply(console, arguments);
+  };
+  console.error = function() {
+    sendLog('error', arguments);
+    if (origError) origError.apply(console, arguments);
+  };
+  console.info = function() {
+    sendLog('info', arguments);
+    if (origInfo) origInfo.apply(console, arguments);
+  };
+
+  window.addEventListener('error', function(e) {
+    sendLog('error', [e.message + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '')]);
+  });
+
+  window.addEventListener('unhandledrejection', function(e) {
+    sendLog('error', ['Unhandled Promise Rejection: ' + serializeArg(e.reason)]);
+  });
+})();
+<\/script>`
 
 const isHtml = computed(() => {
   return props.type.includes('html') || props.content.trim().startsWith('<!DOCTYPE') || props.content.trim().startsWith('<html')
@@ -53,17 +124,17 @@ const isSvg = computed(() => {
 })
 
 /**
- * 包装并注入轻量安全与重置样式的 HTML srcdoc
+ * 包装并注入轻量安全、重置样式与控制台监控的 HTML srcdoc
  */
 const safeHtmlSrcdoc = computed(() => {
   let raw = props.content || ''
-  // 如果没有包含完整的 html/body 骨架，自动注入安全默认底板
   if (!raw.includes('<html') && !raw.includes('<body')) {
-    raw = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  ${CONSOLE_INTERCEPTOR_SCRIPT}
   <style>
     body {
       margin: 0;
@@ -80,7 +151,46 @@ ${raw}
 </body>
 </html>`
   }
-  return raw
+
+  if (raw.includes('<head>')) {
+    return raw.replace('<head>', `<head>\n${CONSOLE_INTERCEPTOR_SCRIPT}`)
+  } else if (raw.includes('<html>')) {
+    return raw.replace('<html>', `<html>\n<head>${CONSOLE_INTERCEPTOR_SCRIPT}</head>`)
+  } else {
+    return `${CONSOLE_INTERCEPTOR_SCRIPT}\n${raw}`
+  }
+})
+
+const handleWindowMessage = (e: MessageEvent) => {
+  if (e.data && e.data.type === 'artifact-console-log') {
+    logIdCounter++
+    consoleEntries.value.push({
+      id: `log-${logIdCounter}-${Date.now()}`,
+      level: e.data.level || 'log',
+      message: String(e.data.message || ''),
+      time: e.data.time || Date.now(),
+    })
+  }
+}
+
+const clearConsole = () => {
+  consoleEntries.value = []
+}
+
+// 切换产物内容时清空旧控制台日志
+watch(
+  () => props.content,
+  () => {
+    clearConsole()
+  },
+)
+
+onMounted(() => {
+  window.addEventListener('message', handleWindowMessage)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', handleWindowMessage)
 })
 
 /**
@@ -155,12 +265,10 @@ const stageStyle = computed(() => {
 <style scoped>
 .artifact-sandbox-container {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   width: 100%;
   height: 100%;
-  overflow: auto;
-  padding: 16px;
+  overflow: hidden;
   background: #f8fafc;
   background-image: radial-gradient(rgba(203, 213, 225, 0.45) 1px, transparent 0);
   background-size: 16px 16px;
@@ -168,9 +276,23 @@ const stageStyle = computed(() => {
   transition: all 0.2s ease;
 }
 
+.viewport-stage-scroll-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
 .artifact-sandbox-container.viewport-responsive {
-  padding: 0;
   background-image: none;
+}
+
+.artifact-sandbox-container.viewport-responsive .viewport-stage-scroll-area {
+  padding: 0;
 }
 
 .viewport-stage {

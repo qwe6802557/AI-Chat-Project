@@ -46,15 +46,52 @@ void main() {
       expect(result.artifacts, isEmpty);
     });
 
-    test('toJson and fromJson serialization works symmetrically', () {
-      const model = ArtifactModel(
+    test('extractFromText aggregates multiple revisions of identical identifier into versions list', () {
+      const raw = '''
+第1版：
+<antArtifact identifier="counter-app" type="text/html" title="计数器 v1">
+<div>Count: 0</div>
+</antArtifact>
+
+更新第2版：
+<antArtifact identifier="counter-app" type="text/html" title="计数器 v2">
+<div>Count: 1 (Updated)</div>
+</antArtifact>
+''';
+      final result = ArtifactModel.extractFromText(raw);
+
+      expect(result.artifacts.length, equals(1));
+      final mainArtifact = result.artifacts.first;
+      expect(mainArtifact.identifier, equals('counter-app'));
+      expect(mainArtifact.version, equals(2));
+      expect(mainArtifact.title, equals('计数器 v2'));
+      expect(mainArtifact.content, equals('<div>Count: 1 (Updated)</div>'));
+      expect(mainArtifact.effectiveVersions.length, equals(2));
+      expect(mainArtifact.effectiveVersions[0].version, equals(1));
+      expect(mainArtifact.effectiveVersions[0].content, equals('<div>Count: 0</div>'));
+      expect(mainArtifact.effectiveVersions[1].version, equals(2));
+      expect(mainArtifact.effectiveVersions[1].content, equals('<div>Count: 1 (Updated)</div>'));
+    });
+
+    test('toJson and fromJson serialization works symmetrically with versions', () {
+      const v1 = ArtifactModel(
         identifier: 'code-1',
-        title: '算法脚本',
+        title: '算法脚本 v1',
         type: 'application/vnd.ant.code',
         language: 'dart',
-        content: 'void main() {}',
+        content: 'void main() { print(1); }',
+        isComplete: true,
+        version: 1,
+      );
+      final model = ArtifactModel(
+        identifier: 'code-1',
+        title: '算法脚本 v2',
+        type: 'application/vnd.ant.code',
+        language: 'dart',
+        content: 'void main() { print(2); }',
         isComplete: true,
         version: 2,
+        versions: [v1],
       );
 
       final json = model.toJson();
@@ -66,6 +103,8 @@ void main() {
       expect(restored.language, equals(model.language));
       expect(restored.content, equals(model.content));
       expect(restored.version, equals(2));
+      expect(restored.effectiveVersions.length, equals(1));
+      expect(restored.effectiveVersions.first.version, equals(1));
     });
   });
 }

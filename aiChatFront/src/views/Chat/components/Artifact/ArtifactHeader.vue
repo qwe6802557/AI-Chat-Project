@@ -136,12 +136,35 @@
           <CopyOutlined />
         </button>
 
-        <!-- 导出文件 -->
+        <!-- 导出文件（SVG / Mermaid 专属矢量与高清 PNG 双通道下拉） -->
+        <a-dropdown v-if="isGraphicArtifact" :trigger="['click']">
+          <button
+            type="button"
+            class="tool-btn"
+            title="导出选项"
+          >
+            <DownloadOutlined />
+          </button>
+          <template #overlay>
+            <a-menu class="export-dropdown-menu">
+              <a-menu-item key="source" @click="handleExportSource">
+                <FileTextOutlined />
+                <span>导出矢量源码 ({{ isMermaid ? '.mmd' : '.svg' }})</span>
+              </a-menu-item>
+              <a-menu-item key="png" @click="handleExportPng">
+                <FileImageOutlined />
+                <span>导出高清图片 (.png, 2x Retina)</span>
+              </a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
+
         <button
+          v-else
           type="button"
           class="tool-btn"
           title="导出下载"
-          @click="handleExport"
+          @click="handleExportSource"
         >
           <DownloadOutlined />
         </button>
@@ -191,11 +214,13 @@ import {
   ExpandOutlined,
   GlobalOutlined,
   FileImageOutlined,
+  FileTextOutlined,
   ApartmentOutlined,
   DiffOutlined,
   EditOutlined,
 } from '@ant-design/icons-vue'
 import { useArtifactStore } from '../../stores/useArtifactStore'
+import { rasterizeSvgToPng, downloadBlobFile } from '../../utils/rasterizeSvg'
 
 defineOptions({
   name: 'ArtifactHeader',
@@ -250,7 +275,25 @@ const handleRequestIteration = () => {
   message.success('已将当前产物修改提示词填入输入框，请补充修改要求后发送')
 }
 
-const handleExport = () => {
+const isGraphicArtifact = computed(() => {
+  const type = (activeArtifact.value?.type || '').toLowerCase()
+  const content = (currentVersion.value?.content || '').trim()
+  return (
+    type.includes('svg') ||
+    type.includes('mermaid') ||
+    content.startsWith('<svg') ||
+    content.startsWith('graph ') ||
+    content.startsWith('flowchart ')
+  )
+})
+
+const isMermaid = computed(() => {
+  const type = (activeArtifact.value?.type || '').toLowerCase()
+  const content = (currentVersion.value?.content || '').trim()
+  return type.includes('mermaid') || content.startsWith('graph ') || content.startsWith('flowchart ')
+})
+
+const handleExportSource = () => {
   const art = activeArtifact.value
   const version = currentVersion.value
   if (!art || !version) return
@@ -299,16 +342,36 @@ const handleExport = () => {
 
   const filename = `${art.identifier}-v${version.version}.${extension}`
   const blob = new Blob([content], { type: mimeType })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-
+  downloadBlobFile(blob, filename)
   message.success(`已导出文件：${filename}`)
+}
+
+const handleExportPng = async () => {
+  const art = activeArtifact.value
+  const version = currentVersion.value
+  if (!art || !version) return
+
+  let svgString = ''
+  if (isMermaid.value) {
+    const svgEl = document.querySelector('.generic-preview-stage svg')
+    svgString = svgEl ? svgEl.outerHTML : ''
+    if (!svgString) {
+      message.warning('Mermaid 图表尚在渲染中，请稍候重试导出')
+      return
+    }
+  } else {
+    svgString = version.content || ''
+  }
+
+  try {
+    message.loading({ content: '正在生成 2x 高清 PNG 图片...', key: 'export-png' })
+    const pngBlob = await rasterizeSvgToPng(svgString, { scale: 2, backgroundColor: '#ffffff' })
+    const filename = `${art.identifier}-v${version.version}-2x.png`
+    downloadBlobFile(pngBlob, filename)
+    message.success({ content: `已成功导出高清图片：${filename}`, key: 'export-png' })
+  } catch (err: any) {
+    message.error({ content: `导出图片失败：${err?.message || '未知错误'}`, key: 'export-png' })
+  }
 }
 </script>
 
@@ -579,5 +642,29 @@ const handleExport = () => {
   height: 16px;
   background: rgba(226, 232, 240, 0.9);
   margin: 0 4px;
+}
+
+:deep(.export-dropdown-menu) {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+:deep(.export-dropdown-menu .ant-dropdown-menu-item) {
+  color: #cbd5e1;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+:deep(.export-dropdown-menu .ant-dropdown-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 </style>
