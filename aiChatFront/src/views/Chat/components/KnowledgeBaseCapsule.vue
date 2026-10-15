@@ -4,22 +4,27 @@
     trigger="click"
     placement="top"
     overlay-class-name="kb-capsule-popover"
+    :destroy-tooltip-on-hide="false"
   >
     <template #content>
       <div class="kb-picker-dropdown">
         <div class="dropdown-header">
-          <span class="title">选择知识库 (混合 RAG)</span>
+          <div class="header-left">
+            <span class="title">选择知识库 (混合 RAG)</span>
+            <LoadingOutlined v-if="isRefreshing" spin class="refresh-spinner" title="正在同步最新切片..." />
+          </div>
           <router-link to="/knowledge" class="manage-link" @click="isOpen = false">
             管理知识库
           </router-link>
         </div>
 
-        <div v-if="loading" class="dropdown-loading">
+        <!-- 仅在初始完全无数据且正在加载时展示 loading，有缓存时0延迟直接呈现 -->
+        <div v-if="loading && activeBases.length === 0" class="dropdown-loading">
           <LoadingOutlined spin />
           <span>正在加载知识库...</span>
         </div>
 
-        <div v-else-if="kbList.length === 0" class="dropdown-empty">
+        <div v-else-if="activeBases.length === 0" class="dropdown-empty">
           <p>暂无可用知识库</p>
           <router-link to="/knowledge" class="create-btn" @click="isOpen = false">
             前往创建
@@ -28,7 +33,7 @@
 
         <div v-else class="kb-options-list">
           <div
-            v-for="kb in kbList"
+            v-for="kb in activeBases"
             :key="kb.id"
             :class="['kb-option-item', { selected: selectedIds.includes(kb.id) }]"
             @click="toggleSelect(kb.id)"
@@ -51,7 +56,6 @@
       type="button"
       :class="['kb-capsule-btn', { active: selectedIds.length > 0, disabled }]"
       :disabled="disabled"
-      @click="handleCapsuleClick"
     >
       <DatabaseOutlined class="capsule-icon" />
       <span class="capsule-label">
@@ -64,9 +68,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { DatabaseOutlined, LoadingOutlined, CheckOutlined } from '@ant-design/icons-vue'
-import { getKnowledgeBases } from '@/api/knowledge'
-import type { KnowledgeBaseItem } from '@/interface/knowledge'
+import { useKnowledgeStore } from '@/stores'
 
 defineOptions({
   name: 'KnowledgeBaseCapsule',
@@ -88,20 +92,8 @@ const emit = defineEmits<{
 }>()
 
 const isOpen = ref(false)
-const loading = ref(false)
-const kbList = ref<KnowledgeBaseItem[]>([])
-
-const fetchList = async () => {
-  loading.value = true
-  try {
-    const res = await getKnowledgeBases()
-    kbList.value = (res.data || []).filter((item) => item.isActive !== false)
-  } catch {
-    // 忽略加载错误
-  } finally {
-    loading.value = false
-  }
-}
+const knowledgeStore = useKnowledgeStore()
+const { activeBases, loading, isRefreshing } = storeToRefs(knowledgeStore)
 
 const toggleSelect = (id: string) => {
   const current = [...props.selectedIds]
@@ -114,21 +106,16 @@ const toggleSelect = (id: string) => {
   emit('update:selectedIds', current)
 }
 
-const handleCapsuleClick = () => {
-  if (props.disabled) return
-  if (!isOpen.value && kbList.value.length === 0) {
-    fetchList()
-  }
-}
-
+// 展开时仅进行静默后台校验（Silent Revalidate），绝不重置已有 DOM 导致抖动
 watch(isOpen, (open) => {
   if (open) {
-    fetchList()
+    knowledgeStore.fetchKnowledgeBases(false, true)
   }
 })
 
 onMounted(() => {
-  fetchList()
+  // 组件挂载时预热全局缓存
+  knowledgeStore.fetchKnowledgeBases(false, true)
 })
 </script>
 
@@ -186,6 +173,7 @@ onMounted(() => {
 
 .kb-picker-dropdown {
   width: 260px;
+  min-height: 80px;
   padding: 4px;
 
   .dropdown-header {
@@ -196,9 +184,20 @@ onMounted(() => {
     border-bottom: 1px solid #f1f5f9;
     font-size: 12px;
 
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
     .title {
       font-weight: 600;
       color: #1e293b;
+    }
+
+    .refresh-spinner {
+      font-size: 11px;
+      color: #3b82f6;
     }
 
     .manage-link {

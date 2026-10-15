@@ -9,3 +9,6 @@ export type { UserInfo } from '@/types/user'
 // 对话管理
 export { useConversationStore } from './conversation'
 export type { Conversation, Message, MessageAttachment } from '@/interface/conversation'
+
+// 知识库管理
+export { useKnowledgeStore } from './knowledge'
