@@ -44,6 +44,9 @@ export interface ArtifactItem {
 /** 视口模拟模式 */
 export type ViewportMode = 'responsive' | 'desktop' | 'tablet' | 'mobile'
 
+/** 工作区顶栏视图选项卡 */
+export type ArtifactWorkspaceTab = 'preview' | 'code' | 'diff'
+
 export interface ViewportConfig {
   mode: ViewportMode
   label: string

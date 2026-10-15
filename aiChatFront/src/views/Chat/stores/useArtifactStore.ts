@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ArtifactItem, ArtifactVersion, ArtifactType, ViewportMode } from '../types/artifact'
+import type { ArtifactItem, ArtifactVersion, ArtifactType, ViewportMode, ArtifactWorkspaceTab } from '../types/artifact'
 
 export const useArtifactStore = defineStore('chatArtifact', () => {
   /** 产物字典，key 为 identifier */
@@ -24,8 +24,11 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
   /** 视口模拟模式 */
   const viewportMode = ref<ViewportMode>('responsive')
 
-  /** 预览 / 源码 Tab 切换 */
-  const activeTab = ref<'preview' | 'code'>('preview')
+  /** 预览 / 源码 / 差异对比 Tab 切换 */
+  const activeTab = ref<ArtifactWorkspaceTab>('preview')
+
+  /** 跨轮次迭代修改时预填至输入框的 prompt */
+  const pendingPrompt = ref<string | null>(null)
 
   /**
    * 全部产物列表（按更新时间降序）
@@ -50,6 +53,20 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
     if (!art || !art.versions || art.versions.length === 0) return null
     const idx = Math.min(Math.max(0, activeVersionIndex.value), art.versions.length - 1)
     return art.versions[idx] || null
+  })
+
+  /**
+   * 当前激活版本的前一个历史版本（用于对比基准）
+   */
+  const previousVersion = computed<ArtifactVersion | null>(() => {
+    const art = activeArtifact.value
+    if (!art || !art.versions || art.versions.length < 2) return null
+    const idx = Math.min(Math.max(0, activeVersionIndex.value), art.versions.length - 1)
+    if (idx > 0) {
+      return art.versions[idx - 1] || null
+    }
+    // 如果当前选中的是 v1，默认与最新版本对比
+    return art.versions[art.versions.length - 1] || null
   })
 
   /**
@@ -198,10 +215,32 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
   }
 
   /**
-   * 设置预览/源码 Tab
+   * 设置预览/源码/差异对比 Tab
    */
-  function setActiveTab(tab: 'preview' | 'code') {
+  function setActiveTab(tab: ArtifactWorkspaceTab) {
     activeTab.value = tab
+  }
+
+  /**
+   * 触发跨轮次修改提示词预填
+   */
+  function requestIteration(identifier?: string) {
+    const targetId = identifier || activeArtifactId.value
+    if (!targetId) return
+    const art = artifacts.value[targetId]
+    if (!art) return
+
+    const ver = currentVersion.value?.version || art.versions.length || 1
+    pendingPrompt.value = `请基于产物【${art.title}】(identifier: "${art.identifier}"，当前为 v${ver}) 进行如下修改：\n- `
+  }
+
+  /**
+   * 消费并清空预填提示词
+   */
+  function consumePendingPrompt(): string | null {
+    const prompt = pendingPrompt.value
+    pendingPrompt.value = null
+    return prompt
   }
 
   /**
@@ -213,6 +252,8 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
     activeVersionIndex.value = 0
     isWorkspaceOpen.value = false
     isMaximized.value = false
+    activeTab.value = 'preview'
+    pendingPrompt.value = null
   }
 
   return {
@@ -224,9 +265,11 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
     splitRatio,
     viewportMode,
     activeTab,
+    pendingPrompt,
     artifactList,
     activeArtifact,
     currentVersion,
+    previousVersion,
     registerOrUpdateArtifact,
     openArtifact,
     selectVersion,
@@ -235,6 +278,8 @@ export const useArtifactStore = defineStore('chatArtifact', () => {
     setSplitRatio,
     setViewportMode,
     setActiveTab,
+    requestIteration,
+    consumePendingPrompt,
     clearArtifacts,
   }
 })

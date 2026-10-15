@@ -21,7 +21,7 @@
       <!-- 顶栏控制器 -->
       <ArtifactHeader />
 
-      <!-- 主视图区域：预览模式 vs 源码模式 -->
+      <!-- 主视图区域：预览模式 vs 源码模式 vs 差异对比模式 -->
       <div class="artifact-content-stage">
         <ArtifactSandbox
           v-if="activeTab === 'preview'"
@@ -30,9 +30,14 @@
           :viewport-mode="viewportMode"
         />
         <ArtifactCodeViewer
-          v-else
+          v-else-if="activeTab === 'code'"
           :code="currentVersion?.content || ''"
           :language="activeArtifact?.language"
+        />
+        <ArtifactDiffViewer
+          v-else-if="activeTab === 'diff'"
+          :artifact="activeArtifact"
+          :current-version-index="activeVersionIndex"
         />
       </div>
     </div>
@@ -46,6 +51,7 @@ import { useArtifactStore } from '../../stores/useArtifactStore'
 import ArtifactHeader from './ArtifactHeader.vue'
 import ArtifactSandbox from './ArtifactSandbox.vue'
 import ArtifactCodeViewer from './ArtifactCodeViewer.vue'
+import ArtifactDiffViewer from './ArtifactDiffViewer.vue'
 
 defineOptions({
   name: 'ArtifactWorkspace',
@@ -59,6 +65,7 @@ const {
   activeTab,
   activeArtifact,
   currentVersion,
+  activeVersionIndex,
 } = storeToRefs(artifactStore)
 
 let isDragging = false
