@@ -45,6 +45,7 @@
           />
 
           <a-textarea
+            ref="messageTextareaRef"
             v-model:value="inputMessage"
             class="message-input prompt-textarea"
             placeholder="发送消息，或拖拽/粘贴图片与文档..."
@@ -140,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import {
@@ -152,6 +153,7 @@ import {
 } from '@ant-design/icons-vue'
 import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
 import { useConversationStore } from '@/stores'
+import { useArtifactStore } from '../stores/useArtifactStore'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import WebSearchToggle from './WebSearchToggle.vue'
@@ -220,10 +222,31 @@ const inputMessage = ref('')
 const webSearchEnabled = ref(false)
 const selectedKnowledgeBaseIds = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const messageTextareaRef = ref<any>(null)
 const scrollSignal = ref(0)
 
 const conversationStore = useConversationStore()
+const artifactStore = useArtifactStore()
 const { currentConversation } = storeToRefs(conversationStore)
+
+// 监听跨轮次产物修改请求，预填输入框并自动聚焦
+watch(
+  () => artifactStore.pendingPrompt,
+  (prompt) => {
+    if (prompt) {
+      inputMessage.value = prompt
+      artifactStore.consumePendingPrompt()
+      nextTick(() => {
+        const el = messageTextareaRef.value?.$el || messageTextareaRef.value
+        const textarea = el?.tagName === 'TEXTAREA' ? el : el?.querySelector?.('textarea')
+        if (textarea) {
+          textarea.focus()
+          textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+        }
+      })
+    }
+  },
+)
 
 // 切换对话时，自动恢复当前会话持久化绑定的知识库
 watch(

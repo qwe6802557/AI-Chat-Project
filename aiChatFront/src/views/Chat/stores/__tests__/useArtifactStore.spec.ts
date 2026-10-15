@@ -95,4 +95,37 @@ describe('useArtifactStore', () => {
     expect(store.isWorkspaceOpen).toBe(false)
     expect(store.isMaximized).toBe(false)
   })
+
+  it('computes previousVersion and handles requestIteration prompt prefill', () => {
+    const store = useArtifactStore()
+
+    store.registerOrUpdateArtifact({
+      identifier: 'card-ui',
+      title: '卡片组件',
+      type: 'text/html',
+      content: '<div>v1</div>',
+      messageId: 'm1',
+    })
+
+    expect(store.previousVersion).toBeNull()
+
+    store.registerOrUpdateArtifact({
+      identifier: 'card-ui',
+      title: '卡片组件',
+      type: 'text/html',
+      content: '<div>v2</div>',
+      messageId: 'm2',
+    })
+
+    expect(store.previousVersion?.version).toBe(1)
+    expect(store.previousVersion?.content).toBe('<div>v1</div>')
+    expect(store.currentVersion?.version).toBe(2)
+
+    store.requestIteration('card-ui')
+    expect(store.pendingPrompt).toContain('请基于产物【卡片组件】(identifier: "card-ui"，当前为 v2)')
+
+    const consumed = store.consumePendingPrompt()
+    expect(consumed).toContain('请基于产物【卡片组件】')
+    expect(store.pendingPrompt).toBeNull()
+  })
 })

@@ -59,6 +59,16 @@
             <CodeOutlined class="seg-icon" />
             <span>源码</span>
           </button>
+          <button
+            v-if="hasMultipleVersions"
+            type="button"
+            class="seg-btn"
+            :class="{ active: activeTab === 'diff' }"
+            @click="artifactStore.setActiveTab('diff')"
+          >
+            <DiffOutlined class="seg-icon" />
+            <span>差异对比</span>
+          </button>
         </div>
 
         <!-- 视口模拟器（仅在预览 Tab 下展示） -->
@@ -103,6 +113,19 @@
       </div>
 
       <div class="toolbar-right">
+        <!-- 跨轮次提出修改 -->
+        <button
+          type="button"
+          class="action-btn-iteration"
+          title="基于当前版本在输入框预填修改指令"
+          @click="handleRequestIteration"
+        >
+          <EditOutlined class="btn-icon" />
+          <span>提出修改</span>
+        </button>
+
+        <div class="divider-v"></div>
+
         <!-- 复制代码 -->
         <button
           type="button"
@@ -169,6 +192,8 @@ import {
   GlobalOutlined,
   FileImageOutlined,
   ApartmentOutlined,
+  DiffOutlined,
+  EditOutlined,
 } from '@ant-design/icons-vue'
 import { useArtifactStore } from '../../stores/useArtifactStore'
 
@@ -186,6 +211,10 @@ const {
   activeTab,
   currentVersion,
 } = storeToRefs(artifactStore)
+
+const hasMultipleVersions = computed(() => {
+  return (activeArtifact.value?.versions?.length || 0) > 1
+})
 
 const versionOptions = computed(() => {
   const art = activeArtifact.value
@@ -215,6 +244,12 @@ const handleCopy = async () => {
   }
 }
 
+const handleRequestIteration = () => {
+  if (!activeArtifact.value) return
+  artifactStore.requestIteration(activeArtifact.value.identifier)
+  message.success('已将当前产物修改提示词填入输入框，请补充修改要求后发送')
+}
+
 const handleExport = () => {
   const art = activeArtifact.value
   const version = currentVersion.value
@@ -224,20 +259,42 @@ const handleExport = () => {
   let extension = 'txt'
   let mimeType = 'text/plain;charset=utf-8'
 
-  if (art.type.includes('html')) {
+  const lang = (version.language || art.language || '').toLowerCase()
+  const type = art.type.toLowerCase()
+
+  const extMap: Record<string, { ext: string; mime: string }> = {
+    html: { ext: 'html', mime: 'text/html;charset=utf-8' },
+    svg: { ext: 'svg', mime: 'image/svg+xml;charset=utf-8' },
+    mermaid: { ext: 'mmd', mime: 'text/vnd.mermaid;charset=utf-8' },
+    markdown: { ext: 'md', mime: 'text/markdown;charset=utf-8' },
+    md: { ext: 'md', mime: 'text/markdown;charset=utf-8' },
+    typescript: { ext: 'ts', mime: 'text/typescript;charset=utf-8' },
+    ts: { ext: 'ts', mime: 'text/typescript;charset=utf-8' },
+    javascript: { ext: 'js', mime: 'text/javascript;charset=utf-8' },
+    js: { ext: 'js', mime: 'text/javascript;charset=utf-8' },
+    python: { ext: 'py', mime: 'text/x-python;charset=utf-8' },
+    py: { ext: 'py', mime: 'text/x-python;charset=utf-8' },
+    json: { ext: 'json', mime: 'application/json;charset=utf-8' },
+    css: { ext: 'css', mime: 'text/css;charset=utf-8' },
+    vue: { ext: 'vue', mime: 'text/x-vue;charset=utf-8' },
+    sql: { ext: 'sql', mime: 'text/x-sql;charset=utf-8' },
+    go: { ext: 'go', mime: 'text/x-go;charset=utf-8' },
+    rust: { ext: 'rs', mime: 'text/x-rust;charset=utf-8' },
+    java: { ext: 'java', mime: 'text/x-java;charset=utf-8' },
+  }
+
+  if (type.includes('html')) {
     extension = 'html'
     mimeType = 'text/html;charset=utf-8'
-  } else if (art.type.includes('svg')) {
+  } else if (type.includes('svg')) {
     extension = 'svg'
     mimeType = 'image/svg+xml;charset=utf-8'
-  } else if (art.type.includes('mermaid')) {
+  } else if (type.includes('mermaid')) {
     extension = 'mmd'
-  } else if (version.language === 'python' || art.language === 'python') {
-    extension = 'py'
-  } else if (version.language === 'typescript' || art.language === 'typescript') {
-    extension = 'ts'
-  } else if (version.language === 'javascript' || art.language === 'javascript') {
-    extension = 'js'
+    mimeType = 'text/plain;charset=utf-8'
+  } else if (extMap[lang]) {
+    extension = extMap[lang].ext
+    mimeType = extMap[lang].mime
   }
 
   const filename = `${art.identifier}-v${version.version}.${extension}`
@@ -457,6 +514,35 @@ const handleExport = () => {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.action-btn-iteration {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4f46e5;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.action-btn-iteration:hover {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #4338ca;
+}
+
+.action-btn-iteration:active {
+  transform: scale(0.98);
+}
+
+.action-btn-iteration .btn-icon {
+  font-size: 12px;
 }
 
 .tool-btn {
