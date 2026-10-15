@@ -29,14 +29,14 @@
               type="button"
               class="icon-action-btn"
               title="刷新列表"
-              :disabled="loadingBases"
-              @click="fetchKnowledgeBases"
+              :disabled="loadingBases || isRefreshing"
+              @click="handleManualRefresh"
             >
-              <ReloadOutlined :spin="loadingBases" />
+              <ReloadOutlined :spin="loadingBases || isRefreshing" />
             </button>
           </div>
 
-          <div v-if="loadingBases" class="skeleton-list">
+          <div v-if="loadingBases && knowledgeBases.length === 0" class="skeleton-list">
             <div v-for="i in 3" :key="i" class="kb-skeleton-card" />
           </div>
 
@@ -158,7 +158,7 @@
                 <span class="col-title col-actions">操作</span>
               </div>
 
-              <div v-if="loadingDocs" class="table-loading-skeleton">
+              <div v-if="loadingDocs && currentDocuments.length === 0" class="table-loading-skeleton">
                 <div v-for="i in 4" :key="i" class="table-row-skeleton" />
               </div>
 
@@ -375,6 +375,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onActivated } from 'vue'
+import { storeToRefs } from 'pinia'
 import { message, Modal } from 'ant-design-vue'
 import {
   DatabaseOutlined,
@@ -395,7 +396,6 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons-vue'
 import {
-  getKnowledgeBases,
   createKnowledgeBase,
   deleteKnowledgeBase,
   getKnowledgeDocuments,
@@ -404,6 +404,7 @@ import {
   getKnowledgeChunks,
   searchKnowledgeBase,
 } from '@/api/knowledge'
+import { useKnowledgeStore } from '@/stores'
 import type {
   KnowledgeBaseItem,
   KnowledgeDocumentItem,
@@ -415,8 +416,8 @@ defineOptions({
   name: 'KnowledgeBaseWorkbench',
 })
 
-const loadingBases = ref(false)
-const knowledgeBases = ref<KnowledgeBaseItem[]>([])
+const knowledgeStore = useKnowledgeStore()
+const { knowledgeBases, loading: loadingBases, isRefreshing } = storeToRefs(knowledgeStore)
 const currentKb = ref<KnowledgeBaseItem | null>(null)
 
 const activeTab = ref<'documents' | 'test'>('documents')
@@ -446,33 +447,38 @@ const isSearching = ref(false)
 const hasSearched = ref(false)
 const searchResults = ref<RagSearchResultItem[]>([])
 
-const fetchKnowledgeBases = async () => {
-  loadingBases.value = true
-  try {
-    const res = await getKnowledgeBases()
-    knowledgeBases.value = res.data || []
-    if (knowledgeBases.value.length > 0) {
-      if (!currentKb.value || !knowledgeBases.value.some((b) => b.id === currentKb.value?.id)) {
-        const firstKb = knowledgeBases.value[0]
-        if (firstKb) {
-          selectKnowledgeBase(firstKb)
-        }
-      }
-    } else {
-      currentKb.value = null
-    }
-  } catch (err: any) {
-    message.error(err.message || '加载知识库失败')
-  } finally {
-    loadingBases.value = false
-  }
-}
-
 const selectKnowledgeBase = (kb: KnowledgeBaseItem) => {
+  if (currentKb.value?.id !== kb.id) {
+    currentDocuments.value = []
+  }
   currentKb.value = kb
   fetchDocuments(kb.id)
   searchResults.value = []
   hasSearched.value = false
+}
+
+const fetchKnowledgeBases = async (force = false, silent = true) => {
+  if (knowledgeBases.value.length > 0 && !currentKb.value) {
+    const firstKb = knowledgeBases.value[0]
+    if (firstKb) {
+      selectKnowledgeBase(firstKb)
+    }
+  }
+  const list = await knowledgeStore.fetchKnowledgeBases(force, silent)
+  if (list && list.length > 0) {
+    if (!currentKb.value || !list.some((b) => b.id === currentKb.value?.id)) {
+      const firstKb = list[0]
+      if (firstKb) {
+        selectKnowledgeBase(firstKb)
+      }
+    }
+  } else if (!list || list.length === 0) {
+    currentKb.value = null
+  }
+}
+
+const handleManualRefresh = async () => {
+  await fetchKnowledgeBases(true, false)
 }
 
 const fetchDocuments = async (kbId: string) => {
@@ -506,7 +512,7 @@ const handleConfirmCreate = async () => {
     })
     message.success('知识库创建成功')
     showCreateModal.value = false
-    await fetchKnowledgeBases()
+    await fetchKnowledgeBases(true, true)
     if (res.data) {
       selectKnowledgeBase(res.data)
     }
@@ -531,7 +537,7 @@ const handleDeleteKnowledgeBase = (kb: KnowledgeBaseItem) => {
         if (currentKb.value?.id === kb.id) {
           currentKb.value = null
         }
-        await fetchKnowledgeBases()
+        await fetchKnowledgeBases(true, true)
       } catch (err: any) {
         message.error(err.message || '删除失败')
       }
@@ -571,7 +577,7 @@ const uploadDocFile = async (file: File) => {
     await uploadKnowledgeDocument(currentKb.value.id, file)
     message.success(`文档 "${file.name}" 解析与向量化入库成功`)
     await fetchDocuments(currentKb.value.id)
-    await fetchKnowledgeBases()
+    await fetchKnowledgeBases(true, true)
   } catch (err: any) {
     message.error(err.message || '上传解析失败')
   } finally {
@@ -592,7 +598,7 @@ const handleDeleteDocument = (doc: KnowledgeDocumentItem) => {
         message.success('文档删除成功')
         if (currentKb.value) {
           await fetchDocuments(currentKb.value.id)
-          await fetchKnowledgeBases()
+          await fetchKnowledgeBases(true, true)
         }
       } catch (err: any) {
         message.error(err.message || '删除失败')
