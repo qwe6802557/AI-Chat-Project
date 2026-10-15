@@ -180,6 +180,8 @@ const stageStyle = computed(() => {
   overflow: hidden;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
+  flex-shrink: 0;
+  margin: auto;
 }
 
 .sandbox-iframe {

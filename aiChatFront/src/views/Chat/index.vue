@@ -12,32 +12,34 @@
         @clear-conversations="handleClearConversations"
         @logout="handleLogout"
       />
-      <ChatArea
-        :style="chatAreaStyle"
-        :messages="currentMessages"
-        :loading="loading"
-        :selected-model="selectedModel"
-        :model-options="modelOptions"
-        :models-loading="modelsLoading"
-        :current-session-id="currentConversationId"
-        :has-more-messages="hasMoreMessages"
-        :load-more-messages="handleLoadMoreMessages"
-        :selected-model-input-price="selectedModelInputPrice"
-        :selected-model-output-price="selectedModelOutputPrice"
-        :selected-model-reserve-credits="selectedModelReserveCredits"
-        :selected-model-reasoning-capability="selectedModelReasoningCapability"
-        :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
-        :current-credits-remaining="currentCreditsRemaining"
-        :has-credit-snapshot="hasCreditSnapshot"
-        @update:selected-model="handleModelChange"
-        @send-message="handleSendMessage"
-        @stop-generation="handleStopGeneration"
-        @retry-message="handleRetryMessage"
-      />
-      <ArtifactWorkspace
-        v-if="isWorkspaceOpen"
-        :style="workspaceStyle"
-      />
+      <div class="chat-workspace-container">
+        <ChatArea
+          :style="chatAreaStyle"
+          :messages="currentMessages"
+          :loading="loading"
+          :selected-model="selectedModel"
+          :model-options="modelOptions"
+          :models-loading="modelsLoading"
+          :current-session-id="currentConversationId"
+          :has-more-messages="hasMoreMessages"
+          :load-more-messages="handleLoadMoreMessages"
+          :selected-model-input-price="selectedModelInputPrice"
+          :selected-model-output-price="selectedModelOutputPrice"
+          :selected-model-reserve-credits="selectedModelReserveCredits"
+          :selected-model-reasoning-capability="selectedModelReasoningCapability"
+          :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
+          :current-credits-remaining="currentCreditsRemaining"
+          :has-credit-snapshot="hasCreditSnapshot"
+          @update:selected-model="handleModelChange"
+          @send-message="handleSendMessage"
+          @stop-generation="handleStopGeneration"
+          @retry-message="handleRetryMessage"
+        />
+        <ArtifactWorkspace
+          v-if="isWorkspaceOpen"
+          :style="workspaceStyle"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -493,5 +495,14 @@ onActivated(async () => {
   min-height: 0;
   overflow: hidden;
   background: #f8fafc;
+}
+
+.chat-workspace-container {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
 }
 </style>

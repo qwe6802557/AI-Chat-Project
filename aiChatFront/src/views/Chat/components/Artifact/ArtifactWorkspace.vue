@@ -70,8 +70,8 @@ const startDragging = (e: MouseEvent) => {
   document.body.style.userSelect = 'none'
   document.body.style.cursor = 'col-resize'
 
-  // 计算父容器总可用宽度（排除 sidebar）
-  const parent = document.querySelector('.chat-main-container')
+  // 计算可用工作区分栏容器总宽度（已自动隔离左侧 sidebar）
+  const parent = document.querySelector('.chat-workspace-container')
   if (parent) {
     containerWidth = parent.clientWidth
   }
@@ -83,7 +83,7 @@ const startDragging = (e: MouseEvent) => {
 const handleDragging = (e: MouseEvent) => {
   if (!isDragging || !containerWidth) return
 
-  const parent = document.querySelector('.chat-main-container')
+  const parent = document.querySelector('.chat-workspace-container')
   if (!parent) return
 
   const rect = parent.getBoundingClientRect()
