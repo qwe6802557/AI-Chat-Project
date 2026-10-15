@@ -896,23 +896,39 @@ $avatar-size: 32px;
 
             .open-artifact-btn,
             .copy-btn {
-              background: rgba(255, 255, 255, 0.1);
-              border: none;
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.12);
               color: #abb2bf;
               padding: 2px 8px;
               border-radius: 4px;
               font-size: 11px;
               cursor: pointer;
-              transition: all 0.2s ease;
+              transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
               &:hover {
                 background: rgba(255, 255, 255, 0.2);
                 color: #fff;
               }
+
+              &:active {
+                transform: scale(0.98);
+              }
             }
 
-            .open-artifact-btn:hover {
-              background: #2563eb;
+            .open-artifact-btn.visual-btn {
+              background: rgba(37, 99, 235, 0.16);
+              border-color: rgba(59, 130, 246, 0.35);
+              color: #93c5fd;
+
+              &:hover {
+                background: #2563eb;
+                border-color: #2563eb;
+                color: #ffffff;
+              }
+            }
+
+            .open-artifact-btn.code-btn:hover {
+              background: rgba(255, 255, 255, 0.22);
               color: #ffffff;
             }
           }

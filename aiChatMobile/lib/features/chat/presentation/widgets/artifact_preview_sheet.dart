@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_highlighter/flutter_highlighter.dart';
 import 'package:flutter_highlighter/themes/atom-one-dark.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/artifact_model.dart';
 
@@ -33,10 +34,52 @@ class ArtifactPreviewSheet extends StatefulWidget {
 
 class _ArtifactPreviewSheetState extends State<ArtifactPreviewSheet> {
   int _selectedTabIndex = 0; // 0: 预览, 1: 源码
+  WebViewController? _webViewController;
+  bool _isLoadingWeb = true;
 
   bool get _isSvg =>
       widget.artifact.type.contains('svg') ||
       widget.artifact.content.trim().startsWith('<svg');
+
+  bool get _isHtml =>
+      widget.artifact.type.contains('html') ||
+      (widget.artifact.language?.toLowerCase() == 'html') ||
+      widget.artifact.content.trim().startsWith('<!DOCTYPE') ||
+      widget.artifact.content.trim().startsWith('<html');
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_isSvg && !_isHtml) {
+      _selectedTabIndex = 1;
+    } else if (_isHtml) {
+      _initWebViewController();
+    }
+  }
+
+  void _initWebViewController() {
+    try {
+      _webViewController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.white)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageStarted: (_) {
+              if (mounted) setState(() => _isLoadingWeb = true);
+            },
+            onPageFinished: (_) {
+              if (mounted) setState(() => _isLoadingWeb = false);
+            },
+            onWebResourceError: (_) {
+              if (mounted) setState(() => _isLoadingWeb = false);
+            },
+          ),
+        )
+        ..loadHtmlString(widget.artifact.content);
+    } catch (_) {
+      _isLoadingWeb = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -268,25 +311,58 @@ class _ArtifactPreviewSheetState extends State<ArtifactPreviewSheet> {
       );
     }
 
-    // HTML / 其它格式：移动端以精致格式化预览卡呈现
+    if (_isHtml) {
+      if (_webViewController == null) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: SelectableText(
+            widget.artifact.content,
+            style: const TextStyle(
+              fontSize: 13.0,
+              height: 1.5,
+              color: StitchTokens.onSurface,
+              fontFamily: 'monospace',
+            ),
+          ),
+        );
+      }
+
+      return Stack(
+        children: [
+          WebViewWidget(controller: _webViewController!),
+          if (_isLoadingWeb)
+            const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2.0,
+                color: StitchTokens.primary,
+              ),
+            ),
+        ],
+      );
+    }
+
+    // 纯代码等非直接预览格式
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(14.0),
             decoration: BoxDecoration(
               color: StitchTokens.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+              border: Border.all(
+                color: StitchTokens.outlineVariant.withValues(alpha: 0.5),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 16.0, color: StitchTokens.primary),
+                const Icon(Icons.code_rounded, size: 18.0, color: StitchTokens.primary),
                 const SizedBox(width: 8.0),
                 Expanded(
                   child: Text(
-                    '该产物为 ${widget.artifact.type}，在移动端可查看结构并在 PC 端沙箱直接交互运行。',
+                    '当前产物为 ${widget.artifact.language?.toUpperCase() ?? 'CODE'} 纯逻辑源码，可在【产物源码】Tab 查看语法高亮与复制。',
                     style: const TextStyle(
                       fontSize: 12.0,
                       color: StitchTokens.onSurfaceVariant,

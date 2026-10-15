@@ -26,6 +26,26 @@ void main() {
       expect(result.artifacts.first.isComplete, isFalse);
     });
 
+    test('extractFromText promotes regular markdown code blocks into artifacts', () {
+      const raw = '这是为您编写的页面代码：\n```html\n<div class="box">Card</div>\n```\n可以直接在画布中预览。';
+      final result = ArtifactModel.extractFromText(raw);
+
+      expect(result.artifacts.length, equals(1));
+      expect(result.artifacts.first.identifier, equals('snippet-1'));
+      expect(result.artifacts.first.type, equals('text/html'));
+      expect(result.artifacts.first.title, equals('HTML 交互应用'));
+      expect(result.artifacts.first.content, equals('<div class="box">Card</div>'));
+      expect(result.artifacts.first.isComplete, isTrue);
+    });
+
+    test('extractFromText returns empty artifacts when text has no code blocks or tags', () {
+      const raw = '这是一段普通的文本回复，没有任何代码块或标签。';
+      final result = ArtifactModel.extractFromText(raw);
+
+      expect(result.cleanedText, equals(raw));
+      expect(result.artifacts, isEmpty);
+    });
+
     test('toJson and fromJson serialization works symmetrically', () {
       const model = ArtifactModel(
         identifier: 'code-1',
