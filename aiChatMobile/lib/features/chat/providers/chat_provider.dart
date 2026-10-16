@@ -514,6 +514,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
       attachments: attachmentsToSend,
     );
 
+    final isKbEnabled = state.selectedKnowledgeBaseIds.isNotEmpty;
+    final isWebSearch = state.isWebSearchEnabled;
+    final hasSearchFeature = isKbEnabled || isWebSearch;
+
     final assistantMessageId = const Uuid().v4();
     final assistantPlaceholder = ChatMessageModel(
       id: assistantMessageId,
@@ -523,7 +527,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
       model: state.selectedModel,
       status: MessageStatus.streaming,
       createdAt: DateTime.now(),
-      searchStatus: state.isWebSearchEnabled ? 'searching' : null,
+      searchStatus: hasSearchFeature ? 'searching' : null,
+      isKnowledgeBaseEnabled: isKbEnabled,
+      isWebSearchEnabled: isWebSearch,
     );
 
     final isOnline = _ref.read(connectivityProvider).isOnline;
@@ -633,6 +639,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
           if (chunk.delta != null) {
             contentBuffer.write(chunk.delta);
+            if (currentSources == null || currentSources!.isEmpty) {
+              currentSearchStatus = null;
+            }
           }
 
           final updatedMessages = state.messages.map((msg) {
@@ -645,6 +654,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
                 searchStatus: currentSearchStatus,
                 sources: currentSources ?? msg.sources,
                 toolCalls: List<ToolExecutionRecordModel>.from(currentToolCalls),
+                isKnowledgeBaseEnabled: isKbEnabled,
+                isWebSearchEnabled: isWebSearch,
               );
             }
             return msg;

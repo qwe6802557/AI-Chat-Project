@@ -8,11 +8,19 @@ import 'citation_bottom_sheet.dart';
 class ChatSearchSourceGallery extends StatefulWidget {
   final List<SearchSourceModel> sources;
   final String? searchStatus;
+  final bool isKnowledgeBaseEnabled;
+  final bool isWebSearchEnabled;
+  final bool hasAnswerContent;
+  final bool isDone;
 
   const ChatSearchSourceGallery({
     super.key,
     required this.sources,
     this.searchStatus,
+    this.isKnowledgeBaseEnabled = false,
+    this.isWebSearchEnabled = false,
+    this.hasAnswerContent = false,
+    this.isDone = false,
   });
 
   @override
@@ -61,6 +69,23 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
   }
 
   Widget _buildSearchingRadar() {
+    final String label;
+    final IconData icon;
+
+    if (widget.isKnowledgeBaseEnabled && widget.isWebSearchEnabled) {
+      label = '正在检索参考来源与知识库...';
+      icon = Icons.travel_explore_rounded;
+    } else if (widget.isKnowledgeBaseEnabled) {
+      label = '正在检索知识库文档切片...';
+      icon = Icons.menu_book_rounded;
+    } else if (widget.isWebSearchEnabled) {
+      label = '正在检索互联网参考来源...';
+      icon = Icons.language_rounded;
+    } else {
+      label = '正在检索参考内容...';
+      icon = Icons.travel_explore_rounded;
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10.0),
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -74,16 +99,16 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
         children: [
           FadeTransition(
             opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_animController),
-            child: const Icon(
-              Icons.travel_explore_rounded,
+            child: Icon(
+              icon,
               size: 16.0,
               color: StitchTokens.primary,
             ),
           ),
           const SizedBox(width: 8.0),
-          const Text(
-            '正在检索参考来源与知识库...',
-            style: TextStyle(
+          Text(
+            label,
+            style: const TextStyle(
               fontSize: 12.0,
               fontWeight: FontWeight.w500,
               color: StitchTokens.primary,
@@ -216,7 +241,12 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
     final isSearching = widget.searchStatus == 'searching';
     final hasSources = widget.sources.isNotEmpty;
 
-    if (!isSearching && !hasSources) {
+    // 严格生命周期守卫：
+    // 1. 如果既不处于搜索态，也没有参考来源，直接隐藏
+    // 2. 如果没有命中来源，且已经进入正文回答阶段（hasAnswerContent）或回答已结束（isDone），雷达搜索框必须立即消失！
+    // 3. 如果根本未启用知识库且未开启联网搜索，无论 searchStatus 为何，在没有来源时一律隐藏！
+    final noFeatureEnabled = !widget.isKnowledgeBaseEnabled && !widget.isWebSearchEnabled;
+    if (!hasSources && (widget.hasAnswerContent || widget.isDone || !isSearching || noFeatureEnabled)) {
       return const SizedBox.shrink();
     }
 

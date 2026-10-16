@@ -5,7 +5,6 @@ import '../../../core/theme/stitch_tokens.dart';
 import '../providers/chat_provider.dart';
 import 'widgets/chat_assistant_message_bubble.dart';
 import 'widgets/chat_bottom_input_bar.dart';
-import 'widgets/chat_sticky_model_bar.dart';
 import 'widgets/chat_top_header.dart';
 import 'widgets/chat_user_message_bubble.dart';
 import 'widgets/model_switcher_bottom_sheet.dart';
@@ -197,11 +196,6 @@ class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClie
               selectedModel: chatState.selectedModel,
               onModelTap: _openModelSwitcher,
               onProfileTap: () => context.push('/profile'),
-            ),
-            const SizedBox(height: 4.0),
-            ChatStickyModelBar(
-              model: chatState.selectedModel,
-              onTap: _openModelSwitcher,
             ),
             const StitchOfflineBanner(),
             if (chatState.errorMessage != null)
