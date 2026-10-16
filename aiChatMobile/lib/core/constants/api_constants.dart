@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 /// 全局 API 契约与服务常量
 class ApiConstants {
   ApiConstants._();
@@ -6,6 +8,7 @@ class ApiConstants {
   static String get baseUrl {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
+    if (kDebugMode && kIsWeb) return 'http://localhost:3000';
     return 'https://aichat.yanggenbwebsite.site';
   }
 

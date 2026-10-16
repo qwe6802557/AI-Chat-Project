@@ -9,6 +9,8 @@ import '../../features/video/presentation/video_page.dart';
 import '../../features/voice/presentation/voice_page.dart';
 import '../../features/explore/presentation/explore_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
+import '../../features/knowledge_base/presentation/knowledge_base_list_page.dart';
+import '../../features/knowledge_base/presentation/knowledge_base_detail_page.dart';
 import '../../features/chat/providers/chat_provider.dart';
 import '../../shared/widgets/animated_branch_fade.dart';
 import '../../shared/widgets/floating_glass_nav_bar.dart';
@@ -66,6 +68,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile',
         builder: (context, state) => const ProfilePage(),
+      ),
+      GoRoute(
+        path: '/knowledge-base',
+        builder: (context, state) => const KnowledgeBaseListPage(),
+      ),
+      GoRoute(
+        path: '/knowledge-base/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id'] ?? '';
+          return KnowledgeBaseDetailPage(knowledgeBaseId: id);
+        },
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

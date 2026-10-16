@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/knowledge_base_model.dart';
 
@@ -177,6 +178,19 @@ class _KnowledgeBaseBottomSheetState extends State<KnowledgeBaseBottomSheet> {
                   ],
                 ),
               ),
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: StitchTokens.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.settings_outlined, size: 16.0),
+                label: const Text('管理中心', style: TextStyle(fontSize: 12.0, fontWeight: FontWeight.w600)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  context.push('/knowledge-base');
+                },
+              ),
             ],
           ),
           const SizedBox(height: 16.0),
@@ -189,21 +203,38 @@ class _KnowledgeBaseBottomSheetState extends State<KnowledgeBaseBottomSheet> {
             )
           else if (_knowledgeBases.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32.0),
+              padding: const EdgeInsets.symmetric(vertical: 28.0),
               child: Column(
-                children: const [
-                  Icon(
+                children: [
+                  const Icon(
                     Icons.inventory_2_outlined,
                     size: 36.0,
                     color: Color(0xFF94A3B8),
                   ),
-                  SizedBox(height: 8.0),
-                  Text(
-                    '暂无可用知识库，可在电脑端工作台创建与上传文档',
+                  const SizedBox(height: 8.0),
+                  const Text(
+                    '暂无可用知识库，点击下方按钮即刻新建',
                     style: TextStyle(
                       fontSize: 13.0,
                       color: Color(0xFF64748B),
                     ),
+                  ),
+                  const SizedBox(height: 14.0),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: StitchTokens.primary,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add_rounded, size: 16.0, color: Colors.white),
+                    label: const Text('新建知识库', style: TextStyle(color: Colors.white, fontSize: 13.0)),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      context.push('/knowledge-base');
+                    },
                   ),
                 ],
               ),
