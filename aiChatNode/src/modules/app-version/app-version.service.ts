@@ -41,22 +41,22 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.6',
-      latestVersionCode: 8,
+      latestVersion: '1.1.7',
+      latestVersionCode: 9,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '21.0 MB',
+      packageSize: '21.5 MB',
       releaseNotes: [
-        '全新上线移动端 RAG 知识库检索与证据溯源体系：支持行内切片角标 [n] 触感交互胶囊',
-        '全新原生切片证据抽屉（CitationBottomSheet）：支持置信度徽章高对比展示、切片正文排版与一键复制',
-        '升级高质感 StitchMarkdownView 渲染引擎：内置 AtomOneDark 极客黑代码高亮与红黄绿视窗工具栏',
-        '知识库参考切片画廊与消息气泡全链路打通，统一证据溯源体验',
-        '优化 Flutter 跨端持久化存储通道与用户数据兼容性',
+        '全新上线移动端知识库管理中心（知识大脑）：支持多知识库分类管理、统计看板与质感封面',
+        '集成全格式文档投喂工作台：支持 PDF、Markdown、TXT、DOCX 多格式文件上传与实时进度反馈',
+        '支持文档切片全景审阅抽屉（ChunkDetailDrawer）：切片字数统计、高亮排版与一键复制',
+        '新增向量检索演练沙箱（RetrievalTestModal）：直接测试语义命中效果与召回相似度分值',
+        '支持 SWR 轮询与即时状态响应，文档解析就绪自动更新',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-16T02:00:00.000Z',
+      publishedAt: '2026-10-16T05:50:00.000Z',
     };
   }
 
