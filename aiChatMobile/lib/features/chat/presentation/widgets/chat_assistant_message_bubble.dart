@@ -7,6 +7,8 @@ import 'artifact_capsule_card.dart';
 import 'chat_reasoning_card.dart';
 import 'chat_search_source_gallery.dart';
 import 'chat_tool_execution_card.dart';
+import 'citation_bottom_sheet.dart';
+import 'stitch_markdown_view.dart';
 
 /// AI 助手消息气泡组件
 class ChatAssistantMessageBubble extends StatelessWidget {
@@ -135,16 +137,26 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                 if (msg.status == MessageStatus.error)
                   _buildAssistantErrorCard()
                 else if (_getCleanedContent(msg.content).isNotEmpty || msg.status == MessageStatus.streaming)
-                  Text(
-                    _getCleanedContent(msg.content).isEmpty && msg.status == MessageStatus.streaming
-                        ? '正在构思回复...'
-                        : _getCleanedContent(msg.content),
-                    style: TextStyle(
-                      fontSize: 14.0,
-                      height: 1.5,
-                      color: _getCleanedContent(msg.content).isEmpty ? StitchTokens.outline : StitchTokens.onSurface,
-                    ),
-                  ),
+                  _getCleanedContent(msg.content).isEmpty && msg.status == MessageStatus.streaming
+                      ? const Text(
+                          '正在构思回复...',
+                          style: TextStyle(
+                            fontSize: 14.0,
+                            height: 1.5,
+                            color: StitchTokens.outline,
+                          ),
+                        )
+                      : StitchMarkdownView(
+                          data: _getCleanedContent(msg.content),
+                          sources: msg.sources,
+                          onCitationTap: (source, index) {
+                            CitationBottomSheet.show(
+                              context,
+                              source: source,
+                              index: index,
+                            );
+                          },
+                        ),
               ],
             ),
           ),
