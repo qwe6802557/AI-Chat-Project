@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/stitch_tokens.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../providers/explore_provider.dart';
@@ -110,6 +111,61 @@ class _ExplorePageState extends ConsumerState<ExplorePage> {
           padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 88.0),
           children: [
             const ExploreMetricsBanner(),
+            const SizedBox(height: 12.0),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => context.push('/knowledge-base'),
+                borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEFF6FF), Color(0xFFF8FAFC)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38.0,
+                        height: 38.0,
+                        decoration: BoxDecoration(
+                          color: StitchTokens.primary,
+                          borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+                        ),
+                        child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 20.0),
+                      ),
+                      const SizedBox(width: 12.0),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '知识大脑中心',
+                              style: TextStyle(
+                                fontSize: 14.0,
+                                fontWeight: FontWeight.w700,
+                                color: StitchTokens.onSurface,
+                              ),
+                            ),
+                            SizedBox(height: 2.0),
+                            Text(
+                              '管理个人知识库，投喂技术文档与切片审阅',
+                              style: TextStyle(fontSize: 11.0, color: StitchTokens.outline),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 14.0, color: StitchTokens.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 12.0),
             ExploreCategoryChips(
               categories: _categories,
