@@ -78,6 +78,8 @@ class ChatMessageModel {
   final String? searchStatus;
   final List<SearchSourceModel> sources;
   final List<ToolExecutionRecordModel> toolCalls;
+  final bool? isKnowledgeBaseEnabled;
+  final bool? isWebSearchEnabled;
 
   const ChatMessageModel({
     required this.id,
@@ -94,10 +96,14 @@ class ChatMessageModel {
     this.searchStatus,
     this.sources = const [],
     this.toolCalls = const [],
+    this.isKnowledgeBaseEnabled,
+    this.isWebSearchEnabled,
   });
 
   bool get isUser => role == 'user';
   bool get isAssistant => role == 'assistant';
+  bool get hasContent => content.trim().isNotEmpty;
+  bool get hasSources => sources.isNotEmpty;
 
   ChatMessageModel copyWith({
     String? id,
@@ -114,6 +120,8 @@ class ChatMessageModel {
     String? searchStatus,
     List<SearchSourceModel>? sources,
     List<ToolExecutionRecordModel>? toolCalls,
+    bool? isKnowledgeBaseEnabled,
+    bool? isWebSearchEnabled,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -130,6 +138,8 @@ class ChatMessageModel {
       searchStatus: searchStatus ?? this.searchStatus,
       sources: sources ?? this.sources,
       toolCalls: toolCalls ?? this.toolCalls,
+      isKnowledgeBaseEnabled: isKnowledgeBaseEnabled ?? this.isKnowledgeBaseEnabled,
+      isWebSearchEnabled: isWebSearchEnabled ?? this.isWebSearchEnabled,
     );
   }
 
@@ -148,6 +158,8 @@ class ChatMessageModel {
     if (searchStatus != null) 'searchStatus': searchStatus,
     'sources': sources.map((s) => s.toJson()).toList(),
     'toolCalls': toolCalls.map((t) => t.toJson()).toList(),
+    if (isKnowledgeBaseEnabled != null) 'isKnowledgeBaseEnabled': isKnowledgeBaseEnabled,
+    if (isWebSearchEnabled != null) 'isWebSearchEnabled': isWebSearchEnabled,
   };
 
   factory ChatMessageModel.fromJson(Map<String, dynamic> json) {
@@ -190,6 +202,8 @@ class ChatMessageModel {
       searchStatus: json['searchStatus'] as String?,
       sources: sources,
       toolCalls: toolCalls,
+      isKnowledgeBaseEnabled: json['isKnowledgeBaseEnabled'] as bool?,
+      isWebSearchEnabled: json['isWebSearchEnabled'] as bool?,
     );
   }
 }

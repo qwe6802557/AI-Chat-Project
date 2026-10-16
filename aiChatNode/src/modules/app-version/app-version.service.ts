@@ -41,22 +41,21 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.7',
-      latestVersionCode: 9,
+      latestVersion: '1.1.8',
+      latestVersionCode: 10,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
       packageSize: '21.5 MB',
       releaseNotes: [
-        '全新上线移动端知识库管理中心（知识大脑）：支持多知识库分类管理、统计看板与质感封面',
-        '集成全格式文档投喂工作台：支持 PDF、Markdown、TXT、DOCX 多格式文件上传与实时进度反馈',
-        '支持文档切片全景审阅抽屉（ChunkDetailDrawer）：切片字数统计、高亮排版与一键复制',
-        '新增向量检索演练沙箱（RetrievalTestModal）：直接测试语义命中效果与召回相似度分值',
-        '支持 SWR 轮询与即时状态响应，文档解析就绪自动更新',
+        '移除顶部重复吸顶栏：界面更清爽纯粹，专注对话内容呈现',
+        '重构打字加载微动效：新增精致三点正弦跳动与呼吸流光质感指示器',
+        '精准优化检索状态提示：根据是否勾选知识库与联网搜索动态区分文案与图标',
+        '修复检索雷达常驻缺陷：正文一旦吐字或未命中来源时雷达框自动优雅隐去',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-16T05:50:00.000Z',
+      publishedAt: '2026-10-16T07:15:00.000Z',
     };
   }
 

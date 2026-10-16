@@ -46,7 +46,7 @@ class ApiConstants {
   static const int videoGenerationCost = 200;
 
   // 业务默认值与阈值
-  static const String appVersion = '1.1.7';
+  static const String appVersion = '1.1.8';
   static const String defaultChatModel = 'grok-chat-fast';
   static const int chatMessageCost = 10;
   static const int imageGenerationCost = 100;

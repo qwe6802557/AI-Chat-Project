@@ -7,6 +7,7 @@ import 'artifact_capsule_card.dart';
 import 'chat_reasoning_card.dart';
 import 'chat_search_source_gallery.dart';
 import 'chat_tool_execution_card.dart';
+import 'chat_typing_indicator.dart';
 import 'citation_bottom_sheet.dart';
 import 'stitch_markdown_view.dart';
 
@@ -128,6 +129,10 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                   ChatSearchSourceGallery(
                     sources: msg.sources,
                     searchStatus: msg.searchStatus,
+                    isKnowledgeBaseEnabled: msg.isKnowledgeBaseEnabled ?? false,
+                    isWebSearchEnabled: msg.isWebSearchEnabled ?? false,
+                    hasAnswerContent: _getCleanedContent(msg.content).trim().isNotEmpty,
+                    isDone: msg.status == MessageStatus.done,
                   ),
                 if (msg.toolCalls.isNotEmpty)
                   ChatToolExecutionGallery(toolCalls: msg.toolCalls),
@@ -138,13 +143,10 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                   _buildAssistantErrorCard()
                 else if (_getCleanedContent(msg.content).isNotEmpty || msg.status == MessageStatus.streaming)
                   _getCleanedContent(msg.content).isEmpty && msg.status == MessageStatus.streaming
-                      ? const Text(
-                          '正在构思回复...',
-                          style: TextStyle(
-                            fontSize: 14.0,
-                            height: 1.5,
-                            color: StitchTokens.outline,
-                          ),
+                      ? ChatTypingIndicator(
+                          label: msg.searchStatus == 'searching'
+                              ? '正在检索并准备回复...'
+                              : '正在深度构思回复...',
                         )
                       : StitchMarkdownView(
                           data: _getCleanedContent(msg.content),
