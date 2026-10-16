@@ -41,22 +41,22 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.5',
-      latestVersionCode: 7,
+      latestVersion: '1.1.6',
+      latestVersionCode: 8,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
       packageSize: '21.0 MB',
       releaseNotes: [
-        '全新上线 Artifacts 3.0：沙箱微 IDE 运行时控制台（实时捕获报错/警告/日志），SVG 支持 2x Retina 高清图片与矢量源码导出',
-        '移动端升级产物多版本药丸快速回溯切换（支持一键回溯旧版与最新版）',
-        '移动端新增系统级文件原生分享（支持直接分享代码与产物文件至微信/QQ/系统文件）',
-        '多版本视口模拟与安全沙箱渲染环境升级',
-        '延续极简 ARM64 单架构混淆与符号剥离深度优化，保持轻量体积',
+        '全新上线移动端 RAG 知识库检索与证据溯源体系：支持行内切片角标 [n] 触感交互胶囊',
+        '全新原生切片证据抽屉（CitationBottomSheet）：支持置信度徽章高对比展示、切片正文排版与一键复制',
+        '升级高质感 StitchMarkdownView 渲染引擎：内置 AtomOneDark 极客黑代码高亮与红黄绿视窗工具栏',
+        '知识库参考切片画廊与消息气泡全链路打通，统一证据溯源体验',
+        '优化 Flutter 跨端持久化存储通道与用户数据兼容性',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-15T06:30:00.000Z',
+      publishedAt: '2026-10-16T02:00:00.000Z',
     };
   }
 

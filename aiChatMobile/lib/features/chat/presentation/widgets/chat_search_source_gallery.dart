@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/chat_message_model.dart';
+import 'citation_bottom_sheet.dart';
 
 /// 联网搜索与知识库来源画廊
 class ChatSearchSourceGallery extends StatefulWidget {
@@ -57,130 +57,7 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
   }
 
   void _showKnowledgeChunkDetail(BuildContext context, SearchSourceModel source) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useRootNavigator: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(StitchTokens.radius2Xl),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Color.fromRGBO(0, 0, 0, 0.12),
-              blurRadius: 20.0,
-              offset: Offset(0, -4),
-            ),
-          ],
-        ),
-        padding: EdgeInsets.fromLTRB(
-          20.0,
-          12.0,
-          20.0,
-          MediaQuery.of(context).padding.bottom + 20.0,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 36.0,
-                height: 4.0,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
-                  borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16.0),
-            Row(
-              children: [
-                Container(
-                  width: 36.0,
-                  height: 36.0,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-                  ),
-                  child: const Icon(
-                    Icons.menu_book_rounded,
-                    size: 18.0,
-                    color: StitchTokens.primary,
-                  ),
-                ),
-                const SizedBox(width: 10.0),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        source.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15.0,
-                          fontWeight: FontWeight.w600,
-                          color: StitchTokens.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 2.0),
-                      Text(
-                        '切片 #${(source.chunkIndex ?? 0) + 1}${source.score != null ? ' · 置信度 ${(source.score! * 100).toInt()}%' : ''}',
-                        style: const TextStyle(
-                          fontSize: 11.0,
-                          color: StitchTokens.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.copy_rounded, size: 18.0),
-                  color: StitchTokens.primary,
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: source.snippet));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('切片内容已复制'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16.0),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 360.0),
-              child: SingleChildScrollView(
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Text(
-                    source.snippet,
-                    style: const TextStyle(
-                      fontSize: 13.0,
-                      height: 1.6,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    CitationBottomSheet.show(context, source: source);
   }
 
   Widget _buildSearchingRadar() {

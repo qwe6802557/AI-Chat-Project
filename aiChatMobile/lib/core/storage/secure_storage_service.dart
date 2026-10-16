@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/domain/user_model.dart';
@@ -25,9 +26,13 @@ class SecureStorageService {
     required String userId,
     required String username,
   }) async {
-    await _storage.write(key: _keyToken, value: token);
-    await _storage.write(key: _keyUserId, value: userId);
-    await _storage.write(key: _keyUsername, value: username);
+    if (!kIsWeb) {
+      try {
+        await _storage.write(key: _keyToken, value: token);
+        await _storage.write(key: _keyUserId, value: userId);
+        await _storage.write(key: _keyUsername, value: username);
+      } catch (_) {}
+    }
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyToken, token);
@@ -36,22 +41,40 @@ class SecureStorageService {
   }
 
   Future<String?> getToken() async {
-    final token = await _storage.read(key: _keyToken);
-    if (token != null && token.isNotEmpty) return token;
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyToken);
+    }
+    try {
+      final token = await _storage.read(key: _keyToken);
+      if (token != null && token.isNotEmpty) return token;
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyToken);
   }
 
   Future<String?> getUserId() async {
-    final id = await _storage.read(key: _keyUserId);
-    if (id != null && id.isNotEmpty) return id;
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyUserId);
+    }
+    try {
+      final id = await _storage.read(key: _keyUserId);
+      if (id != null && id.isNotEmpty) return id;
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyUserId);
   }
 
   Future<String?> getUsername() async {
-    final name = await _storage.read(key: _keyUsername);
-    if (name != null && name.isNotEmpty) return name;
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyUsername);
+    }
+    try {
+      final name = await _storage.read(key: _keyUsername);
+      if (name != null && name.isNotEmpty) return name;
+    } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_keyUsername);
   }
@@ -89,9 +112,13 @@ class SecureStorageService {
   }
 
   Future<void> clearAuthCredentials() async {
-    await _storage.delete(key: _keyToken);
-    await _storage.delete(key: _keyUserId);
-    await _storage.delete(key: _keyUsername);
+    if (!kIsWeb) {
+      try {
+        await _storage.delete(key: _keyToken);
+        await _storage.delete(key: _keyUserId);
+        await _storage.delete(key: _keyUsername);
+      } catch (_) {}
+    }
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyToken);

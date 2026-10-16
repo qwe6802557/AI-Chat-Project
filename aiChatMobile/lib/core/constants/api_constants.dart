@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
- 
 /// 全局 API 契约与服务常量
 class ApiConstants {
   ApiConstants._();
@@ -8,12 +6,6 @@ class ApiConstants {
   static String get baseUrl {
     const envUrl = String.fromEnvironment('API_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    if (kIsWeb) {
-      final host = Uri.base.host;
-      if (host == 'localhost' || host == '127.0.0.1') {
-        return 'http://localhost:3000';
-      }
-    }
     return 'https://aichat.yanggenbwebsite.site';
   }
 
@@ -51,7 +43,7 @@ class ApiConstants {
   static const int videoGenerationCost = 200;
 
   // 业务默认值与阈值
-  static const String appVersion = '1.1.5';
+  static const String appVersion = '1.1.6';
   static const String defaultChatModel = 'grok-chat-fast';
   static const int chatMessageCost = 10;
   static const int imageGenerationCost = 100;

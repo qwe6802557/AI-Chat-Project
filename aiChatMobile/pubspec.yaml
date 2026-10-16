@@ -1,7 +1,7 @@
 name: ai_chat_mobile
 description: "AI-Chat-Project Native Mobile Client with Stitch Deep Tech Glass UI"
 publish_to: "none"
-version: 1.1.5+7
+version: 1.1.6+8
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -31,6 +31,7 @@ dependencies:
 
   # 富文本渲染与代码语法高亮
   flutter_markdown: ^0.7.4+1
+  markdown: ^7.2.2
   flutter_highlighter: ^0.1.1
   webview_flutter: ^4.10.0
 

@@ -56,9 +56,16 @@ class UserModel {
       email: json['email'] as String?,
       phone: json['phone'] as String?,
       role: (json['role'] as String?) ?? 'user',
-      credits: json['credits'] != null
+      credits: json['credits'] is Map<String, dynamic>
           ? UserCredits.fromJson(json['credits'] as Map<String, dynamic>)
-          : const UserCredits(total: 0, consumed: 0, remaining: 0, reserved: 0),
+          : (json['credits'] is num
+              ? UserCredits(
+                  total: (json['credits'] as num).toInt(),
+                  consumed: 0,
+                  remaining: (json['credits'] as num).toInt(),
+                  reserved: 0,
+                )
+              : const UserCredits(total: 0, consumed: 0, remaining: 0, reserved: 0)),
     );
   }
 
