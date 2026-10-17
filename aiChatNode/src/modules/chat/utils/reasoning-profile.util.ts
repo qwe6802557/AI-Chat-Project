@@ -23,8 +23,6 @@ const RAW_REASONING_MODEL_PATTERNS = [
   /^glm-5$/i,
   /reasoner/i,
   /thinking/i,
-  /grok-build/i,
-  /^grok-4\.[67]/i,
   /deepseek-r1/i,
   /-r1-/i,
   /-r1$/i,

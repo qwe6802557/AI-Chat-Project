@@ -45,11 +45,11 @@ describe('resolveModelReasoningProfile', () => {
     });
   });
 
-  it('marks grok-4.7 on Grok2API as raw reasoning capable', () => {
+  it('marks DeepSeek-R1 on SiliconFlow as raw reasoning capable', () => {
     expect(
       resolveModelReasoningProfile({
-        providerName: 'Grok2API',
-        modelId: 'grok-4.7',
+        providerName: 'SiliconFlow',
+        modelId: 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
       }),
     ).toMatchObject({
       capability: 'raw',

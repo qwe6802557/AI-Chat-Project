@@ -17,7 +17,7 @@ describe('Image API', () => {
 
     const params = {
       prompt: 'futuristic cat',
-      model: 'grok-imagine-image-2.0',
+      model: 'grok-imagine-image-lite',
       n: 1,
     }
 
@@ -39,7 +39,7 @@ describe('Image API', () => {
     const controller = new AbortController()
     const params = {
       prompt: 'cyberpunk warrior',
-      model: 'grok-imagine-image-2.0',
+      model: 'grok-imagine-image-lite',
     }
 
     await generateImageApi(params, { signal: controller.signal })

@@ -49,7 +49,7 @@ describe('ImageControlBar', () => {
     expect(emitted).toBeTruthy()
     expect(emitted![0][0]).toEqual({
       prompt: 'A photorealistic futuristic cyberpunk city',
-      model: 'grok-imagine-image-2.0',
+      model: 'grok-imagine-image-lite',
       n: 1,
       aspect_ratio: '1:1',
       resolution: '1k',

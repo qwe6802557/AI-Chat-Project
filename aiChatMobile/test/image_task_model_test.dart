@@ -7,7 +7,7 @@ void main() {
       final json = {
         'id': 'task-999',
         'prompt': 'A cybernetic laboratory with glowing glassware',
-        'model': 'grok-imagine-image-2.0',
+        'model': 'grok-imagine-image-lite',
         'aspect_ratio': '16:9',
         'resolution': '2k',
         'imageUrls': [
@@ -21,7 +21,7 @@ void main() {
 
       expect(model.id, 'task-999');
       expect(model.prompt, 'A cybernetic laboratory with glowing glassware');
-      expect(model.model, 'grok-imagine-image-2.0');
+      expect(model.model, 'grok-imagine-image-lite');
       expect(model.aspectRatio, '16:9');
       expect(model.resolution, '2k');
       expect(model.imageUrls.length, 1);
@@ -40,6 +40,7 @@ void main() {
 
       final model = ImageTaskModel.fromJson(json);
       expect(model.imageUrls.first, 'https://aichat.yanggenbwebsite.site/images/media/cat_0.png');
+      expect(model.model, 'grok-imagine-image-lite');
     });
   });
 }

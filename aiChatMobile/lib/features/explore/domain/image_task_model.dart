@@ -47,7 +47,7 @@ class ImageTaskModel {
     return ImageTaskModel(
       id: (json['id'] ?? '').toString(),
       prompt: (json['prompt'] ?? '') as String,
-      model: (json['model'] ?? 'grok-imagine-image-2.0') as String,
+      model: (json['model'] ?? 'grok-imagine-image-lite') as String,
       aspectRatio: (json['aspect_ratio'] ?? json['aspectRatio'] ?? '1:1') as String,
       resolution: (json['resolution'] ?? '1k') as String,
       imageUrls: urls,

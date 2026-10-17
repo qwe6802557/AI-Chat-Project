@@ -9,7 +9,7 @@ export const DEFAULT_ZAIWEN_CHAT_MODEL = 'GLM-5';
 
 /**
  * 在问模型种子（已暂时注释）
- * 当前阶段只保留 Grok2API 供应商下的 grok-4.5 与 grok-build-0.1
+ * 当前阶段只保留 Grok2API 供应商下的可用模型（如 grok-chat-fast）
  * 全部注释不影响类型导出与下游引用
  */
 // export const ZAIWEN_CHAT_MODEL_SEEDS: ZaiwenChatModelSeed[] = [

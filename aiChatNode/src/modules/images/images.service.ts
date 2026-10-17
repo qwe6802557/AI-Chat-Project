@@ -137,8 +137,12 @@ export class ImagesService implements OnModuleInit, OnModuleDestroy {
   ): Promise<ImageGeneration> {
     const defaultModel =
       this.configService.get<string>('DEFAULT_IMAGE_MODEL') ||
-      'grok-imagine-image-2.0';
-    const modelId = dto.model || defaultModel;
+      'grok-imagine-image-lite';
+    const rawModelId = dto.model || defaultModel;
+    const modelId =
+      rawModelId === 'grok-imagine-image-2.0'
+        ? 'grok-imagine-image-lite'
+        : rawModelId;
 
     const model = await this.aiModelService.findByModelIdOrNull(modelId);
     const unitCredits = model ? model.creditCost : 100;

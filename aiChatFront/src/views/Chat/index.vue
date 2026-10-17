@@ -78,12 +78,6 @@ const PREFERRED_MODEL_ORDER: string[] = [
   'glm-4-flash',
   'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
   'Qwen/Qwen2.5-Coder-7B-Instruct',
-  'grok-4.3',
-  'grok-4.5',
-  'grok-4.6',
-  'grok-4.7',
-  'grok-build-0.1',
-  'grok-composer-2.5-fast',
 ]
 
 const getModelOrderRank = (model: { modelId: string; sortOrder?: number }): number => {
@@ -149,8 +143,10 @@ const isChatModel = (model: { modelId?: string; category?: string } | null | und
   }
   const id = model.modelId.toLowerCase()
   if (
+    id === 'grok-imagine-image-lite' ||
     id === 'grok-imagine-image-2.0' ||
     id.includes('imagine-image') ||
+    id.includes('image-lite') ||
     id.includes('image-2.0')
   ) {
     return false
@@ -161,21 +157,29 @@ const isChatModel = (model: { modelId?: string; category?: string } | null | und
 // 模型选择
 const DEFAULT_CHAT_MODEL = 'grok-chat-fast'
 const MODEL_VERSION_KEY = 'chat_model_default_version'
-const CURRENT_MODEL_VERSION = '2026-09-10-grok-fast'
+const CURRENT_MODEL_VERSION = '2026-10-18-grok-fast'
+const DEPRECATED_CHAT_MODELS = [
+  'grok-4.3',
+  'grok-build-0.1',
+  'grok-4.5',
+  'grok-4.6',
+  'grok-4.7',
+  'grok-composer-2.5-fast',
+]
 
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
   'selectedChatModel',
   DEFAULT_CHAT_MODEL
 )
 
-// 自动迁移旧版本默认模型（原默认值为 grok-4.5）至新默认模型 grok-chat-fast
+// 自动迁移旧版本模型至当前默认模型 grok-chat-fast
 if (localStorage.getItem(MODEL_VERSION_KEY) !== CURRENT_MODEL_VERSION) {
-  if (selectedModel.value === 'grok-4.5' || !isChatModel({ modelId: selectedModel.value })) {
+  if (DEPRECATED_CHAT_MODELS.includes(selectedModel.value) || !isChatModel({ modelId: selectedModel.value })) {
     selectedModel.value = DEFAULT_CHAT_MODEL
     saveSelectedModel()
   }
   localStorage.setItem(MODEL_VERSION_KEY, CURRENT_MODEL_VERSION)
-} else if (!isChatModel({ modelId: selectedModel.value })) {
+} else if (DEPRECATED_CHAT_MODELS.includes(selectedModel.value) || !isChatModel({ modelId: selectedModel.value })) {
   selectedModel.value = DEFAULT_CHAT_MODEL
   saveSelectedModel()
 }

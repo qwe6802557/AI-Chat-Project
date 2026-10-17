@@ -155,14 +155,14 @@ const emit = defineEmits<{
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const promptText = ref('')
-const selectedModel = ref('grok-imagine-image-2.0')
+const selectedModel = ref('grok-imagine-image-lite')
 const selectedCount = ref(1)
 const selectedAspectRatio = ref('1:1')
 const selectedResolution = ref('1k')
 const selectedQuality = ref('medium')
 
 const modelOptions = [
-  { label: 'grok-imagine-image-2.0', value: 'grok-imagine-image-2.0' },
+  { label: 'grok-imagine-image-lite', value: 'grok-imagine-image-lite' },
 ]
 
 const canSubmit = computed(() => {
