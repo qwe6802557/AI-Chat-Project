@@ -28,7 +28,7 @@ describe('ImagesService', () => {
       get: jest.fn().mockImplementation((key: string) => {
         if (key === 'IMAGE_API_BASE_URL' || key === 'GROK2API_BASE_URL') return 'http://1.15.171.111:8000/v1';
         if (key === 'IMAGE_API_KEY' || key === 'GROK2API_KEY') return 'test-api-key';
-        if (key === 'DEFAULT_IMAGE_MODEL') return 'grok-imagine-image-2.0';
+        if (key === 'DEFAULT_IMAGE_MODEL') return 'grok-imagine-image-lite';
         return null;
       }),
     };
@@ -42,7 +42,7 @@ describe('ImagesService', () => {
     aiModelServiceMock = {
       findByModelIdOrNull: jest.fn().mockResolvedValue({
         id: 'model-uuid',
-        modelId: 'grok-imagine-image-2.0',
+        modelId: 'grok-imagine-image-lite',
         creditCost: 100,
         category: 'image',
       } as any),
@@ -183,7 +183,7 @@ describe('ImagesService', () => {
       const pendingTask = {
         id: 'image-task-timeout',
         userId: 'user-1',
-        modelId: 'grok-imagine-image-2.0',
+        modelId: 'grok-imagine-image-lite',
         status: 'pending',
         costCredits: 100,
         createdAt: expiredCreatedAt,
@@ -210,7 +210,7 @@ describe('ImagesService', () => {
       const expiredTask = {
         id: 'image-task-history',
         userId: 'user-1',
-        modelId: 'grok-imagine-image-2.0',
+        modelId: 'grok-imagine-image-lite',
         status: 'pending',
         costCredits: 100,
         createdAt: expiredCreatedAt,

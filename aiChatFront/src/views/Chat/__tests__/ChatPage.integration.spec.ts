@@ -562,20 +562,20 @@ describe('ChatPage integration', () => {
   })
 
   it('excludes image models from model options and corrects selectedModel if set to an image model', async () => {
-    localStorage.setItem('selectedChatModel', JSON.stringify('grok-imagine-image-2.0'))
+    localStorage.setItem('selectedChatModel', JSON.stringify('grok-imagine-image-lite'))
 
     mockGetActiveModels.mockResolvedValueOnce({
       code: 0,
       data: [
         {
-          modelId: 'grok-4.5',
+          modelId: 'glm-4-flash',
           category: 'chat',
           inputPrice: 1.0,
           outputPrice: 2.0,
           creditCost: 100,
         },
         {
-          modelId: 'grok-imagine-image-2.0',
+          modelId: 'grok-imagine-image-lite',
           category: 'image',
           inputPrice: 0,
           outputPrice: 0,
@@ -595,12 +595,12 @@ describe('ChatPage integration', () => {
     const { wrapper } = await mountChatPage()
 
     const optionsText = wrapper.find('.model-options-probe').text()
-    expect(optionsText).toContain('grok-4.5')
-    expect(optionsText).not.toContain('grok-imagine-image-2.0')
+    expect(optionsText).toContain('glm-4-flash')
+    expect(optionsText).not.toContain('grok-imagine-image-lite')
     expect(optionsText).not.toContain('custom-image-generator')
 
-    expect(wrapper.find('.model-probe').text()).toBe('grok-4.5')
-    expect(localStorage.getItem('selectedChatModel')).toBe('"grok-4.5"')
+    expect(wrapper.find('.model-probe').text()).toBe('glm-4-flash')
+    expect(localStorage.getItem('selectedChatModel')).toBe('"glm-4-flash"')
   })
 
   it('automatically migrates legacy default model grok-4.5 to grok-chat-fast on load', async () => {
@@ -631,7 +631,7 @@ describe('ChatPage integration', () => {
 
     expect(wrapper.find('.model-probe').text()).toBe('grok-chat-fast')
     expect(localStorage.getItem('selectedChatModel')).toBe('"grok-chat-fast"')
-    expect(localStorage.getItem('chat_model_default_version')).toBe('2026-09-10-grok-fast')
+    expect(localStorage.getItem('chat_model_default_version')).toBe('2026-10-18-grok-fast')
   })
 
   it('blocks sending when current credits are lower than selected model cost', async () => {

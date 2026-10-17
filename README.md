@@ -35,14 +35,14 @@
 ### 1. 智能多模态对话 (AI Chat Workbench)
 - **SSE 流式传输与逐字打字机**：基于 Server-Sent Events 实现毫秒级响应流式输出，平滑且无页面阻塞。
 - **深度思考模型（Reasoning Panel）支持**：原生兼容带思维链（Chain of Thought）的模型（如 DeepSeek-R1、Grok 系列思考模型），支持思考耗时统计与思考过程折叠收起。
-- **动态模型热切换**：支持随时切换已启用的文本对话模型（`grok-chat-fast`、`grok-4.3`、`grok-4.5`、`grok-4.6`、`grok-4.7`、`grok-build-0.1` 等），并在聊天模式下严格隐藏生图专用模型。
+- **动态模型热切换**：支持随时切换已启用的文本对话模型（`grok-chat-fast`、`glm-4-flash`、`DeepSeek-R1`、`Qwen2.5-Coder` 等），并在聊天模式下严格隐藏生图专用模型。
 - **多模态图像与附件上传**：支持用户在对话中上传图片、PDF、Word 附件，由多模态大模型进行综合语义理解与图文交互。
 - **精美 Markdown 排版**：内置代码高亮、一键免密复制代码、标准 LaTeX 数学公式渲染、自适应优雅数据表格。
 - **会话持久化与无限滚动**：多会话自由创建、重命名、归档清理，向上滚动自动加载更早历史消息。
 - **自研贴底稳定滚动算法**：融合 `useScrollManager`、多帧 RAF 沉降追踪（`trackSettling`）与 `ResizeObserver`，彻底杜绝复杂表格排版膨胀引发的滚动条卡在中部问题。
 
 ### 2. 灵感生图工作台 (AI Image Workbench)
-- **生图引擎接入**：直连 Grok Imagine（`grok-imagine-image-2.0`）顶级生图引擎。
+- **生图引擎接入**：直连 Grok Imagine（`grok-imagine-image-lite`）顶级生图引擎。
 - **参数控制台 (Command Deck)**：极简药丸胶囊风格设计，无死角配置生成张数（1x~4x）、宽高比（1:1、16:9、9:16 等）、分辨率（1k/2k）与生图质量。
 - **多状态卡片画廊**：
   - 创作请求发出后自动平滑置顶；
@@ -222,7 +222,7 @@ JWT_SECRET=your-secure-random-jwt-secret-key-at-least-32-chars
 # 上游模型服务（如 Grok2API 或 OpenAI 兼容代理）
 GROK2API_BASE_URL=http://127.0.0.1:18000/v1
 GROK2API_API_KEY=your-grok2api-key
-DEFAULT_IMAGE_MODEL=grok-imagine-image-2.0
+DEFAULT_IMAGE_MODEL=grok-imagine-image-lite
 ```
 
 ---

@@ -23,8 +23,8 @@ export class CreateImageGenerationDto {
 
   @ApiProperty({
     description: '生图模型',
-    example: 'grok-imagine-image-2.0',
-    default: 'grok-imagine-image-2.0',
+    example: 'grok-imagine-image-lite',
+    default: 'grok-imagine-image-lite',
     required: false,
   })
   @IsOptional()

@@ -41,21 +41,20 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.1.8',
-      latestVersionCode: 10,
+      latestVersion: '1.2.0',
+      latestVersionCode: 12,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
       packageSize: '21.5 MB',
       releaseNotes: [
-        '移除顶部重复吸顶栏：界面更清爽纯粹，专注对话内容呈现',
-        '重构打字加载微动效：新增精致三点正弦跳动与呼吸流光质感指示器',
-        '精准优化检索状态提示：根据是否勾选知识库与联网搜索动态区分文案与图标',
-        '修复检索雷达常驻缺陷：正文一旦吐字或未命中来源时雷达框自动优雅隐去',
+        '下架不可用模型：全面移除 grok-4.3 与 grok-build-0.1，对话模型精简为 4 款高效稳定模型',
+        '原生 Slim Release 架构构建，遵循最小体积原则，性能与下载更轻快',
+        '移动端与 Web 端全面同步，优化网络流式与会话稳定性',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-16T07:15:00.000Z',
+      publishedAt: '2026-10-18T04:00:00.000Z',
     };
   }
 

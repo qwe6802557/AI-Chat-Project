@@ -10,7 +10,7 @@ class ImageRepository {
 
   Future<ImageTaskModel> createImageGeneration({
     required String prompt,
-    String model = 'grok-imagine-image-2.0',
+    String model = 'grok-imagine-image-lite',
     int n = 1,
     String aspectRatio = '1:1',
     String resolution = '1k',

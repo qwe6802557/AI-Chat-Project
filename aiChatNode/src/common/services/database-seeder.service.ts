@@ -78,7 +78,7 @@ export class DatabaseSeederService implements OnModuleInit {
 
   /**
    * 初始化 AI 供应商和模型种子数据
-   * 当前阶段：仅注册 Grok2API 供应商及 grok-4.5 / grok-build-0.1 两个模型
+   * 当前阶段：仅注册 Grok2API 供应商及 grok-chat-fast / grok-imagine-image-lite 等可用模型
    * 在问与 Claude 相关 seed 已暂时注释，数据库历史记录需通过 isActive=false 脚本同步禁用
    */
   private async seedAiProviders(): Promise<SeedSummary> {
@@ -165,61 +165,41 @@ export class DatabaseSeederService implements OnModuleInit {
         sortOrder: 1,
         isActive: true,
       },
-      {
-        modelId: 'grok-4.3',
-        modelName: 'Grok 4.3',
-        description: '本机 Grok2API 4.3 聊天模型',
-        sortOrder: 2,
-        isActive: true,
-      },
-      {
-        modelId: 'grok-4.5',
-        modelName: 'Grok 4.5',
-        description: '本机 Grok2API 4.5 聊天模型',
-        sortOrder: 3,
-        isActive: true,
-      },
-      {
-        modelId: 'grok-4.6',
-        modelName: 'Grok 4.6',
-        description: '本机 Grok2API 4.6 聊天模型',
-        sortOrder: 4,
-        isActive: true,
-      },
-      {
-        modelId: 'grok-4.7',
-        modelName: 'Grok 4.7',
-        description: '本机 Grok2API 4.7 深度推理旗舰模型',
-        sortOrder: 5,
-        isActive: true,
-      },
-      {
-        modelId: 'grok-build-0.1',
-        modelName: 'Grok Build 0.1',
-        description: '本机 Grok2API Build 模型',
-        sortOrder: 6,
-        isActive: true,
-      },
-      {
-        modelId: 'grok-composer-2.5-fast',
-        modelName: 'Grok Composer 2.5 Fast',
-        description: '本机 Grok2API 代码与创作快速模型',
-        sortOrder: 7,
-        isActive: true,
-      },
     ];
 
     const GROK2API_IMAGE_MODELS = [
       {
-        modelId: 'grok-imagine-image-2.0',
-        modelName: 'Grok Imagine Image 2.0',
-        description: 'Grok Web 图片生成模型，支持 n、宽高比、1k/2k',
+        modelId: 'grok-imagine-image-lite',
+        modelName: 'Grok Imagine Image Lite',
+        description: 'Grok Web 图片生成轻量模型，支持 n、宽高比、1k/2k',
         sortOrder: 1,
         isActive: true,
         category: 'image' as const,
         creditCost: 100,
       },
     ];
+
+    // 显式下架已停用/不可用的历史模型
+    const DEPRECATED_MODEL_IDS = [
+      'grok-4.3',
+      'grok-build-0.1',
+      'grok-4.5',
+      'grok-4.6',
+      'grok-4.7',
+      'grok-composer-2.5-fast',
+      'grok-imagine-image-2.0',
+    ];
+    for (const deprecatedId of DEPRECATED_MODEL_IDS) {
+      try {
+        const existing = await this.aiModelService.findByModelIdOrNull(deprecatedId);
+        if (existing && existing.isActive) {
+          await this.aiModelService.update(existing.id, { isActive: false });
+          this.logger.log(`已下架不可用模型: ${deprecatedId}`);
+        }
+      } catch (err) {
+        this.logger.warn(`下架模型 ${deprecatedId} 失败: ${err}`);
+      }
+    }
 
     for (const model of GROK2API_CHAT_MODELS) {
       const result = await this.ensureModel({
@@ -356,7 +336,7 @@ export class DatabaseSeederService implements OnModuleInit {
     try {
       const allModels = await this.aiModelService.findAll();
       for (const m of allModels) {
-        if (m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-2.0')) {
+        if (m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-lite' && m.modelId !== 'grok-imagine-image-2.0')) {
           if (m.creditCost !== DEFAULT_CHAT_MODEL_CREDIT_COST || m.billingMode !== DEFAULT_CHAT_BILLING_MODE) {
             await this.aiModelService.update(m.id, {
               creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
