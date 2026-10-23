@@ -188,6 +188,7 @@ export class DatabaseSeederService implements OnModuleInit {
       'grok-4.7',
       'grok-composer-2.5-fast',
       'grok-imagine-image-2.0',
+      'moonshotai/Kimi-K3',
     ];
     for (const deprecatedId of DEPRECATED_MODEL_IDS) {
       try {
@@ -332,6 +333,68 @@ export class DatabaseSeederService implements OnModuleInit {
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
 
+    // ===== OurFreeModel (dsh-our-free-model) 本地免密网关通道 =====
+    const ofmProviderResult = await this.ensureProvider({
+      name: 'OurFreeModel',
+      description: 'Our Free Model (dsh-our-free-model) 本地免密聚合网关通道',
+      website: 'https://github.com/Ebony-Vinyl/dsh-our-free-model',
+    });
+    summary[
+      ofmProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    ] += 1;
+
+    const OUR_FREE_MODELS = [
+      {
+        modelId: 'deepseek-ai/DeepSeek-V4.1-Flash',
+        modelName: 'DeepSeek-V4.1-Flash (EAC 协付)',
+        description: 'Our Free Model EAC 通道：DeepSeek 前沿快速对话模型，已解锁 GitHub 协付通道',
+        sortOrder: 11,
+        isActive: true,
+      },
+      {
+        modelId: 'z-ai/glm-5.3',
+        modelName: 'GLM-5.3 (EAC 协付)',
+        description: 'Our Free Model EAC 通道：智谱前沿旗舰大模型，全能逻辑推理与代码理解',
+        sortOrder: 12,
+        isActive: true,
+      },
+      {
+        modelId: 'openai/gpt-oss-20b',
+        modelName: 'GPT-OSS-20B (EAC 协付)',
+        description: 'Our Free Model EAC 通道：高吞吐低延迟开源前沿模型，日常通用与极速问答',
+        sortOrder: 13,
+        isActive: true,
+      },
+      {
+        modelId: 'kilo-auto/free',
+        modelName: 'Kilo-Auto (OFM Free)',
+        description: 'Our Free Model 免密通道：Kilo AI 自动优选免费前沿大模型',
+        sortOrder: 14,
+        isActive: true,
+      },
+    ];
+
+    for (const model of OUR_FREE_MODELS) {
+      const result = await this.ensureModel({
+        providerId: ofmProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 128000,
+        maxOutput: 4096,
+        availability: 99.9,
+        tps: 60,
+        description: model.description,
+        billingMode: DEFAULT_CHAT_BILLING_MODE,
+        creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: 'chat',
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
     // 同步数据库中所有已存在的聊天模型为固定 10 积分按次计费
     try {
       const allModels = await this.aiModelService.findAll();
@@ -425,22 +488,32 @@ export class DatabaseSeederService implements OnModuleInit {
       const needsCreditCostUpdate =
         payload.creditCost !== undefined &&
         existingModel.creditCost !== payload.creditCost;
+      const needsNameUpdate =
+        payload.modelName !== undefined &&
+        existingModel.modelName !== payload.modelName;
+      const needsDescUpdate =
+        payload.description !== undefined &&
+        existingModel.description !== payload.description;
 
       if (
         needsSortUpdate ||
         needsActiveUpdate ||
         needsCategoryUpdate ||
         needsBillingModeUpdate ||
-        needsCreditCostUpdate
+        needsCreditCostUpdate ||
+        needsNameUpdate ||
+        needsDescUpdate
       ) {
         await this.aiModelService.update(existingModel.id, {
+          modelName: payload.modelName ?? existingModel.modelName,
+          description: payload.description ?? existingModel.description,
           sortOrder: payload.sortOrder ?? existingModel.sortOrder,
           isActive: payload.isActive ?? existingModel.isActive,
           category: payload.category ?? existingModel.category,
           billingMode: payload.billingMode ?? existingModel.billingMode,
           creditCost: payload.creditCost ?? existingModel.creditCost,
         });
-        this.logger.log(`模型已更新配置(排序/状态/分类/计费): ${payload.modelId}`);
+        this.logger.log(`模型已更新配置(名称/描述/排序/状态/分类/计费): ${payload.modelId}`);
       } else {
         this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
       }

@@ -58,6 +58,33 @@ describe('resolveModelReasoningProfile', () => {
       badgeLabel: '支持思考过程',
     });
   });
+
+  it('marks OurFreeModel DeepSeek-R1 as raw reasoning capable', () => {
+    expect(
+      resolveModelReasoningProfile({
+        providerName: 'OurFreeModel',
+        modelId: 'deepseek-ai/DeepSeek-R1',
+      }),
+    ).toMatchObject({
+      capability: 'raw',
+      strategy: 'provider_preferred',
+      integration: 'inline_tag',
+      badgeLabel: '支持思考过程',
+    });
+  });
+
+  it('marks OurFreeModel non-reasoner model as none reasoning capability', () => {
+    expect(
+      resolveModelReasoningProfile({
+        providerName: 'OurFreeModel',
+        modelId: 'deepseek-ai/DeepSeek-V4.1-Flash',
+      }),
+    ).toMatchObject({
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+    });
+  });
 });
 
 describe('resolveReasoningPanelTitle', () => {

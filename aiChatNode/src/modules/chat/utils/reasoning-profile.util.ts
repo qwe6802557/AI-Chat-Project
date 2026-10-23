@@ -161,6 +161,31 @@ export const resolveModelReasoningProfile = (params: {
     };
   }
 
+  if (
+    normalizedProviderName.includes('ourfreemodel') ||
+    normalizedProviderName.includes('ofm') ||
+    normalizedProviderName.includes('dsh')
+  ) {
+    if (matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS)) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'inline_tag',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
+    };
+  }
+
   return {
     capability: 'none',
     strategy: 'summary_preferred',
