@@ -61,9 +61,10 @@
             <div
               v-if="message.role === 'assistant' && message.failover"
               class="failover-notice-bar"
+              :class="{ 'is-pending': message.streaming && !message.content }"
             >
               <ThunderboltOutlined class="failover-icon" />
-              <span>主服务繁忙，已自动无感接入高可用备用通道</span>
+              <span>{{ (message.streaming && !message.content) ? '主服务繁忙，正在无缝切换备用通道...' : '主服务繁忙，已自动无感接入高可用备用通道' }}</span>
             </div>
             <SearchSourceGallery
               v-if="message.role === 'assistant' && (message.sources?.length || message.searchStatus === 'searching')"
@@ -87,7 +88,7 @@
               :artifact="art"
             />
             <MarkdownMessage
-              v-if="message.role === 'assistant' && (message.content || !message.error)"
+              v-if="message.role === 'assistant' && (message.content || (!message.error && message.reasoning?.status !== 'streaming'))"
               class="markdown-content"
               :message-id="message.id"
               :content="message.content"
@@ -1116,10 +1117,21 @@ $avatar-size: 32px;
         color: #1d4ed8;
         font-size: 11.5px;
         margin-bottom: 8px;
+        transition: all 0.25s ease;
 
         .failover-icon {
           font-size: 13px;
           color: #2563eb;
+          transition: transform 0.25s ease;
+        }
+
+        &.is-pending {
+          background: #eff6ff;
+          border-color: #93c5fd;
+
+          .failover-icon {
+            animation: failover-pulse 1.4s ease-in-out infinite;
+          }
         }
       }
 
@@ -1309,6 +1321,17 @@ $avatar-size: 32px;
   30% {
     opacity: 1;
     transform: translateY(-10px);
+  }
+}
+
+@keyframes failover-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
   }
 }
 

@@ -5,6 +5,7 @@ import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from '../adapters/grok2api.adapter';
 import { ZhipuAdapter } from '../adapters/zhipu.adapter';
 import { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
+import { OFMAdapter } from '../adapters/ofm.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModel } from '../../ai-provider/entities/ai-model.entity';
 import { AiModelService } from '../../ai-provider/ai-model.service';
@@ -66,6 +67,7 @@ export class AIClientService {
     private readonly grok2apiAdapter: Grok2APIAdapter,
     private readonly zhipuAdapter: ZhipuAdapter,
     private readonly siliconFlowAdapter: SiliconFlowAdapter,
+    private readonly ofmAdapter: OFMAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
@@ -464,6 +466,15 @@ export class AIClientService {
       normalizedProviderName.includes('硅基流动')
     ) {
       return this.siliconFlowAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('ourfreemodel') ||
+      normalizedProviderName.includes('ofm') ||
+      normalizedProviderName.includes('dsh') ||
+      providerName.includes('免费模型')
+    ) {
+      return this.ofmAdapter;
     }
 
     throw new BadRequestException(`暂不支持供应商 ${providerName}`);

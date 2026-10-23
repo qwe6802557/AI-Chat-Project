@@ -6,8 +6,16 @@
     @mouseout="handleMouseOut"
   >
     <div v-if="streaming" class="streaming-markdown">
-      <div v-html="streamingHtml" />
-      <span class="streaming-cursor" aria-hidden="true" />
+      <template v-if="hasVisibleStreamingText">
+        <div v-html="streamingHtml" />
+        <span class="streaming-cursor" aria-hidden="true" />
+      </template>
+      <div v-else class="streaming-wait-placeholder" aria-label="正在等待回答">
+        <span class="wait-dot" />
+        <span class="wait-dot" />
+        <span class="wait-dot" />
+        <span class="wait-text">{{ waitPlaceholderText }}</span>
+      </div>
     </div>
     <div v-else v-html="html" />
 
@@ -45,11 +53,13 @@ interface Props {
    */
   streaming?: boolean
   sources?: SearchSource[]
+  waitPlaceholderText?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   streaming: false,
   sources: () => [],
+  waitPlaceholderText: '正在思考并组织回答...',
 })
 
 const emit = defineEmits<{
@@ -239,6 +249,12 @@ const getRenderableContent = (): string => {
   return sanitizeVisibleAssistantContent(props.content || '')
 }
 
+const hasVisibleStreamingText = computed(() => {
+  const target = getRenderableContent().trim()
+  const current = (streamingText.value || '').trim()
+  return Boolean(target.length > 0 || current.length > 0)
+})
+
 type CacheEntry = {
   content: string
   html: string
@@ -414,14 +430,68 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
+.streaming-wait-placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.streaming-wait-placeholder .wait-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  opacity: 0.65;
+  animation: wait-dot-bounce 1.35s ease-in-out infinite both;
+}
+
+.streaming-wait-placeholder .wait-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.streaming-wait-placeholder .wait-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.streaming-wait-placeholder .wait-text {
+  margin-left: 4px;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+}
+
+@keyframes wait-dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.65);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
 .streaming-cursor {
   display: inline-block;
   width: 2px;
-  height: 1em;
+  height: 1.1em;
   vertical-align: text-bottom;
   margin-left: 2px;
-  background: currentColor;
-  opacity: 0.7;
+  background: #2563eb;
+  border-radius: 1px;
+  animation: streaming-cursor-blink 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes streaming-cursor-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
 }
 
 :deep(.citation-ref-badge) {

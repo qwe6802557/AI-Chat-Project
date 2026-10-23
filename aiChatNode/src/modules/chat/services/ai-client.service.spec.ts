@@ -8,6 +8,7 @@ import type { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
 import type { Grok2APIAdapter } from '../adapters/grok2api.adapter';
 import type { ZhipuAdapter } from '../adapters/zhipu.adapter';
 import type { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
+import type { OFMAdapter } from '../adapters/ofm.adapter';
 import type { CompletionChunk } from '../types/completion.types';
 import { AIClientService } from './ai-client.service';
 
@@ -106,6 +107,20 @@ describe('AIClientService', () => {
     createStreamChatCompletion: jest.fn(),
     healthCheck: jest.fn(),
   };
+  const ofmAdapter: Pick<
+    OFMAdapter,
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
+  > = {
+    providerName: 'OurFreeModel',
+    isConfigured: true,
+    createChatCompletion: jest.fn(),
+    createStreamChatCompletion: jest.fn(),
+    healthCheck: jest.fn(),
+  };
   const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
   const findActiveModelsMock = jest.fn<AiModelService['findActiveModels']>();
   const aiModelService: Pick<AiModelService, 'findByModelId' | 'findActiveModels'> = {
@@ -144,6 +159,7 @@ describe('AIClientService', () => {
       grok2apiAdapter as Grok2APIAdapter,
       zhipuAdapter as ZhipuAdapter,
       siliconFlowAdapter as SiliconFlowAdapter,
+      ofmAdapter as OFMAdapter,
       aiModelService as AiModelService,
       aiProviderService as AiProviderService,
       redisService as RedisService,
@@ -572,6 +588,29 @@ describe('AIClientService', () => {
       // 后续 chunk 为备用模型实际流式内容
       expect(chunks[1].delta?.content).toBe('Fallback ');
       expect(chunks[2].delta?.content).toBe('stream');
+    });
+
+    it('正确路由 OurFreeModel 适配器并正常调用非流式请求', async () => {
+      findByModelIdMock.mockResolvedValue({
+        isActive: true,
+        inputPrice: 0,
+        outputPrice: 0,
+        provider: { id: 'provider-ofm', name: 'OurFreeModel', isActive: true },
+        modelName: 'DeepSeek-V4.1-Flash',
+      } as any);
+
+      (ofmAdapter.createChatCompletion as jest.Mock).mockResolvedValueOnce({
+        content: 'Hello from OFM',
+        model: 'DeepSeek-V4.1-Flash',
+        usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      });
+
+      const response = await service.createChatCompletion('DeepSeek-V4.1-Flash', [
+        { role: 'user', content: 'hi' },
+      ]);
+
+      expect(response.content).toBe('Hello from OFM');
+      expect(ofmAdapter.createChatCompletion).toHaveBeenCalled();
     });
   });
 });
