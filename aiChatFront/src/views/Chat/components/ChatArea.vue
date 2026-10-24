@@ -29,6 +29,17 @@
     />
 
     <div class="input-area-container">
+      <!-- 消息排队队列卡片 (Queued Messages) -->
+      <QueuedMessageCard
+        :queued-messages="currentQueuedMessages"
+        :is-generating="props.loading"
+        :is-paused="props.isQueuePaused"
+        @send-now="(item) => emit('send-queued-now', item)"
+        @edit="handleEditQueued"
+        @remove="handleRemoveQueued"
+        @resume-queue="() => emit('resume-queue')"
+      />
+
       <div class="control-bar-card">
         <FilePreview
           v-if="uploadedFiles.length > 0"
@@ -52,21 +63,55 @@
             class="message-input prompt-textarea"
             placeholder="发送消息，或拖拽/粘贴图片与文档..."
             :auto-size="{ minRows: 2, maxRows: 6 }"
-            :disabled="loading"
             @keydown.enter.exact.prevent="handleSend"
             @paste="handlePaste"
           />
 
-          <button
-            type="button"
-            :class="['submit-btn', { active: canSend || loading, 'stop-mode': loading }]"
-            :disabled="!canSend && !loading"
-            :title="loading ? '停止生成' : (canSend ? '发送 (Enter)' : '请输入内容')"
-            @click="handleButtonClick"
-          >
-            <span v-if="loading" class="stop-square-icon" aria-hidden="true"></span>
-            <ArrowUpOutlined v-else class="btn-icon" />
-          </button>
+          <div class="action-btn-cluster">
+            <!-- 仅在流式生成且输入框没有待排队内容时，展示主停止按钮 -->
+            <button
+              v-if="props.loading && !canQueue"
+              type="button"
+              class="submit-btn stop-mode"
+              title="停止生成"
+              @click="handleStopClick"
+            >
+              <span class="stop-square-icon" aria-hidden="true"></span>
+            </button>
+
+            <!-- 流式生成且输入框有待排队内容时，展示停止与排队双按钮并存 -->
+            <template v-else-if="props.loading && canQueue">
+              <button
+                type="button"
+                class="sub-stop-btn"
+                title="停止当前生成"
+                @click="handleStopClick"
+              >
+                <span class="stop-square-icon" aria-hidden="true"></span>
+              </button>
+
+              <button
+                type="button"
+                class="submit-btn active queue-btn"
+                title="加入排队 (Enter)"
+                @click="handleSend"
+              >
+                <ArrowUpOutlined class="btn-icon" />
+              </button>
+            </template>
+
+            <!-- 常规非流式状态下的发送按钮 -->
+            <button
+              v-else
+              type="button"
+              :class="['submit-btn', { active: canSend }]"
+              :disabled="!canSend"
+              :title="canSend ? '发送 (Enter)' : '请输入内容'"
+              @click="handleButtonClick"
+            >
+              <ArrowUpOutlined class="btn-icon" />
+            </button>
+          </div>
         </div>
 
         <div class="params-row">
@@ -158,6 +203,8 @@ import { useConversationStore } from '@/stores'
 import { useArtifactStore } from '../stores/useArtifactStore'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
+import QueuedMessageCard from './QueuedMessageCard.vue'
+import type { QueuedMessage } from '@/interface/conversation'
 import WebSearchToggle from './WebSearchToggle.vue'
 import ToolQuickCapsules from './ToolQuickCapsules.vue'
 import KnowledgeBaseCapsule from './KnowledgeBaseCapsule.vue'
@@ -195,6 +242,7 @@ interface Props {
   hasCreditSnapshot?: boolean
   initialLoading?: boolean
   sessionLoading?: boolean
+  isQueuePaused?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -207,6 +255,7 @@ const props = withDefaults(defineProps<Props>(), {
   hasCreditSnapshot: false,
   initialLoading: false,
   sessionLoading: false,
+  isQueuePaused: false,
 })
 
 const emit = defineEmits<{
@@ -222,6 +271,8 @@ const emit = defineEmits<{
   ]
   'stop-generation': []
   'retry-message': [messageId: string]
+  'send-queued-now': [item: QueuedMessage]
+  'resume-queue': []
 }>()
 
 const inputMessage = ref('')
@@ -295,10 +346,23 @@ const hasEnoughCredits = computed(() => {
   return props.currentCreditsRemaining >= props.selectedModelReserveCredits
 })
 
+const canQueue = computed(() => {
+  const hasContent = !!inputMessage.value.trim()
+  const canSendWithFiles = hasFiles.value && canSendFiles.value
+  return (hasContent || canSendWithFiles) && hasEnoughCredits.value
+})
+
 const canSend = computed(() => {
   const hasContent = !!inputMessage.value.trim()
   const canSendWithFiles = hasFiles.value && canSendFiles.value
   return (hasContent || canSendWithFiles) && !props.loading && hasEnoughCredits.value
+})
+
+const activeConvId = computed(() => props.currentSessionId || conversationStore.currentConversationId || currentConversation.value?.id || '')
+
+const currentQueuedMessages = computed<QueuedMessage[]>(() => {
+  if (!activeConvId.value) return []
+  return conversationStore.getQueuedMessages(activeConvId.value)
 })
 
 const formatRate = (value: number) => {
@@ -324,11 +388,48 @@ const handlePromptClick = (prompt: string) => {
   }
 }
 
+const handleStopClick = () => {
+  emit('stop-generation')
+}
+
 const handleButtonClick = () => {
   if (props.loading) {
-    emit('stop-generation')
+    if (canQueue.value) {
+      handleSend()
+    } else {
+      emit('stop-generation')
+    }
   } else if (canSend.value) {
     handleSend()
+  }
+}
+
+const handleEditQueued = (item: QueuedMessage) => {
+  if (activeConvId.value) {
+    conversationStore.removeQueuedMessage(activeConvId.value, item.id)
+  }
+  inputMessage.value = item.prompt
+  if (item.webSearch !== undefined) {
+    webSearchEnabled.value = item.webSearch
+  }
+  if (item.knowledgeBaseIds) {
+    selectedKnowledgeBaseIds.value = [...item.knowledgeBaseIds]
+  }
+  nextTick(() => {
+    const el = messageTextareaRef.value?.$el || messageTextareaRef.value
+    const textarea = el?.tagName === 'TEXTAREA' ? el : el?.querySelector?.('textarea')
+    if (textarea) {
+      textarea.focus()
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    }
+  })
+  message.info('已将排队消息提取回输入框')
+}
+
+const handleRemoveQueued = (item: QueuedMessage) => {
+  if (activeConvId.value) {
+    conversationStore.removeQueuedMessage(activeConvId.value, item.id)
+    message.info('已从排队队列中移除')
   }
 }
 
@@ -339,7 +440,7 @@ const handleSend = () => {
     return
   }
 
-  if (props.loading || isProcessing.value) {
+  if (isProcessing.value) {
     return
   }
 
@@ -380,6 +481,26 @@ const handleSend = () => {
     sendOptions = {
       ...(sendOptions || {}),
       knowledgeBaseIds: selectedKnowledgeBaseIds.value,
+    }
+  }
+
+  // 若当前正在流式生成响应中，则将该消息推入排队队列
+  if (props.loading) {
+    const convId = activeConvId.value
+    if (convId) {
+      conversationStore.enqueueMessage(convId, {
+        prompt: content,
+        options: sendOptions,
+        model: props.selectedModel,
+      })
+      message.success('已加入发送排队队列')
+      inputMessage.value = ''
+      clearFiles()
+      scrollSignal.value += 1
+      return
+    } else {
+      message.warning('正在生成中，请稍后')
+      return
     }
   }
 
@@ -637,6 +758,16 @@ $font-size-lg: 16px;
     &:hover {
       background: #40a9ff;
       transform: translateY(-1px);
+    }
+
+    &.queue-btn {
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      box-shadow: 0 2px 10px rgba(14, 165, 233, 0.38);
+
+      &:hover {
+        background: #0284c7;
+        box-shadow: 0 4px 14px rgba(14, 165, 233, 0.5);
+      }
     }
   }
 

@@ -48,6 +48,7 @@ export function useStreamChat() {
   const authStore = useAuthStore()
 
   const loading = ref(false)
+  const isQueuePaused = ref(false)
   const activeRequestId = ref<string | null>(null)
   const activeController = ref<StreamRequestController | null>(null)
   const activeStreamContext = ref<{
@@ -115,7 +116,10 @@ export function useStreamChat() {
   /**
    * 取消当前流式请求
    */
-  const cancelCurrentStream = () => {
+  const cancelCurrentStream = (pauseQueue = false) => {
+    if (pauseQueue) {
+      isQueuePaused.value = true
+    }
     activeRequestId.value = null
     activeController.value?.close()
     activeController.value = null
@@ -163,7 +167,8 @@ export function useStreamChat() {
       knowledgeBaseIds?: string[]
     },
   ) => {
-    cancelCurrentStream()
+    cancelCurrentStream(false)
+    isQueuePaused.value = false
 
     const toolsStore = useToolsStore()
     const {
@@ -505,6 +510,26 @@ export function useStreamChat() {
             activeController.value = null
             activeRequestId.value = null
             activeStreamContext.value = null
+
+            // 检查当前会话队列中是否有待发送消息并自动处理
+            if (!isQueuePaused.value) {
+              const nextQueued = conversationStore.dequeueMessage(sessionId)
+              if (nextQueued) {
+                const currentUserId = authStore.getUserId()
+                if (currentUserId) {
+                  logger.debug('流式生成结束，自动触发下一条排队消息:', nextQueued.prompt)
+                  setTimeout(() => {
+                    sendMessage(currentUserId, nextQueued.prompt, {
+                      fileIds: nextQueued.fileIds,
+                      serverFiles: nextQueued.serverFiles,
+                      webSearch: nextQueued.webSearch,
+                      knowledgeBaseIds: nextQueued.knowledgeBaseIds,
+                      model: nextQueued.model,
+                    })
+                  }, 120)
+                }
+              }
+            }
           },
 
           onError: (error: string) => {
@@ -523,6 +548,7 @@ export function useStreamChat() {
               error: error || '流式请求失败，请稍后重试',
             })
             loading.value = false
+            isQueuePaused.value = true
 
             conversationStore.saveConversations({ immediate: true })
             activeController.value = null
@@ -591,8 +617,28 @@ export function useStreamChat() {
     })
   }
 
+  const resumeQueue = () => {
+    isQueuePaused.value = false
+    const currId = conversationStore.currentConversationId
+    if (currId && !loading.value) {
+      const nextQueued = conversationStore.dequeueMessage(currId)
+      const currentUserId = authStore.getUserId()
+      if (nextQueued && currentUserId) {
+        sendMessage(currentUserId, nextQueued.prompt, {
+          fileIds: nextQueued.fileIds,
+          serverFiles: nextQueued.serverFiles,
+          webSearch: nextQueued.webSearch,
+          knowledgeBaseIds: nextQueued.knowledgeBaseIds,
+          model: nextQueued.model,
+        })
+      }
+    }
+  }
+
   return {
     loading,
+    isQueuePaused,
+    resumeQueue,
     sendMessage,
     cancelCurrentStream,
     retryMessage,

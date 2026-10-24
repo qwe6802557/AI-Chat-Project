@@ -96,6 +96,21 @@ export interface Message {
 }
 
 /**
+ * 排队消息接口
+ */
+export interface QueuedMessage {
+  id: string
+  conversationId: string
+  prompt: string
+  createdAt: number
+  model?: string
+  webSearch?: boolean
+  knowledgeBaseIds?: string[]
+  fileIds?: string[]
+  serverFiles?: import('@/interface/upload').ServerFileInfo[]
+}
+
+/**
  * 对话接口
  */
 export interface Conversation {
@@ -107,4 +122,5 @@ export interface Conversation {
   updatedAt: number
   sessionId?: string
   knowledgeBaseIds?: string[]
+  queuedMessages?: QueuedMessage[]
 }
