@@ -82,6 +82,7 @@ export class VoiceService {
         headers: {
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
+        signal: AbortSignal.timeout(1500),
       });
 
       if (res.ok) {
@@ -139,6 +140,7 @@ export class VoiceService {
           'Content-Type': 'application/json',
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
+        signal: AbortSignal.timeout(35000),
         body: JSON.stringify({
           model,
           text: dto.text,
@@ -151,6 +153,12 @@ export class VoiceService {
 
       if (!response.ok) {
         const errText = await response.text();
+        if (response.status === 429 || errText.includes('quota_exhausted')) {
+          throw new Error('上游语音账号额度已耗尽，正在排队恢复，请稍后再试');
+        }
+        if (response.status === 503 || errText.includes('upstream_unavailable')) {
+          throw new Error('上游语音通道暂时不可用，请稍后再试');
+        }
         throw new Error(`上游语音合成异常 (${response.status}): ${errText}`);
       }
 
@@ -172,7 +180,10 @@ export class VoiceService {
       savedTask.audioUrl = `/voice/media/${filename}`;
       return await this.voiceTaskRepo.save(savedTask);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const isTimeout = (error instanceof Error && error.name === 'TimeoutError') || String(error).includes('TimeoutError');
+      const msg = isTimeout
+        ? '上游语音生成响应超时，已全额退还积分'
+        : error instanceof Error ? error.message : String(error);
       this.logger.error(`TTS 语音合成失败: ${msg}`);
 
       // 标记失败

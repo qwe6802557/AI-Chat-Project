@@ -1,37 +1,46 @@
 <template>
   <div class="chat-message-viewport">
-    <div v-if="messages.length === 0" class="welcome-screen">
-      <div class="welcome-content">
-        <div class="logo-section">
-          <div class="logo-text">AICHAT</div>
-        </div>
+    <transition name="viewport-fade" mode="out-in">
+      <!-- 1. 首屏初始化或切换会话拉取中且本地暂无消息：展示仿真对话气泡骨架屏 -->
+      <ChatSkeletonLoader
+        v-if="(props.initialLoading || props.sessionLoading) && messages.length === 0"
+        key="skeleton"
+      />
 
-        <div class="features-grid">
-          <div
-            v-for="column in featureColumns"
-            :key="column.title"
-            class="feature-column"
-          >
-            <div class="feature-header">
-              <component :is="column.icon" class="feature-icon" />
-              <h3>{{ column.title }}</h3>
-            </div>
-            <button
-              v-for="item in column.items"
-              :key="item.value"
-              type="button"
-              class="example-card"
-              :disabled="loading"
-              @click="handlePromptClick(item.value)"
+      <!-- 2. 加载完毕且确认为空会话：展示欢迎引导面板 -->
+      <div v-else-if="messages.length === 0" key="welcome" class="welcome-screen">
+        <div class="welcome-content">
+          <div class="logo-section">
+            <div class="logo-text">AICHAT</div>
+          </div>
+
+          <div class="features-grid">
+            <div
+              v-for="column in featureColumns"
+              :key="column.title"
+              class="feature-column"
             >
-              {{ item.label }}
-            </button>
+              <div class="feature-header">
+                <component :is="column.icon" class="feature-icon" />
+                <h3>{{ column.title }}</h3>
+              </div>
+              <button
+                v-for="item in column.items"
+                :key="item.value"
+                type="button"
+                class="example-card"
+                :disabled="loading"
+                @click="handlePromptClick(item.value)"
+              >
+                {{ item.label }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div v-else ref="messagesListRef" class="messages-list">
+      <!-- 3. 正常消息列表 -->
+      <div v-else key="messages" ref="messagesListRef" class="messages-list">
       <div ref="messagesContentRef" class="messages-content-wrapper">
         <div v-if="isLoadingMore" class="loading-more-indicator">
           <LoadingOutlined class="loading-icon" spin />
@@ -212,6 +221,7 @@
         </button>
       </transition>
     </div>
+    </transition>
 
     <DocumentPreviewModal
       :open="Boolean(activePreviewDoc)"
@@ -248,6 +258,7 @@ import MarkdownMessage from './MarkdownMessage.vue'
 import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
+import ChatSkeletonLoader from './ChatSkeletonLoader.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
 import ArtifactCapsuleCard from './Artifact/ArtifactCapsuleCard.vue'
@@ -307,9 +318,14 @@ interface Props {
   hasMoreMessages?: boolean
   loadMoreMessages?: (sessionId: string, page: number) => Promise<void>
   scrollSignal?: number
+  initialLoading?: boolean
+  sessionLoading?: boolean
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  initialLoading: false,
+  sessionLoading: false,
+})
 const emit = defineEmits<{
   'prompt-click': [prompt: string]
   'retry-message': [messageId: string]
@@ -1382,5 +1398,15 @@ $avatar-size: 32px;
 .fade-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+.viewport-fade-enter-active,
+.viewport-fade-leave-active {
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.viewport-fade-enter-from,
+.viewport-fade-leave-to {
+  opacity: 0;
 }
 </style>

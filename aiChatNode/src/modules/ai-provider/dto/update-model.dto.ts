@@ -189,14 +189,16 @@ export class UpdateModelDto {
    * 模型类型
    */
   @ApiProperty({
-    description: '模型类型：chat (对话) 或 image (生图)',
+    description: '模型类型：chat (对话), image (生图), video (视频), voice (语音)',
     example: 'chat',
     required: false,
   })
   @IsOptional()
   @IsString({ message: '模型类型必须是字符串' })
-  @IsIn(['chat', 'image'], { message: '模型类型仅支持 chat 或 image' })
-  category?: 'chat' | 'image';
+  @IsIn(['chat', 'image', 'video', 'voice'], {
+    message: '模型类型仅支持 chat, image, video 或 voice',
+  })
+  category?: 'chat' | 'image' | 'video' | 'voice';
 
   /**
    * 供应商ID
@@ -209,4 +211,16 @@ export class UpdateModelDto {
   @IsOptional()
   @IsUUID('4', { message: '供应商ID必须是有效的UUID' })
   providerId?: string;
+
+  /**
+   * 是否设为默认模型
+   */
+  @ApiProperty({
+    description: '是否设为默认模型',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'isDefault必须是布尔值' })
+  isDefault?: boolean;
 }

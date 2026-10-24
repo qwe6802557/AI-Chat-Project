@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards, Inject, forwardRef } from '@nestjs/common';
+import { AIClientService } from '../chat/services/ai-client.service';
 import {
   ApiTags,
   ApiOperation,
@@ -22,7 +23,11 @@ import { resolveModelReasoningProfile } from '../chat/utils/reasoning-profile.ut
 @Controller('ai-model')
 @UseGuards(JwtAuthGuard) // 接口需要登录验证
 export class AiModelController {
-  constructor(private readonly modelService: AiModelService) {}
+  constructor(
+    private readonly modelService: AiModelService,
+    @Inject(forwardRef(() => AIClientService))
+    private readonly aiClientService: AIClientService,
+  ) {}
 
   private serializeModel(model: AiModel) {
     const reasoningProfile = resolveModelReasoningProfile({
@@ -196,14 +201,14 @@ export class AiModelController {
   @ApiQuery({
     name: 'category',
     required: false,
-    enum: ['chat', 'image'],
-    description: '按模型分类筛选（chat/image）',
+    enum: ['chat', 'image', 'video', 'voice'],
+    description: '按模型分类筛选（chat/image/video/voice）',
   })
   @ApiResponse({ status: 200, description: '获取成功' })
   @ApiResponse({ status: 401, description: '未授权，请先登录' })
   async findActiveModels(
     @Query('includeProvider') includeProvider?: string,
-    @Query('category') category?: 'chat' | 'image',
+    @Query('category') category?: 'chat' | 'image' | 'video' | 'voice',
   ) {
     const models = await this.modelService.findActiveModels(
       includeProvider === 'true',
@@ -252,5 +257,50 @@ export class AiModelController {
   async remove(@Query('id') id: string) {
     await this.modelService.remove(id);
     return { message: '删除成功' };
+  }
+
+  /**
+   * 测试模型响应速度（超管专享）
+   */
+  @Post('test-latency')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: '测试模型响应速度',
+    description: '通过发送微型流式探针测试指定模型的端到端首字与往返延迟（超管权限）。',
+  })
+  @ApiQuery({
+    name: 'id',
+    required: true,
+    description: '模型主键ID或modelId',
+  })
+  @ApiResponse({ status: 200, description: '测速完成' })
+  @ApiResponse({ status: 401, description: '未授权，请先登录' })
+  @ApiResponse({ status: 403, description: '无权限操作' })
+  async testLatency(@Query('id') id: string) {
+    return this.aiClientService.testModelLatency(id);
+  }
+
+  /**
+   * 设为系统默认模型（超管）
+   */
+  @Post('set-default')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: '设为系统默认模型',
+    description: '将指定模型设为分类默认模型，自动取消同分类其他默认标记（超管权限）。',
+  })
+  @ApiQuery({
+    name: 'id',
+    required: true,
+    description: '模型主键ID或modelId',
+  })
+  @ApiResponse({ status: 200, description: '设置成功' })
+  @ApiResponse({ status: 401, description: '未授权，请先登录' })
+  @ApiResponse({ status: 403, description: '无权限操作' })
+  async setDefault(@Query('id') id: string) {
+    const model = await this.modelService.setDefaultModel(id);
+    return this.serializeModel(model);
   }
 }

@@ -169,11 +169,20 @@ export class DatabaseSeederService implements OnModuleInit {
 
     const GROK2API_IMAGE_MODELS = [
       {
-        modelId: 'grok-imagine-image-lite',
-        modelName: 'Grok Imagine Image Lite',
-        description: 'Grok Web 图片生成轻量模型，支持 n、宽高比、1k/2k',
+        modelId: 'grok-imagine-image-2.0',
+        modelName: 'Grok Imagine Image 2.0',
+        description: 'Grok 2.0 官方图片生成旗舰模型，支持 n、宽高比、1k/2k',
         sortOrder: 1,
         isActive: true,
+        category: 'image' as const,
+        creditCost: 100,
+      },
+      {
+        modelId: 'grok-imagine-image-lite',
+        modelName: 'Grok Imagine Image Lite',
+        description: 'Grok Web 图片生成轻量模型（历史模型，管理员暂未启用）',
+        sortOrder: 2,
+        isActive: false,
         category: 'image' as const,
         creditCost: 100,
       },
@@ -187,7 +196,6 @@ export class DatabaseSeederService implements OnModuleInit {
       'grok-4.6',
       'grok-4.7',
       'grok-composer-2.5-fast',
-      'grok-imagine-image-2.0',
       'moonshotai/Kimi-K3',
     ];
     for (const deprecatedId of DEPRECATED_MODEL_IDS) {
@@ -224,6 +232,66 @@ export class DatabaseSeederService implements OnModuleInit {
     }
 
     for (const model of GROK2API_IMAGE_MODELS) {
+      const result = await this.ensureModel({
+        providerId: grok2apiProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 0,
+        maxOutput: 0,
+        availability: 100,
+        tps: 0,
+        description: model.description,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: model.creditCost,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: model.category,
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
+    const GROK2API_VOICE_MODELS = [
+      {
+        modelId: 'grok-voice-think-fast-1.0',
+        modelName: 'Grok 语音极速版 1.0',
+        description: 'Grok 原生语音极速思考与拟真朗读模型 1.0',
+        sortOrder: 1,
+        isActive: true,
+        category: 'voice' as const,
+        creditCost: 20,
+      },
+      {
+        modelId: 'grok-voice-think-fast-2.0',
+        modelName: 'Grok 语音极速版 2.0',
+        description: 'Grok 原生语音极速思考与拟真朗读模型 2.0，更低延迟与高自然度',
+        sortOrder: 2,
+        isActive: true,
+        category: 'voice' as const,
+        creditCost: 20,
+      },
+      {
+        modelId: 'grok-voice-latest',
+        modelName: 'Grok 语音最新版',
+        description: 'Grok 官方最新语音大模型，全音色自然表达与流式输出',
+        sortOrder: 3,
+        isActive: true,
+        category: 'voice' as const,
+        creditCost: 20,
+      },
+      {
+        modelId: 'grok-stt',
+        modelName: 'Grok 语音识别 STT',
+        description: 'Grok 官方高精度语音转文字识别模型',
+        sortOrder: 4,
+        isActive: true,
+        category: 'voice' as const,
+        creditCost: 20,
+      },
+    ];
+
+    for (const model of GROK2API_VOICE_MODELS) {
       const result = await this.ensureModel({
         providerId: grok2apiProviderResult.provider.id,
         modelName: model.modelName,
@@ -333,6 +401,48 @@ export class DatabaseSeederService implements OnModuleInit {
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
 
+    const SILICONFLOW_VIDEO_MODELS = [
+      {
+        modelId: 'Wan-AI/Wan2.2-T2V-A14B',
+        modelName: 'Wan2.2 文生视频 A14B',
+        description: 'Wan2.2 官方文生视频大模型，支持 16:9/9:16/1:1 高清生成',
+        sortOrder: 1,
+        isActive: true,
+        category: 'video' as const,
+        creditCost: 200,
+      },
+      {
+        modelId: 'Wan-AI/Wan2.2-I2V-A14B',
+        modelName: 'Wan2.2 图生视频 A14B',
+        description: 'Wan2.2 官方图生视频大模型，支持首帧生动运镜与动态生成',
+        sortOrder: 2,
+        isActive: true,
+        category: 'video' as const,
+        creditCost: 200,
+      },
+    ];
+
+    for (const model of SILICONFLOW_VIDEO_MODELS) {
+      const result = await this.ensureModel({
+        providerId: siliconFlowProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 0,
+        maxOutput: 0,
+        availability: 100,
+        tps: 0,
+        description: model.description,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: model.creditCost,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: model.category,
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
     // ===== OurFreeModel (dsh-our-free-model) 本地免密网关通道 =====
     const ofmProviderResult = await this.ensureProvider({
       name: 'OurFreeModel',
@@ -411,6 +521,54 @@ export class DatabaseSeederService implements OnModuleInit {
           }
         }
       }
+
+      // 检查是否已存在默认聊天模型，若无则初始化首个可用模型为默认
+      const hasDefaultChat = allModels.some((m) => m.category === 'chat' && m.isDefault);
+      if (!hasDefaultChat) {
+        const defaultCandidate =
+          allModels.find((m) => m.modelId === 'grok-chat-fast') ||
+          allModels.find((m) => m.category === 'chat' && m.isActive);
+        if (defaultCandidate) {
+          await this.aiModelService.setDefaultModel(defaultCandidate.id);
+          this.logger.log(`初始化系统默认聊天模型为: ${defaultCandidate.modelName}`);
+        }
+      }
+
+      // 检查是否已存在默认生图模型，若无则初始化 grok-imagine-image-2.0 为默认
+      const hasDefaultImage = allModels.some((m) => m.category === 'image' && m.isDefault);
+      if (!hasDefaultImage) {
+        const defaultCandidate =
+          allModels.find((m) => m.modelId === 'grok-imagine-image-2.0') ||
+          allModels.find((m) => m.category === 'image' && m.isActive);
+        if (defaultCandidate) {
+          await this.aiModelService.setDefaultModel(defaultCandidate.id);
+          this.logger.log(`初始化系统默认生图模型为: ${defaultCandidate.modelName}`);
+        }
+      }
+
+      // 检查是否已存在默认视频模型，若无则初始化 Wan-AI/Wan2.2-T2V-A14B 为默认
+      const hasDefaultVideo = allModels.some((m) => m.category === 'video' && m.isDefault);
+      if (!hasDefaultVideo) {
+        const defaultCandidate =
+          allModels.find((m) => m.modelId === 'Wan-AI/Wan2.2-T2V-A14B') ||
+          allModels.find((m) => m.category === 'video' && m.isActive);
+        if (defaultCandidate) {
+          await this.aiModelService.setDefaultModel(defaultCandidate.id);
+          this.logger.log(`初始化系统默认视频模型为: ${defaultCandidate.modelName}`);
+        }
+      }
+
+      // 检查是否已存在默认语音模型，若无则初始化 grok-voice-think-fast-1.0 为默认
+      const hasDefaultVoice = allModels.some((m) => m.category === 'voice' && m.isDefault);
+      if (!hasDefaultVoice) {
+        const defaultCandidate =
+          allModels.find((m) => m.modelId === 'grok-voice-think-fast-1.0') ||
+          allModels.find((m) => m.category === 'voice' && m.isActive);
+        if (defaultCandidate) {
+          await this.aiModelService.setDefaultModel(defaultCandidate.id);
+          this.logger.log(`初始化系统默认语音模型为: ${defaultCandidate.modelName}`);
+        }
+      }
     } catch (err) {
       this.logger.warn(`同步已有聊天模型积分配置失败: ${err}`);
     }
@@ -466,7 +624,7 @@ export class DatabaseSeederService implements OnModuleInit {
     creditCost?: number;
     sortOrder?: number;
     isActive?: boolean;
-    category?: 'chat' | 'image';
+    category?: 'chat' | 'image' | 'video' | 'voice';
   }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,

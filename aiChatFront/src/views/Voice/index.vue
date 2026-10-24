@@ -72,7 +72,27 @@ const controlBarRef = ref<InstanceType<typeof VoiceControlBar> | null>(null)
 const mainScrollRef = ref<HTMLElement | null>(null)
 
 const tasks = ref<VoiceTask[]>([])
-const voices = ref<VoiceInfo[]>([])
+
+// 默认内置音色字典（确保在离线或弱网下组件挂载即立即可选）
+const DEFAULT_FALLBACK_VOICES: VoiceInfo[] = [
+  { voice_id: 'eve', name: 'Eve', language: 'multilingual' },
+  { voice_id: 'ara', name: 'Ara', language: 'multilingual' },
+  { voice_id: 'altair', name: 'Altair', language: 'multilingual' },
+  { voice_id: 'atlas', name: 'Atlas', language: 'multilingual' },
+  { voice_id: 'aurora', name: 'Aurora', language: 'multilingual' },
+  { voice_id: 'carina', name: 'Carina', language: 'multilingual' },
+  { voice_id: 'celeste', name: 'Celeste', language: 'multilingual' },
+  { voice_id: 'cosmo', name: 'Cosmo', language: 'multilingual' },
+  { voice_id: 'helios', name: 'Helios', language: 'multilingual' },
+  { voice_id: 'leo', name: 'Leo', language: 'multilingual' },
+  { voice_id: 'luna', name: 'Luna', language: 'multilingual' },
+  { voice_id: 'orion', name: 'Orion', language: 'multilingual' },
+  { voice_id: 'rex', name: 'Rex', language: 'multilingual' },
+  { voice_id: 'sirius', name: 'Sirius', language: 'multilingual' },
+  { voice_id: 'zenith', name: 'Zenith', language: 'multilingual' },
+]
+
+const voices = ref<VoiceInfo[]>([...DEFAULT_FALLBACK_VOICES])
 const isGenerating = ref(false)
 const generatingType = ref<'tts' | 'stt'>('tts')
 const generatingElapsedSeconds = ref(0)
@@ -125,9 +145,13 @@ const fetchVoices = async () => {
     const res = await getVoicesApi()
     if (res.data?.voices && res.data.voices.length > 0) {
       voices.value = res.data.voices
+      return
     }
   } catch (err) {
-    console.warn('获取音色失败，使用默认音色', err)
+    console.warn('获取音色失败，自动使用默认保底音色', err)
+  }
+  if (!voices.value || voices.value.length === 0) {
+    voices.value = [...DEFAULT_FALLBACK_VOICES]
   }
 }
 

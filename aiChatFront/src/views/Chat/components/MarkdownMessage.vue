@@ -7,8 +7,7 @@
   >
     <div v-if="streaming" class="streaming-markdown">
       <template v-if="hasVisibleStreamingText">
-        <div v-html="streamingHtml" />
-        <span class="streaming-cursor" aria-hidden="true" />
+        <div v-html="streamingHtmlWithCursor" />
       </template>
       <div v-else class="streaming-wait-placeholder" aria-label="正在等待回答">
         <span class="wait-dot" />
@@ -310,6 +309,24 @@ const scheduleStreamingRender = () => {
   renderRafId = requestAnimationFrame(runStreamingRender)
 }
 
+const STREAMING_CURSOR_HTML = '<span class="streaming-cursor" aria-hidden="true"></span>'
+const TRAILING_CLOSING_TAG_REGEX = /(<\/(?:p|li|blockquote|h[1-6]|dd|dt|code|td|th)>)((\s*<\/(?:ul|ol|pre|table|tbody|tr|div)>)*\s*)$/i
+
+/**
+ * 将打字机光标直接嵌入到正在输出的内容末尾（叶子块闭合标签前），
+ * 避免光标换行跌落到内容下方
+ */
+const streamingHtmlWithCursor = computed(() => {
+  const rawHtml = streamingHtml.value || ''
+  if (!rawHtml.trim()) {
+    return STREAMING_CURSOR_HTML
+  }
+  if (TRAILING_CLOSING_TAG_REGEX.test(rawHtml)) {
+    return rawHtml.replace(TRAILING_CLOSING_TAG_REGEX, `${STREAMING_CURSOR_HTML}$1$2`)
+  }
+  return `${rawHtml}${STREAMING_CURSOR_HTML}`
+})
+
 const renderFinalHtml = () => {
   const messageId = props.messageId
   const content = getRenderableContent()
@@ -474,14 +491,18 @@ onBeforeUnmount(() => {
   }
 }
 
+:deep(.streaming-cursor),
 .streaming-cursor {
   display: inline-block;
   width: 2px;
-  height: 1.1em;
-  vertical-align: text-bottom;
+  height: 1.15em;
+  vertical-align: -0.15em;
   margin-left: 2px;
+  margin-right: 1px;
   background: #2563eb;
   border-radius: 1px;
+  user-select: none;
+  pointer-events: none;
   animation: streaming-cursor-blink 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

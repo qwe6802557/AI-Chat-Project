@@ -18,6 +18,8 @@
     <ChatMessageViewport
       :messages="messages"
       :loading="loading"
+      :initial-loading="initialLoading"
+      :session-loading="sessionLoading"
       :current-session-id="currentSessionId"
       :has-more-messages="hasMoreMessages"
       :load-more-messages="loadMoreMessages"
@@ -191,6 +193,8 @@ interface Props {
   selectedModelReasoningBadgeLabel?: string
   currentCreditsRemaining?: number
   hasCreditSnapshot?: boolean
+  initialLoading?: boolean
+  sessionLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -201,6 +205,8 @@ const props = withDefaults(defineProps<Props>(), {
   selectedModelReasoningBadgeLabel: '',
   currentCreditsRemaining: 0,
   hasCreditSnapshot: false,
+  initialLoading: false,
+  sessionLoading: false,
 })
 
 const emit = defineEmits<{

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatController } from './chat.controller';
 import { ChatSessionController } from './chat-session.controller';
@@ -27,7 +27,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
   imports: [
     TypeOrmModule.forFeature([ChatMessage, ChatSession, ChatAttachment]),
     UserModule,
-    AiProviderModule,
+    forwardRef(() => AiProviderModule),
     CreditsModule,
     FilesModule, // 导入文件模块
     RedisModule,

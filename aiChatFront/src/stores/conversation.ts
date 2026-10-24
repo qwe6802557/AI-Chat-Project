@@ -243,6 +243,12 @@ export const useConversationStore = defineStore('conversation', () => {
   /** 加载状态 */
   const isLoading = ref(false)
 
+  /** 是否处于首屏初始化加载中（拉取会话列表与首个会话消息） */
+  const isInitialLoading = ref(true)
+
+  /** 是否处于切换会话加载消息中 */
+  const isSessionLoading = ref(false)
+
   // Getters
 
   /** 当前对话 */
@@ -436,9 +442,14 @@ export const useConversationStore = defineStore('conversation', () => {
         hasPersistedAttachments(targetConversation)
       )
     ) {
-      const paginationInfo = await loadMessagesForSession(id)
-      saveConversations()
-      return paginationInfo
+      isSessionLoading.value = true
+      try {
+        const paginationInfo = await loadMessagesForSession(id)
+        saveConversations()
+        return paginationInfo
+      } finally {
+        isSessionLoading.value = false
+      }
     }
 
     saveConversations()
@@ -492,13 +503,31 @@ export const useConversationStore = defineStore('conversation', () => {
       const response = await getSessionList({ userId })
 
       if (response.code === 0 && response.data) {
-        const serverConversations = response.data.map(transformBackendSession)
-        conversations.value = serverConversations
+        // SWR 策略：建立已有本地会话字典，平滑保留已缓存的消息，避免瞬时清空引发欢迎页闪现
+        const existingMap = new Map(conversations.value.map(c => [c.id, c]))
+
+        const mergedConversations: Conversation[] = response.data.map((session) => {
+          const transformed = transformBackendSession(session)
+          const existing = existingMap.get(session.id)
+          if (existing && existing.messages && existing.messages.length > 0) {
+            transformed.messages = existing.messages
+          }
+          return transformed
+        })
+
+        conversations.value = mergedConversations
         saveConversations()
 
-        if (serverConversations.length > 0 && serverConversations[0]) {
-          setCurrentConversationId(serverConversations[0].id)
-          return await loadMessagesForSession(serverConversations[0].id)
+        if (mergedConversations.length > 0 && mergedConversations[0]) {
+          // 优先维持用户当前选中的会话；若不存在则选中首个会话
+          const activeId = currentConversationId.value && mergedConversations.some(c => c.id === currentConversationId.value)
+            ? currentConversationId.value
+            : mergedConversations[0].id
+
+          setCurrentConversationId(activeId)
+
+          // 从服务端加载/校准第一页消息
+          return await loadMessagesForSession(activeId)
         }
 
         setCurrentConversationId('')
@@ -518,19 +547,25 @@ export const useConversationStore = defineStore('conversation', () => {
    */
   const initializeFromServer = async (userId: string): Promise<{ hasMore: boolean; total: number; totalPages: number } | null> => {
     if (!userId || userId === 'null' || userId === 'undefined' || userId.trim() === '') {
+      isInitialLoading.value = false
       return null
     }
 
-    cleanupEmptyTemporaryConversations()
-    const paginationInfo = await loadFromServer(userId)
+    isInitialLoading.value = true
+    try {
+      cleanupEmptyTemporaryConversations()
+      const paginationInfo = await loadFromServer(userId)
 
-    if (conversations.value.length === 0) {
-      createConversation()
-    } else {
-      normalizeCurrentConversationSelection()
+      if (conversations.value.length === 0) {
+        createConversation()
+      } else {
+        normalizeCurrentConversationSelection()
+      }
+
+      return paginationInfo
+    } finally {
+      isInitialLoading.value = false
     }
-
-    return paginationInfo
   }
 
   /**
@@ -775,6 +810,8 @@ export const useConversationStore = defineStore('conversation', () => {
     conversations,
     currentConversationId,
     isLoading,
+    isInitialLoading,
+    isSessionLoading,
 
     // Getters
     currentConversation,

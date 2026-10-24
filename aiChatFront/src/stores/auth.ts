@@ -134,6 +134,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   })
 
+  /** 是否超级管理员 */
+  const isAdmin = computed(() => {
+    return userProfile.value?.role === 'admin'
+  })
+
   // Actions
 
   /**
@@ -348,6 +353,7 @@ export const useAuthStore = defineStore('auth', () => {
     // Getters
     isAuthenticated,
     userInfo,
+    isAdmin,
 
     // Actions
     initFromStorage,

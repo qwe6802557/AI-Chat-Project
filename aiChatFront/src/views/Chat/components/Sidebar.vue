@@ -15,12 +15,21 @@
 
     <!-- 对话 -->
     <div class="conversations-list">
-      <div
-        v-for="conversation in props.conversations"
-        :key="conversation.id"
-        :class="['conversation-item', { active: conversation.id === props.currentConversationId }]"
-        @click="handleConversationClick(conversation.id)"
-      >
+      <!-- 首次加载且无本地缓存时的侧边栏骨架屏 -->
+      <template v-if="props.isInitialLoading && props.conversations.length === 0">
+        <div v-for="i in 5" :key="i" class="sidebar-skeleton-item" aria-hidden="true">
+          <span class="skeleton-icon" />
+          <span class="skeleton-text" :style="{ width: `${45 + (i * 14) % 45}%` }" />
+        </div>
+      </template>
+
+      <template v-else>
+        <div
+          v-for="conversation in props.conversations"
+          :key="conversation.id"
+          :class="['conversation-item', { active: conversation.id === props.currentConversationId }]"
+          @click="handleConversationClick(conversation.id)"
+        >
         <MessageOutlined class="conversation-icon" />
 
         <!-- 编辑模式 -->
@@ -78,6 +87,7 @@
         <span class="empty-title">暂无会话</span>
         <span class="empty-description">新建对话后会显示在这里</span>
       </div>
+    </template>
     </div>
   </div>
 </template>
@@ -103,10 +113,12 @@ interface Props {
   conversations: Conversation[]
   currentConversationId: string
   isClearing?: boolean
+  isInitialLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  isClearing: false
+  isClearing: false,
+  isInitialLoading: false,
 })
 
 const emit = defineEmits<{
@@ -391,6 +403,53 @@ const handleDeleteConversation = (conversation: Conversation) => {
         line-height: 1.5;
       }
     }
+
+    .sidebar-skeleton-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      margin-bottom: 4px;
+      border-radius: 8px;
+      pointer-events: none;
+
+      .skeleton-icon {
+        width: 16px;
+        height: 16px;
+        border-radius: 4px;
+        flex-shrink: 0;
+        background: linear-gradient(
+          90deg,
+          rgba(241, 245, 249, 0.9) 25%,
+          rgba(226, 232, 240, 0.95) 37%,
+          rgba(241, 245, 249, 0.9) 63%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+
+      .skeleton-text {
+        height: 14px;
+        border-radius: 4px;
+        background: linear-gradient(
+          90deg,
+          rgba(241, 245, 249, 0.9) 25%,
+          rgba(226, 232, 240, 0.95) 37%,
+          rgba(241, 245, 249, 0.9) 63%
+        );
+        background-size: 200% 100%;
+        animation: shimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+    }
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
 
