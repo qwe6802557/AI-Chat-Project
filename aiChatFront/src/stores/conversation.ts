@@ -6,7 +6,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
-import { getApiBaseUrl } from '@/utils/common'
+import { getApiBaseUrl, generateUUID } from '@/utils/common'
 import logger from '@/utils/logger'
 import {
   getSessionList,
@@ -24,6 +24,7 @@ import type {
   MessageChargeSummary,
   MessageReasoning,
   MessageUsageStats,
+  QueuedMessage,
 } from '@/interface/conversation'
 import { extractVisibleAssistantContent } from '@/views/Chat/utils/assistantContent'
 
@@ -805,6 +806,78 @@ export const useConversationStore = defineStore('conversation', () => {
     clearPersistedConversations()
   }
 
+  /**
+   * 将消息推入指定会话的排队队列
+   */
+  const enqueueMessage = (
+    conversationId: string,
+    payload: Omit<QueuedMessage, 'id' | 'createdAt' | 'conversationId'>,
+  ): QueuedMessage => {
+    const target = conversations.value.find((c) => c.id === conversationId)
+    if (!target) {
+      throw new Error(`找不到会话 ${conversationId}`)
+    }
+    if (!target.queuedMessages) {
+      target.queuedMessages = []
+    }
+    const queuedItem: QueuedMessage = {
+      id: generateUUID(),
+      conversationId,
+      createdAt: Date.now(),
+      ...payload,
+    }
+    target.queuedMessages.push(queuedItem)
+    saveConversations({ immediate: true })
+    return queuedItem
+  }
+
+  /**
+   * 弹出指定会话队首排队消息
+   */
+  const dequeueMessage = (conversationId: string): QueuedMessage | undefined => {
+    const target = conversations.value.find((c) => c.id === conversationId)
+    if (!target || !target.queuedMessages || target.queuedMessages.length === 0) {
+      return undefined
+    }
+    const item = target.queuedMessages.shift()
+    saveConversations({ immediate: true })
+    return item
+  }
+
+  /**
+   * 移除指定会话中的某条排队消息
+   */
+  const removeQueuedMessage = (conversationId: string, messageId: string): boolean => {
+    const target = conversations.value.find((c) => c.id === conversationId)
+    if (!target || !target.queuedMessages) return false
+    const idx = target.queuedMessages.findIndex((m) => m.id === messageId)
+    if (idx !== -1) {
+      target.queuedMessages.splice(idx, 1)
+      saveConversations({ immediate: true })
+      return true
+    }
+    return false
+  }
+
+  /**
+   * 清空指定会话的排队消息
+   */
+  const clearQueuedMessages = (conversationId: string): void => {
+    const target = conversations.value.find((c) => c.id === conversationId)
+    if (target && target.queuedMessages) {
+      target.queuedMessages = []
+      saveConversations({ immediate: true })
+    }
+  }
+
+  /**
+   * 获取指定会话的排队消息列表
+   */
+  const getQueuedMessages = (conversationId: string): QueuedMessage[] => {
+    const target = conversations.value.find((c) => c.id === conversationId)
+    return target?.queuedMessages || []
+  }
+
   return {
     // State
     conversations,
@@ -838,6 +911,13 @@ export const useConversationStore = defineStore('conversation', () => {
     clearMessageAttachmentBase64,
     deleteMessageById,
     resetLocalState,
+
+    // Actions - 排队队列管理
+    enqueueMessage,
+    dequeueMessage,
+    removeQueuedMessage,
+    clearQueuedMessages,
+    getQueuedMessages,
 
     // Actions - 持久化和初始化
     saveConversations,

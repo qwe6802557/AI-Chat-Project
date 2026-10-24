@@ -33,10 +33,13 @@
           :selected-model-reasoning-badge-label="selectedModelReasoningBadgeLabel"
           :current-credits-remaining="currentCreditsRemaining"
           :has-credit-snapshot="hasCreditSnapshot"
+          :is-queue-paused="isQueuePaused"
           @update:selected-model="handleModelChange"
           @send-message="handleSendMessage"
           @stop-generation="handleStopGeneration"
           @retry-message="handleRetryMessage"
+          @send-queued-now="handleSendQueuedNow"
+          @resume-queue="resumeQueue"
         />
         <ArtifactWorkspace
           v-if="isWorkspaceOpen"
@@ -137,7 +140,7 @@ const workspaceStyle = computed(() => {
 })
 
 // 流式聊天
-const { loading, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
+const { loading, isQueuePaused, resumeQueue, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
 
 const isChatModel = (model: { modelId?: string; category?: string } | null | undefined): boolean => {
   if (!model?.modelId) {
@@ -261,11 +264,27 @@ const handleSendMessage = async (
 }
 
 /**
- * 停止生成
+ * 停止生成 (保护性暂停排队消息自动发出)
  */
 const handleStopGeneration = () => {
-  cancelCurrentStream()
+  cancelCurrentStream(true)
   message.info('已停止生成')
+}
+
+/**
+ * 立即插队发送指定的排队消息
+ */
+const handleSendQueuedNow = async (item: import('@/interface/conversation').QueuedMessage) => {
+  if (currentConversationId.value) {
+    conversationStore.removeQueuedMessage(currentConversationId.value, item.id)
+  }
+  cancelCurrentStream(false)
+  await handleSendMessage(item.prompt, {
+    fileIds: item.fileIds,
+    serverFiles: item.serverFiles,
+    webSearch: item.webSearch,
+    knowledgeBaseIds: item.knowledgeBaseIds,
+  })
 }
 
 /**
