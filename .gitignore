@@ -52,6 +52,7 @@ logs/
 *.log
 
 # ===== 临时文件 =====
+scratch/
 *.tmp
 *.temp
 .cache/

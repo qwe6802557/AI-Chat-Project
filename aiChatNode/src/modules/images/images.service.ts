@@ -137,20 +137,22 @@ export class ImagesService implements OnModuleInit, OnModuleDestroy {
   ): Promise<ImageGeneration> {
     const defaultModel =
       this.configService.get<string>('DEFAULT_IMAGE_MODEL') ||
-      'grok-imagine-image-lite';
-    const rawModelId = dto.model || defaultModel;
-    const modelId =
-      rawModelId === 'grok-imagine-image-2.0'
-        ? 'grok-imagine-image-lite'
-        : rawModelId;
-
-    const model = await this.aiModelService.findByModelIdOrNull(modelId);
-    const unitCredits = model ? model.creditCost : 100;
-    const numGenerations = dto.n ?? 1;
-    const totalCost = unitCredits * numGenerations;
+      'grok-imagine-image-2.0';
+    const modelId = dto.model || defaultModel;
 
     const user = await this.userService.findById(userId);
     const isAdmin = user?.role === 'admin';
+
+    const model = await this.aiModelService.findByModelIdOrNull(modelId);
+    if (!isAdmin && model && !model.isActive) {
+      throw new BadRequestException(
+        `模型 ${model.modelName || modelId} 当前已被管理员停用，暂不可用`,
+      );
+    }
+
+    const unitCredits = model ? model.creditCost : 100;
+    const numGenerations = dto.n ?? 1;
+    const totalCost = unitCredits * numGenerations;
 
     if (!isAdmin && totalCost > 0) {
       const snapshot = await this.creditsService.getSnapshotForUser(userId);
@@ -198,22 +200,37 @@ export class ImagesService implements OnModuleInit, OnModuleDestroy {
 
       const upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/images/generations`;
 
-      const response = await fetch(upstreamUrl, {
+      const requestPayload = {
+        model: modelId,
+        prompt: dto.prompt,
+        n: numGenerations,
+        aspect_ratio: dto.aspect_ratio || '1:1',
+        resolution: dto.resolution || '1k',
+        quality: dto.quality || 'medium',
+        response_format: 'url',
+      };
+
+      const requestHeaders = {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      };
+
+      let response = await fetch(upstreamUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          model: modelId,
-          prompt: dto.prompt,
-          n: numGenerations,
-          aspect_ratio: dto.aspect_ratio || '1:1',
-          resolution: dto.resolution || '1k',
-          quality: dto.quality || 'medium',
-          response_format: 'url',
-        }),
+        headers: requestHeaders,
+        body: JSON.stringify(requestPayload),
       });
+
+      // 若遇上游账号轮换或暂时繁忙 (502/503)，自动等待 1.5 秒重试一次
+      if (!response.ok && (response.status === 502 || response.status === 503)) {
+        this.logger.warn(`上游返回 ${response.status}，将在 1.5 秒后自动重试一次...`);
+        await new Promise((r) => setTimeout(r, 1500));
+        response = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: JSON.stringify(requestPayload),
+        });
+      }
 
       if (!response.ok) {
         const errorText = await response.text();

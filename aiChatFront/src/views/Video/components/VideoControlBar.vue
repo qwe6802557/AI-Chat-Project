@@ -103,7 +103,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { getActiveModels } from '@/api/model'
+import type { BackendAiModel } from '@/interface/model'
 import { message } from 'ant-design-vue'
 import {
   ArrowUpOutlined,
@@ -137,10 +139,36 @@ const canSubmit = computed(() => {
   return promptText.value.trim().length > 0
 })
 
+const activeVideoModels = ref<BackendAiModel[]>([])
+
+const loadActiveVideoModels = async () => {
+  try {
+    const res = await getActiveModels({ category: 'video' })
+    if (res && res.code === 0 && Array.isArray(res.data)) {
+      activeVideoModels.value = res.data.filter((m: BackendAiModel) => m.isActive)
+    }
+  } catch (err) {
+    // 静默降级保持默认
+  }
+}
+
+onMounted(() => {
+  loadActiveVideoModels()
+})
+
 const activeModelLabel = computed(() => {
-  return referenceImageUrl.value
-    ? 'Wan2.2-I2V-A14B'
-    : 'Wan2.2-T2V-A14B'
+  const isImageMode = Boolean(referenceImageUrl.value)
+  if (activeVideoModels.value.length > 0) {
+    const matched = activeVideoModels.value.find(m =>
+      isImageMode
+        ? (m.modelId.includes('I2V') || m.modelName?.includes('图生'))
+        : (m.modelId.includes('T2V') || m.modelName?.includes('文生'))
+    )
+    if (matched) {
+      return matched.modelId.replace('Wan-AI/', '')
+    }
+  }
+  return isImageMode ? 'Wan2.2-I2V-A14B' : 'Wan2.2-T2V-A14B'
 })
 
 const resolveMediaUrl = (url?: string | null): string => {

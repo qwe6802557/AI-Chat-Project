@@ -5,6 +5,7 @@
         :conversations="conversations"
         :current-conversation-id="currentConversationId"
         :is-clearing="isClearing"
+        :is-initial-loading="isInitialLoading"
         @new-chat="handleNewConversation"
         @select-conversation="handleSelectConversation"
         @rename-conversation="handleRenameConversation"
@@ -17,6 +18,8 @@
           :style="chatAreaStyle"
           :messages="currentMessages"
           :loading="loading"
+          :initial-loading="isInitialLoading"
+          :session-loading="isSessionLoading"
           :selected-model="selectedModel"
           :model-options="modelOptions"
           :models-loading="modelsLoading"
@@ -105,7 +108,9 @@ const conversationStore = useConversationStore()
 const {
   conversations,
   currentConversationId,
-  currentMessages
+  currentMessages,
+  isInitialLoading,
+  isSessionLoading,
 } = storeToRefs(conversationStore)
 
 // Artifact 工作区状态
@@ -291,6 +296,10 @@ const loadModelOptions = async () => {
     const activeModels = response.data
       .filter(isChatModel)
       .sort((a, b) => {
+        // 1. 系统设定的默认模型最高优先级，永远排在第一位
+        if (a.isDefault && !b.isDefault) return -1
+        if (!a.isDefault && b.isDefault) return 1
+        // 2. 其次按系统权重排序
         const rankA = getModelOrderRank(a)
         const rankB = getModelOrderRank(b)
         if (rankA !== rankB) {
@@ -301,6 +310,7 @@ const loadModelOptions = async () => {
       .map((model) => ({
         label: model.modelName || model.modelId,
         value: model.modelId,
+        isDefault: !!model.isDefault,
         inputPrice: Number(model.inputPrice ?? 0),
         outputPrice: Number(model.outputPrice ?? 0),
         reserveCredits: Number(model.creditCost ?? 10),
@@ -311,11 +321,16 @@ const loadModelOptions = async () => {
 
     if (activeModels.length > 0) {
       modelOptions.value = activeModels
-    }
 
-    if (!modelOptions.value.some((model) => model.value === selectedModel.value)) {
-      selectedModel.value = modelOptions.value[0]?.value || DEFAULT_CHAT_MODEL
-      saveSelectedModel()
+      // 默认第一个模型就是默认的模型
+      const defaultModel = activeModels.find((m) => m.isDefault) || activeModels[0]
+
+      // 用户进来：若当前未主动手动换过模型，或已有选定模型失效，默认第一个模型且被默认选中
+      const hasManuallySelected = sessionStorage.getItem('hasManuallySelectedChatModel') === 'true'
+      if (!hasManuallySelected || !modelOptions.value.some((model) => model.value === selectedModel.value)) {
+        selectedModel.value = defaultModel.value
+        saveSelectedModel()
+      }
     }
   } catch (error) {
     logger.error('加载模型列表失败:', error)
@@ -339,6 +354,7 @@ const handleModelChange = (modelId: string) => {
   }
   selectedModel.value = modelId
   saveSelectedModel()
+  sessionStorage.setItem('hasManuallySelectedChatModel', 'true')
 }
 
 /**

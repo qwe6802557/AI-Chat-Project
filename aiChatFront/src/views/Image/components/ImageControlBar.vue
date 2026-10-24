@@ -33,7 +33,8 @@
               size="small"
               class="param-select model-select"
               :bordered="false"
-              :dropdown-match-select-width="220"
+              :dropdown-match-select-width="false"
+              :dropdown-style="{ minWidth: '180px' }"
               :disabled="props.loading"
             >
               <a-select-option
@@ -130,18 +131,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   ArrowUpOutlined,
   LoadingOutlined,
   ThunderboltFilled,
   ThunderboltOutlined,
 } from '@ant-design/icons-vue'
+import { getActiveModels } from '@/api/model'
+import type { BackendAiModel } from '@/interface/model'
 import type { CreateImageGenerationParams } from '@/interface/image'
 
 defineOptions({
   name: 'ImageControlBar',
 })
+
+interface ImageModelOption {
+  label: string
+  value: string
+  isDefault?: boolean
+  creditCost?: number
+}
 
 const props = defineProps<{
   loading?: boolean
@@ -155,22 +165,66 @@ const emit = defineEmits<{
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const promptText = ref('')
-const selectedModel = ref('grok-imagine-image-lite')
+const selectedModel = ref('grok-imagine-image-2.0')
 const selectedCount = ref(1)
 const selectedAspectRatio = ref('1:1')
 const selectedResolution = ref('1k')
 const selectedQuality = ref('medium')
 
-const modelOptions = [
-  { label: 'grok-imagine-image-lite', value: 'grok-imagine-image-lite' },
-]
+const modelOptions = ref<ImageModelOption[]>([
+  {
+    label: 'grok-imagine-image-2.0',
+    value: 'grok-imagine-image-2.0',
+    isDefault: true,
+    creditCost: 100,
+  },
+])
+
+const loadModelOptions = async () => {
+  try {
+    const res = await getActiveModels({ category: 'image' })
+    const activeImageModels = (res.data || []).filter(
+      (m: BackendAiModel) => m.isActive && (m.category === 'image' || m.modelId.includes('image')),
+    )
+    if (activeImageModels.length > 0) {
+      activeImageModels.sort((a, b) => {
+        if (a.isDefault && !b.isDefault) return -1
+        if (!a.isDefault && b.isDefault) return 1
+        return (a.sortOrder ?? 99) - (b.sortOrder ?? 99)
+      })
+
+      modelOptions.value = activeImageModels.map((m) => ({
+        label: m.modelName || m.modelId,
+        value: m.modelId,
+        isDefault: !!m.isDefault,
+        creditCost: m.creditCost ?? 100,
+      }))
+
+      // 若当前选中的模型不在已启用的模型列表中，则自动切换至系统默认生图模型或首个启用模型
+      if (!modelOptions.value.some((opt) => opt.value === selectedModel.value)) {
+        const defaultOrFirst =
+          modelOptions.value.find((opt) => opt.isDefault) || modelOptions.value[0]
+        if (defaultOrFirst) {
+          selectedModel.value = defaultOrFirst.value
+        }
+      }
+    }
+  } catch (error) {
+    // 加载异常时维持默认静态选项
+  }
+}
+
+onMounted(() => {
+  loadModelOptions()
+})
 
 const canSubmit = computed(() => {
   return promptText.value.trim().length > 0 && !props.loading
 })
 
 const estimatedCost = computed(() => {
-  const unit = props.unitCreditCost ?? 100
+  const currentOpt = modelOptions.value.find((opt) => opt.value === selectedModel.value)
+  const unit = currentOpt?.creditCost ?? props.unitCreditCost ?? 100
   return unit * selectedCount.value
 })
 

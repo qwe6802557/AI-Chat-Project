@@ -71,7 +71,7 @@
                 :disabled="props.loading"
               >
                 <a-select-option
-                  v-for="v in props.voices"
+                  v-for="v in effectiveVoices"
                   :key="v.voice_id"
                   :value="v.voice_id"
                 >
@@ -123,9 +123,13 @@
                 :dropdown-match-select-width="220"
                 :disabled="props.loading"
               >
-                <a-select-option value="grok-voice-think-fast-1.0">grok-voice-think-fast-1.0</a-select-option>
-                <a-select-option value="grok-voice-think-fast-2.0">grok-voice-think-fast-2.0</a-select-option>
-                <a-select-option value="grok-voice-latest">grok-voice-latest</a-select-option>
+                <a-select-option
+                  v-for="opt in voiceModelOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </a-select-option>
               </a-select>
             </div>
           </div>
@@ -269,7 +273,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { getActiveModels } from '@/api/model'
+import type { BackendAiModel } from '@/interface/model'
 import {
   SoundOutlined,
   AudioOutlined,
@@ -287,6 +293,25 @@ import type { VoiceInfo, CreateTtsParams } from '@/interface/voice'
 defineOptions({
   name: 'VoiceControlBar',
 })
+
+
+const DEFAULT_FALLBACK_VOICES: VoiceInfo[] = [
+  { voice_id: 'eve', name: 'Eve', language: 'multilingual' },
+  { voice_id: 'ara', name: 'Ara', language: 'multilingual' },
+  { voice_id: 'altair', name: 'Altair', language: 'multilingual' },
+  { voice_id: 'atlas', name: 'Atlas', language: 'multilingual' },
+  { voice_id: 'aurora', name: 'Aurora', language: 'multilingual' },
+  { voice_id: 'carina', name: 'Carina', language: 'multilingual' },
+  { voice_id: 'celeste', name: 'Celeste', language: 'multilingual' },
+  { voice_id: 'cosmo', name: 'Cosmo', language: 'multilingual' },
+  { voice_id: 'helios', name: 'Helios', language: 'multilingual' },
+  { voice_id: 'leo', name: 'Leo', language: 'multilingual' },
+  { voice_id: 'luna', name: 'Luna', language: 'multilingual' },
+  { voice_id: 'orion', name: 'Orion', language: 'multilingual' },
+  { voice_id: 'rex', name: 'Rex', language: 'multilingual' },
+  { voice_id: 'sirius', name: 'Sirius', language: 'multilingual' },
+  { voice_id: 'zenith', name: 'Zenith', language: 'multilingual' },
+]
 
 const props = withDefaults(
   defineProps<{
@@ -308,6 +333,10 @@ const emit = defineEmits<{
   'stop': []
 }>()
 
+const effectiveVoices = computed<VoiceInfo[]>(() => {
+  return props.voices && props.voices.length > 0 ? props.voices : DEFAULT_FALLBACK_VOICES
+})
+
 const currentMode = ref<'tts' | 'stt'>('tts')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 
@@ -317,6 +346,44 @@ const ttsVoiceId = ref(props.initialVoiceId || 'eve')
 const ttsSpeed = ref(1.0)
 const ttsLanguage = ref('zh')
 const ttsModel = ref('grok-voice-think-fast-1.0')
+
+interface VoiceModelOption {
+  label: string
+  value: string
+  isDefault?: boolean
+}
+
+const voiceModelOptions = ref<VoiceModelOption[]>([
+  { label: 'grok-voice-think-fast-1.0', value: 'grok-voice-think-fast-1.0', isDefault: true },
+  { label: 'grok-voice-think-fast-2.0', value: 'grok-voice-think-fast-2.0' },
+  { label: 'grok-voice-latest', value: 'grok-voice-latest' },
+])
+
+const loadActiveVoiceModels = async () => {
+  try {
+    const res = await getActiveModels({ category: 'voice' })
+    if (res && res.code === 0 && Array.isArray(res.data)) {
+      const activeVoices = res.data.filter((m: BackendAiModel) => m.isActive && m.modelId !== 'grok-stt')
+      if (activeVoices.length > 0) {
+        voiceModelOptions.value = activeVoices.map((m: BackendAiModel) => ({
+          label: m.modelName || m.modelId,
+          value: m.modelId,
+          isDefault: m.isDefault,
+        }))
+        if (!voiceModelOptions.value.some(opt => opt.value === ttsModel.value)) {
+          const defaultOpt = voiceModelOptions.value.find(opt => opt.isDefault) || voiceModelOptions.value[0]
+          ttsModel.value = defaultOpt.value
+        }
+      }
+    }
+  } catch (err) {
+    // 保持默认列表平稳运行
+  }
+}
+
+onMounted(() => {
+  loadActiveVoiceModels()
+})
 
 // STT 状态
 const sttMethod = ref<'record' | 'upload'>('record')

@@ -19,9 +19,13 @@ export function getVoicesApi(model?: string) {
 
 /**
  * 发起 TTS 文本转语音合成任务
+ * 语音合成依赖上游神经网络多步渲染，配置 60s 充足超时以防误中断
  */
 export function generateTtsApi(params: CreateTtsParams, config?: AxiosRequestConfig) {
-  return request.post<never, ResponseData<VoiceTask>>('/voice/tts', params, config)
+  return request.post<never, ResponseData<VoiceTask>>('/voice/tts', params, {
+    timeout: 60000,
+    ...config,
+  })
 }
 
 /**
@@ -29,6 +33,7 @@ export function generateTtsApi(params: CreateTtsParams, config?: AxiosRequestCon
  */
 export function transcribeSttApi(formData: FormData, config?: AxiosRequestConfig) {
   return request.post<never, ResponseData<VoiceTask>>('/voice/stt', formData, {
+    timeout: 60000,
     ...config,
     headers: {
       'Content-Type': 'multipart/form-data',

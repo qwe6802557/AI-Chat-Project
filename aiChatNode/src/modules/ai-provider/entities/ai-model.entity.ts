@@ -82,10 +82,16 @@ export class AiModel {
   isActive: boolean;
 
   /**
-   * 模型分类：文本对话 (chat) 或 图像生成 (image)
+   * 是否设为默认模型
+   */
+  @Column({ type: 'boolean', default: false })
+  isDefault: boolean;
+
+  /**
+   * 模型分类：文本对话 (chat)、图像生成 (image)、视频生成 (video) 或 语音交互 (voice)
    */
   @Column({ type: 'varchar', length: 32, default: 'chat' })
-  category: 'chat' | 'image';
+  category: 'chat' | 'image' | 'video' | 'voice';
 
   /**
    * 计费模式

@@ -65,6 +65,11 @@ export class AiModelService {
       query.leftJoinAndSelect('model.provider', 'provider');
     }
 
+    query
+      .orderBy('model.isDefault', 'DESC')
+      .addOrderBy('model.sortOrder', 'ASC')
+      .addOrderBy('model.createdAt', 'ASC');
+
     return query.getMany();
   }
 
@@ -206,13 +211,14 @@ export class AiModelService {
    */
   async findActiveModels(
     includeProvider = false,
-    category?: 'chat' | 'image',
+    category?: 'chat' | 'image' | 'video' | 'voice',
   ): Promise<AiModel[]> {
     const query = this.modelRepository.createQueryBuilder('model');
 
     query
       .where('model.isActive = :isActive', { isActive: true })
-      .orderBy('model.sortOrder', 'ASC')
+      .orderBy('model.isDefault', 'DESC')
+      .addOrderBy('model.sortOrder', 'ASC')
       .addOrderBy('model.createdAt', 'ASC');
 
     if (category) {
@@ -224,5 +230,40 @@ export class AiModelService {
     }
 
     return query.getMany();
+  }
+
+  /**
+   * 将指定模型设为系统默认模型（超管）
+   */
+  async setDefaultModel(id: string): Promise<AiModel> {
+    let targetModel: AiModel | null = null;
+    try {
+      targetModel = await this.findOne(id);
+    } catch {
+      targetModel = await this.findByModelId(id);
+    }
+
+    if (!targetModel) {
+      throw new NotFoundException(`模型 ${id} 不存在`);
+    }
+
+    // 1. 取消同类已有默认标记
+    await this.modelRepository.update(
+      { category: targetModel.category },
+      { isDefault: false },
+    );
+
+    // 2. 将目标模型设为默认，同时确保其启用且 sortOrder 设为 0
+    await this.modelRepository.update(targetModel.id, {
+      isDefault: true,
+      isActive: true,
+      sortOrder: 0,
+    });
+
+    this.logger.log(
+      `已将模型 ${targetModel.modelName} (${targetModel.modelId}) 设为系统默认模型`,
+    );
+
+    return this.findOne(targetModel.id, true);
   }
 }

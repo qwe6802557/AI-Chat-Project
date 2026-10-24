@@ -144,3 +144,22 @@ export interface CompletionChunk {
 }
 
 
+
+/**
+ * 模型响应测速与健康指标
+ */
+export interface ModelLatencyResult {
+  id: string;
+  modelId: string;
+  modelName: string;
+  providerName: string;
+  category: 'chat' | 'image' | 'video' | 'voice';
+  status: 'healthy' | 'slow' | 'timeout' | 'error';
+  connectTimeMs: number;
+  firstTokenMs: number;
+  totalTimeMs: number;
+  httpStatus: number;
+  sampleOutput?: string;
+  errorMessage?: string;
+  testedAt: string;
+}

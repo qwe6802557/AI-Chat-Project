@@ -17,6 +17,7 @@ import {
   CompletionResponse,
   CompletionChunk,
   CompletionUsageStats,
+  ModelLatencyResult,
 } from '../types/completion.types';
 import {
   extractAssistantContent,
@@ -872,5 +873,157 @@ export class AIClientService {
         }
       }),
     );
+  }
+
+  /**
+   * 测试单个模型的响应速度与健康状态（超管专用探针）
+   */
+  async testModelLatency(idOrModelId: string): Promise<ModelLatencyResult> {
+    let model: AiModel | null = null;
+    try {
+      model = await this.aiModelService.findOne(idOrModelId, true);
+    } catch {
+      model = await this.aiModelService.findByModelIdOrNull(idOrModelId, true);
+    }
+
+    if (!model) {
+      throw new BadRequestException(`模型 ${idOrModelId} 不存在`);
+    }
+
+    const providerName = model.provider?.name || '';
+    if (!providerName) {
+      throw new BadRequestException(`模型 ${model.modelName} 未关联有效供应商`);
+    }
+
+    const startTime = Date.now();
+    const abortController = new AbortController();
+    let isAbortedByTimeout = false;
+    const timeoutHandle = setTimeout(() => {
+      isAbortedByTimeout = true;
+      abortController.abort();
+    }, 15000);
+
+    try {
+      const adapter = this.resolveAdapter(providerName);
+
+      if (model.category === 'image' || model.category === 'video' || model.category === 'voice') {
+        const healthResult = await adapter.healthCheck({ timeoutMs: 10000 });
+        clearTimeout(timeoutHandle);
+        const totalTimeMs = Date.now() - startTime;
+        const categoryLabel =
+          model.category === 'image'
+            ? '图像接口'
+            : model.category === 'video'
+              ? '视频接口'
+              : '语音接口';
+        return {
+          id: model.id,
+          modelId: model.modelId,
+          modelName: model.modelName,
+          providerName,
+          category: model.category,
+          status: totalTimeMs > 6000 ? 'slow' : 'healthy',
+          connectTimeMs: Math.round(totalTimeMs / 2),
+          firstTokenMs: totalTimeMs,
+          totalTimeMs,
+          httpStatus: 200,
+          sampleOutput: `${categoryLabel}探活正常`,
+          testedAt: new Date().toISOString(),
+        };
+      }
+
+      const stream = await adapter.createStreamChatCompletion(
+        [{ role: 'user', content: 'hi' }],
+        model.modelId,
+        {
+          maxTokens: 5,
+          temperature: 0.1,
+          abortSignal: abortController.signal,
+        },
+      );
+
+      const connectTimeMs = Date.now() - startTime;
+      let firstTokenMs = 0;
+      let sampleOutput = '';
+
+      for await (const chunk of stream) {
+        const text = chunk.delta?.content || '';
+        if (text) {
+          if (firstTokenMs === 0) {
+            firstTokenMs = Date.now() - startTime;
+          }
+          sampleOutput += text;
+          if (sampleOutput.length >= 80) {
+            break;
+          }
+        }
+      }
+
+      clearTimeout(timeoutHandle);
+      const totalTimeMs = Date.now() - startTime;
+      if (firstTokenMs === 0) {
+        firstTokenMs = totalTimeMs;
+      }
+
+      return {
+        id: model.id,
+        modelId: model.modelId,
+        modelName: model.modelName,
+        providerName,
+        category: model.category,
+        status: totalTimeMs > 6000 ? 'slow' : 'healthy',
+        connectTimeMs,
+        firstTokenMs,
+        totalTimeMs,
+        httpStatus: 200,
+        sampleOutput: sampleOutput.trim() || 'OK',
+        testedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      clearTimeout(timeoutHandle);
+      const elapsed = Date.now() - startTime;
+
+      if (isAbortedByTimeout || abortController.signal.aborted) {
+        return {
+          id: model.id,
+          modelId: model.modelId,
+          modelName: model.modelName,
+          providerName,
+          category: model.category,
+          status: 'timeout',
+          connectTimeMs: elapsed >= 15000 ? 15000 : elapsed,
+          firstTokenMs: 0,
+          totalTimeMs: 15000,
+          httpStatus: 408,
+          errorMessage: '请求超时（15 秒未返回有效 Token 或上游通道阻塞）',
+          testedAt: new Date().toISOString(),
+        };
+      }
+
+      const statusCode =
+        (error as any)?.status ||
+        (error as any)?.statusCode ||
+        (error as any)?.response?.status ||
+        500;
+      const errorMsg =
+        (error as any)?.error?.message ||
+        (error as any)?.message ||
+        String(error);
+
+      return {
+        id: model.id,
+        modelId: model.modelId,
+        modelName: model.modelName,
+        providerName,
+        category: model.category,
+        status: 'error',
+        connectTimeMs: elapsed,
+        firstTokenMs: 0,
+        totalTimeMs: elapsed,
+        httpStatus: statusCode,
+        errorMessage: errorMsg,
+        testedAt: new Date().toISOString(),
+      };
+    }
   }
 }

@@ -28,7 +28,7 @@ describe('ImagesService', () => {
       get: jest.fn().mockImplementation((key: string) => {
         if (key === 'IMAGE_API_BASE_URL' || key === 'GROK2API_BASE_URL') return 'http://1.15.171.111:8000/v1';
         if (key === 'IMAGE_API_KEY' || key === 'GROK2API_KEY') return 'test-api-key';
-        if (key === 'DEFAULT_IMAGE_MODEL') return 'grok-imagine-image-lite';
+        if (key === 'DEFAULT_IMAGE_MODEL') return 'grok-imagine-image-2.0';
         return null;
       }),
     };
@@ -42,9 +42,10 @@ describe('ImagesService', () => {
     aiModelServiceMock = {
       findByModelIdOrNull: jest.fn().mockResolvedValue({
         id: 'model-uuid',
-        modelId: 'grok-imagine-image-lite',
+        modelId: 'grok-imagine-image-2.0',
         creditCost: 100,
         category: 'image',
+        isActive: true,
       } as any),
     };
 
@@ -67,6 +68,22 @@ describe('ImagesService', () => {
   afterEach(() => {
     service.onModuleDestroy();
     jest.clearAllMocks();
+  });
+
+  it('非管理员尝试使用已停用的模型时应抛出 BadRequestException', async () => {
+    aiModelServiceMock.findByModelIdOrNull = jest.fn().mockResolvedValue({
+      id: 'model-inactive',
+      modelId: 'grok-imagine-image-lite',
+      modelName: 'Grok Imagine Image Lite',
+      isActive: false,
+    } as any);
+
+    await expect(
+      service.generateImages('user-1', {
+        prompt: '测试图片',
+        model: 'grok-imagine-image-lite',
+      }),
+    ).rejects.toThrow('已被管理员停用');
   });
 
   it('非管理员余额不足时应抛出 BadRequestException 拦截', async () => {

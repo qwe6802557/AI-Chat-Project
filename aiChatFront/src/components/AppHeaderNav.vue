@@ -82,6 +82,10 @@
               <UserOutlined />
               <span style="margin-left: 8px;">个人账户</span>
             </a-menu-item>
+            <a-menu-item v-if="isAdmin" key="model-manage" @click="showModelManageModal = true">
+              <ControlOutlined />
+              <span style="margin-left: 8px;">模型管理</span>
+            </a-menu-item>
             <a-menu-item key="mobile" @click="handleDownloadMobile">
               <MobileOutlined />
               <span style="margin-left: 8px;">下载手机端</span>
@@ -104,6 +108,9 @@
       </a-dropdown>
     </div>
 
+    <!-- 模型管理控制台弹窗 (超管) -->
+    <ModelManageModal v-if="isAdmin" v-model:open="showModelManageModal" />
+
     <!-- 更新与帮助弹窗 -->
     <AboutModal v-model:open="showAboutModal" />
   </header>
@@ -120,6 +127,7 @@ import {
   AudioOutlined,
   DownOutlined,
   UserOutlined,
+  ControlOutlined,
   DeleteOutlined,
   QuestionCircleOutlined,
   LogoutOutlined,
@@ -129,6 +137,7 @@ import {
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
+import ModelManageModal from './ModelManageModal.vue'
 
 defineOptions({
   name: 'AppHeaderNav',
@@ -143,6 +152,11 @@ const router = useRouter()
 const authStore = useAuthStore()
 const conversationStore = useConversationStore()
 const showAboutModal = ref(false)
+const showModelManageModal = ref(false)
+
+const isAdmin = computed(() => {
+  return authStore.isAdmin || authStore.userProfile?.role === 'admin' || authStore.getUserAccount().role === 'admin'
+})
 
 const currentMode = computed(() => {
   if (props.activeMode) return props.activeMode
