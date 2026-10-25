@@ -23,6 +23,9 @@ export interface VoiceInfo {
   voice_id: string;
   name: string;
   language: string;
+  gender?: string;
+  category?: string;
+  description?: string;
 }
 
 export interface CreateTtsParams {

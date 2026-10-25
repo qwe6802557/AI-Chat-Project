@@ -1,19 +1,19 @@
 <template>
   <div
-    v-if="reasoning.content"
+    v-if="reasoning.content || isStreaming"
     :class="['reasoning-panel', { expanded, streaming: isStreaming }]"
   >
     <button
       type="button"
       class="reasoning-toggle"
-      @click="expanded = !expanded"
+      @click="handleToggle"
     >
       <div class="reasoning-copy">
         <div class="reasoning-heading">
-          <span class="reasoning-badge">
+          <span class="reasoning-badge" :class="{ 'is-thinking': isStreaming }">
             <BulbOutlined />
           </span>
-          <span class="reasoning-label">Think</span>
+          <span class="reasoning-label">{{ isStreaming ? '深度思考中...' : '已深度思考' }}</span>
         </div>
         <span
           v-if="previewText"
@@ -26,7 +26,14 @@
     </button>
 
     <div v-if="expanded" class="reasoning-body">
+      <div v-if="!reasoning.content && isStreaming" class="reasoning-empty-loading">
+        <span class="thinking-dot"></span>
+        <span class="thinking-dot"></span>
+        <span class="thinking-dot"></span>
+        <span class="thinking-text">思考中，正在分析问题与构建推论...</span>
+      </div>
       <MarkdownMessage
+        v-else
         :message-id="`${messageId}-reasoning`"
         :content="reasoning.content"
         :streaming="isStreaming"
@@ -36,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { BulbOutlined, DownOutlined, RightOutlined } from '@ant-design/icons-vue'
 import type { MessageReasoning } from '@/interface/conversation'
 import MarkdownMessage from './MarkdownMessage.vue'
@@ -50,14 +57,27 @@ const props = defineProps<{
   reasoning: MessageReasoning
 }>()
 
-const expanded = ref(false)
-
 const isStreaming = computed(() => props.reasoning.status === 'streaming')
+const userToggled = ref(false)
+const expanded = ref(props.reasoning.status === 'streaming')
+
+watch(isStreaming, (streaming, prevStreaming) => {
+  if (streaming && !userToggled.value) {
+    expanded.value = true
+  } else if (!streaming && prevStreaming && !userToggled.value) {
+    expanded.value = false
+  }
+})
+
+const handleToggle = () => {
+  userToggled.value = true
+  expanded.value = !expanded.value
+}
 
 const previewText = computed(() => {
-  const compactText = props.reasoning.content.replace(/\s+/g, ' ').trim()
+  const compactText = (props.reasoning.content || '').replace(/\s+/g, ' ').trim()
   if (!compactText) {
-    return isStreaming.value ? 'Thinking...' : ''
+    return isStreaming.value ? '正在梳理推导思路...' : ''
   }
 
   return compactText.length > 72 ? `${compactText.slice(0, 72)}...` : compactText
@@ -78,8 +98,8 @@ const previewText = computed(() => {
   }
 
   &.streaming {
-    border-color: rgba(21, 112, 239, 0.14);
-    background: rgba(239, 246, 255, 0.72);
+    border-color: rgba(21, 112, 239, 0.18);
+    background: rgba(239, 246, 255, 0.78);
   }
 }
 
@@ -120,9 +140,25 @@ const previewText = computed(() => {
   background: rgba(15, 23, 42, 0.06);
   color: #344054;
   flex-shrink: 0;
+  transition: all 0.25s ease;
 
   :deep(.anticon) {
     font-size: 11px;
+  }
+
+  &.is-thinking {
+    background: rgba(37, 99, 235, 0.12);
+    color: #2563eb;
+    animation: thinking-glow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes thinking-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
   }
 }
 
@@ -131,7 +167,7 @@ const previewText = computed(() => {
   font-weight: 600;
   color: #101828;
   line-height: 20px;
-  margin-left: 4px;
+  margin-left: 6px;
 }
 
 .reasoning-preview {
@@ -158,6 +194,48 @@ const previewText = computed(() => {
     color: #475467;
     font-size: 13px;
     line-height: 1.72;
+  }
+}
+
+.reasoning-empty-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  font-size: 13px;
+  color: #64748b;
+
+  .thinking-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3b82f6;
+    animation: thinking-dot-bounce 1.4s ease-in-out infinite both;
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+
+  .thinking-text {
+    margin-left: 4px;
+    font-size: 12.5px;
+    color: #64748b;
+    letter-spacing: 0.2px;
+  }
+}
+
+@keyframes thinking-dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.65);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1.15);
+    opacity: 1;
   }
 }
 </style>

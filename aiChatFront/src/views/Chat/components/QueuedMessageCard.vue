@@ -5,13 +5,13 @@
         <!-- 头部标题栏 -->
         <div class="card-header" @click="toggleCollapse">
           <div class="header-left">
-            <span class="header-title">Queued Messages</span>
+            <span class="header-title">排队待发消息</span>
             <span class="count-badge">{{ queuedMessages.length }}</span>
             <span v-if="isPaused" class="header-subtitle paused-hint">
               已暂停自动发送 · 可手动点击发送
             </span>
             <span v-else class="header-subtitle">
-              Sends after agent finishes working
+              将在当前回答生成结束后自动发送
             </span>
           </div>
 
@@ -185,11 +185,10 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 }
 
 .queued-card {
-  background: #1c1f24;
-  background: linear-gradient(180deg, #22262c 0%, #1a1d22 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.15);
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
   overflow: hidden;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -199,12 +198,13 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
-  background: rgba(0, 0, 0, 0.12);
+  background: #f8fafc;
+  transition: background 0.2s ease;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.2);
+    background: #f1f5f9;
   }
 }
 
@@ -216,7 +216,7 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 }
 
 .header-title {
-  color: #f1f5f9;
+  color: #1e293b;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -226,24 +226,25 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
+  background: #e0f2fe;
+  color: #0284c7;
   font-size: 11px;
   font-weight: 600;
   padding: 0 6px;
   height: 18px;
   border-radius: 9px;
+  border: 1px solid #bae6fd;
 }
 
 .header-subtitle {
-  color: rgba(255, 255, 255, 0.45);
+  color: #64748b;
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 
   &.paused-hint {
-    color: #fbbf24;
+    color: #d97706;
     font-weight: 500;
   }
 }
@@ -255,9 +256,9 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 }
 
 .resume-btn {
-  background: rgba(245, 158, 11, 0.18);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #fbbf24;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #b45309;
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 6px;
@@ -265,15 +266,15 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(245, 158, 11, 0.28);
-    border-color: #fbbf24;
+    background: #fde68a;
+    color: #92400e;
   }
 }
 
 .collapse-btn {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: #64748b;
   padding: 4px;
   display: flex;
   align-items: center;
@@ -283,8 +284,8 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   transition: all 0.2s ease;
 
   &:hover {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.08);
+    color: #0f172a;
+    background: #e2e8f0;
   }
 
   .chevron-icon {
@@ -298,26 +299,29 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 }
 
 .card-body {
-  padding: 6px 10px;
+  padding: 8px 12px;
+  background: #ffffff;
 }
 
 .items-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .queued-item-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  transition: background 0.18s ease;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  transition: all 0.18s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: #f1f5f9;
+    border-color: #e2e8f0;
   }
 }
 
@@ -338,13 +342,13 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 
 .item-index-num {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  font-weight: 500;
+  color: #94a3b8;
+  font-weight: 600;
   flex-shrink: 0;
 }
 
 .prompt-text-preview {
-  color: #e2e8f0;
+  color: #1e293b;
   font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
@@ -364,8 +368,9 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 4px;
@@ -375,13 +380,15 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   }
 
   &.search-chip {
-    background: rgba(14, 165, 233, 0.15);
-    color: #38bdf8;
+    background: #e0f2fe;
+    border-color: #bae6fd;
+    color: #0284c7;
   }
 
   &.kb-chip {
-    background: rgba(168, 85, 247, 0.15);
-    color: #c084fc;
+    background: #f3e8ff;
+    border-color: #e9d5ff;
+    color: #7e22ce;
   }
 }
 
@@ -396,7 +403,7 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
 .action-icon-btn {
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.55);
+  color: #64748b;
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -416,17 +423,17 @@ const hasItemMeta = (item: QueuedMessage): boolean => {
   }
 
   &.send-now-btn:hover {
-    background: rgba(56, 189, 248, 0.16);
-    color: #38bdf8;
+    background: #e0f2fe;
+    color: #0284c7;
   }
 
   &.edit-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
+    background: #eff6ff;
+    color: #2563eb;
   }
 
   &.delete-btn:hover {
-    background: rgba(239, 68, 68, 0.18);
+    background: #fee2e2;
     color: #ef4444;
   }
 }

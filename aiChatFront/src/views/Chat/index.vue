@@ -81,9 +81,12 @@ interface ChatModelOption {
 
 const PREFERRED_MODEL_ORDER: string[] = [
   'grok-chat-fast',
+  'spark-x2.6',
   'glm-4-flash',
   'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
   'Qwen/Qwen2.5-Coder-7B-Instruct',
+  'spark-x2.5',
+  'spark-x2.6-4b',
 ]
 
 const getModelOrderRank = (model: { modelId: string; sortOrder?: number }): number => {

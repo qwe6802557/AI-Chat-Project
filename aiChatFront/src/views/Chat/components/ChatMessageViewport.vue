@@ -149,6 +149,58 @@
                 {{ formatDuration(message.durationMs) }}
               </span>
             </div>
+
+            <!-- AI 消息操作工具栏：语音朗读、复制、重新生成 -->
+            <div
+              v-if="message.role === 'assistant' && !message.streaming && message.content"
+              class="assistant-actions-bar"
+            >
+              <!-- 语音朗读按钮 -->
+              <button
+                type="button"
+                class="action-btn read-aloud-btn"
+                :class="{
+                  'is-playing': playingMessageId === message.id,
+                  'is-loading': audioLoadingMessageId === message.id,
+                }"
+                :disabled="audioLoadingMessageId === message.id"
+                :title="getReadAloudTitle(message.id)"
+                @click="handleToggleReadAloud(message)"
+              >
+                <LoadingOutlined v-if="audioLoadingMessageId === message.id" class="action-icon" spin />
+                <span v-else-if="playingMessageId === message.id" class="sound-wave-bars">
+                  <span class="bar bar-1"></span>
+                  <span class="bar bar-2"></span>
+                  <span class="bar bar-3"></span>
+                </span>
+                <SoundOutlined v-else class="action-icon" />
+                <span class="action-text">{{ getReadAloudLabel(message.id) }}</span>
+              </button>
+
+              <!-- 复制消息内容按钮 -->
+              <button
+                type="button"
+                class="action-btn copy-btn"
+                :title="copiedMessageId === message.id ? '已复制' : '复制内容'"
+                @click="handleCopyMessage(message)"
+              >
+                <CheckOutlined v-if="copiedMessageId === message.id" class="action-icon check-icon" />
+                <CopyOutlined v-else class="action-icon" />
+                <span class="action-text">{{ copiedMessageId === message.id ? '已复制' : '复制' }}</span>
+              </button>
+
+              <!-- 重新生成按钮 -->
+              <button
+                type="button"
+                class="action-btn retry-btn"
+                title="重新生成此回答"
+                :disabled="loading"
+                @click="emit('retry-message', message.id)"
+              >
+                <ReloadOutlined class="action-icon" />
+                <span class="action-text">重新生成</span>
+              </button>
+            </div>
             <div v-if="message.role === 'user'" class="user-message-content">
               <div v-if="message.attachments?.length" class="message-attachments">
                 <a-image-preview-group>
@@ -205,6 +257,7 @@
           <div class="message-content">
             <div class="typing-indicator">
               <span></span><span></span><span></span>
+              <span class="typing-hint">正在思考并连接模型...</span>
             </div>
           </div>
         </div>
@@ -238,7 +291,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, ref, toRef, watch, onBeforeUnmount } from 'vue'
 import {
   BulbOutlined,
   ThunderboltOutlined,
@@ -249,7 +302,12 @@ import {
   LoadingOutlined,
   ExclamationCircleFilled,
   ReloadOutlined,
+  SoundOutlined,
+  CopyOutlined,
+  CheckOutlined,
 } from '@ant-design/icons-vue'
+import { message } from 'ant-design-vue'
+import { generateTtsApi } from '@/api/voice'
 import { useScrollManager } from '@/hooks/useScrollManager'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { formatFileSize, getAttachmentBadgeLabel } from '@/hooks/useFileUpload'
@@ -523,6 +581,146 @@ const formatDuration = (ms?: number | null): string => {
   const sec = (ms / 1000).toFixed(1)
   return `耗时 ${sec}s`
 }
+
+/**
+ * 提取并清理 Markdown 消息用于语音合成的纯文本
+ */
+const extractCleanTextForTts = (markdown: string): string => {
+  if (!markdown) return ''
+  return markdown
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/^\s*>\s*/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+const playingMessageId = ref<string | null>(null)
+const audioLoadingMessageId = ref<string | null>(null)
+const copiedMessageId = ref<string | null>(null)
+const messageAudioMap = ref<Record<string, string>>({})
+let currentAudioInstance: HTMLAudioElement | null = null
+
+const stopCurrentAudio = () => {
+  if (currentAudioInstance) {
+    currentAudioInstance.pause()
+    currentAudioInstance.currentTime = 0
+    currentAudioInstance = null
+  }
+  playingMessageId.value = null
+}
+
+const getReadAloudTitle = (msgId: string) => {
+  if (audioLoadingMessageId.value === msgId) return '正在生成语音...'
+  if (playingMessageId.value === msgId) return '点击停止播报'
+  return '语音播报 (微软 Edge-TTS 零成本)'
+}
+
+const getReadAloudLabel = (msgId: string) => {
+  if (audioLoadingMessageId.value === msgId) return '生成中...'
+  if (playingMessageId.value === msgId) return '播报中'
+  return '朗读'
+}
+
+const handleToggleReadAloud = async (msg: Message) => {
+  if (playingMessageId.value === msg.id) {
+    stopCurrentAudio()
+    return
+  }
+
+  stopCurrentAudio()
+
+  let audioUrl = messageAudioMap.value[msg.id]
+  if (!audioUrl) {
+    const cleanText = extractCleanTextForTts(msg.content)
+    if (!cleanText) {
+      message.warning('无可朗读的纯文本内容')
+      return
+    }
+
+    audioLoadingMessageId.value = msg.id
+    try {
+      const res = await generateTtsApi({
+        text: cleanText.slice(0, 2000),
+        voiceId: 'zh-CN-XiaoxiaoNeural',
+        model: 'edge-tts',
+        language: 'zh',
+        speed: 1.0,
+      })
+
+      if (res.data?.audioUrl) {
+        audioUrl = res.data.audioUrl
+        messageAudioMap.value[msg.id] = audioUrl
+      } else {
+        throw new Error(res.data?.errorMessage || '未能获取音频文件')
+      }
+    } catch (err: any) {
+      console.error('语音朗读失败:', err)
+      message.error(err.message || '语音合成失败，请稍后重试')
+      audioLoadingMessageId.value = null
+      return
+    } finally {
+      audioLoadingMessageId.value = null
+    }
+  }
+
+  try {
+    const audio = new Audio(audioUrl)
+    currentAudioInstance = audio
+    playingMessageId.value = msg.id
+
+    audio.onended = () => {
+      if (playingMessageId.value === msg.id) {
+        playingMessageId.value = null
+      }
+      currentAudioInstance = null
+    }
+
+    audio.onerror = (e) => {
+      console.error('音频播放错误', e)
+      message.error('音频播放异常')
+      if (playingMessageId.value === msg.id) {
+        playingMessageId.value = null
+      }
+      currentAudioInstance = null
+    }
+
+    await audio.play()
+  } catch (playErr) {
+    console.error('Audio play failed:', playErr)
+    playingMessageId.value = null
+    currentAudioInstance = null
+    message.error('无法自动播放音频，请确保浏览器允许媒体播放')
+  }
+}
+
+const handleCopyMessage = async (msg: Message) => {
+  if (!msg.content) return
+  try {
+    await navigator.clipboard.writeText(msg.content)
+    copiedMessageId.value = msg.id
+    message.success('已复制到剪贴板')
+    setTimeout(() => {
+      if (copiedMessageId.value === msg.id) {
+        copiedMessageId.value = null
+      }
+    }, 2000)
+  } catch {
+    message.error('复制失败，请手动选择复制')
+  }
+}
+
+onBeforeUnmount(() => {
+  stopCurrentAudio()
+})
 </script>
 
 <style scoped lang="scss">
@@ -1250,19 +1448,20 @@ $avatar-size: 32px;
 
       .typing-indicator {
         display: flex;
+        align-items: center;
         gap: 6px;
-        padding: 12px 16px;
+        padding: 10px 16px;
         background: #ffffff;
         border: 1px solid rgba(15, 23, 42, 0.06);
         border-radius: 14px;
         box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.03);
         width: fit-content;
 
-        span {
-          width: 8px;
-          height: 8px;
+        span:not(.typing-hint) {
+          width: 7px;
+          height: 7px;
           border-radius: 50%;
-          background: #94a3b8;
+          background: #3b82f6;
           animation: typing 1.4s infinite ease-in-out;
 
           &:nth-child(2) {
@@ -1272,6 +1471,14 @@ $avatar-size: 32px;
           &:nth-child(3) {
             animation-delay: 0.4s;
           }
+        }
+
+        .typing-hint {
+          margin-left: 6px;
+          font-size: 12.5px;
+          color: #64748b;
+          font-weight: 400;
+          letter-spacing: 0.2px;
         }
       }
     }
@@ -1408,5 +1615,94 @@ $avatar-size: 32px;
 .viewport-fade-enter-from,
 .viewport-fade-leave-to {
   opacity: 0;
+}
+
+.assistant-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 2px;
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #64748b;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:hover:not(:disabled) {
+      color: #0f172a;
+      background: rgba(0, 0, 0, 0.05);
+      border-color: rgba(0, 0, 0, 0.08);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &.read-aloud-btn {
+      &.is-playing {
+        color: #4f46e5;
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        font-weight: 500;
+      }
+      &.is-loading {
+        color: #6366f1;
+      }
+    }
+
+    .action-icon {
+      font-size: 13px;
+    }
+
+    .check-icon {
+      color: #10b981;
+    }
+
+    .sound-wave-bars {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 12px;
+
+      .bar {
+        width: 2.5px;
+        background: #4f46e5;
+        border-radius: 1px;
+        animation: soundWave 0.8s ease-in-out infinite alternate;
+
+        &.bar-1 {
+          height: 5px;
+          animation-delay: 0s;
+        }
+        &.bar-2 {
+          height: 12px;
+          animation-delay: 0.2s;
+        }
+        &.bar-3 {
+          height: 7px;
+          animation-delay: 0.4s;
+        }
+      }
+    }
+  }
+}
+
+@keyframes soundWave {
+  0% {
+    height: 4px;
+  }
+  100% {
+    height: 12px;
+  }
 }
 </style>

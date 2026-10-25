@@ -11,6 +11,7 @@ import { Grok2APIAdapter } from './adapters/grok2api.adapter';
 import { ZhipuAdapter } from './adapters/zhipu.adapter';
 import { SiliconFlowAdapter } from './adapters/siliconflow.adapter';
 import { OFMAdapter } from './adapters/ofm.adapter';
+import { XfyunMaaSAdapter } from './adapters/xfyun-maas.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -46,6 +47,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     ZhipuAdapter, // 智谱 AI 适配器
     SiliconFlowAdapter, // 硅基流动适配器
     OFMAdapter, // Our Free Model 本地免密适配器
+    XfyunMaaSAdapter, // 科大讯飞星辰 MaaS 适配器 (Spark-X2.6)
   ],
   exports: [ChatService, ChatSessionService, AIClientService],
 })
