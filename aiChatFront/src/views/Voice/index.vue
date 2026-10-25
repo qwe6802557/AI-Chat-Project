@@ -32,6 +32,7 @@
             :voices="voices"
             @submit-tts="handleGenerateTts"
             @submit-stt="handleTranscribeStt"
+            @model-change="handleModelChange"
             @stop="handleStopGenerate"
           />
         </footer>
@@ -75,21 +76,52 @@ const tasks = ref<VoiceTask[]>([])
 
 // 默认内置音色字典（确保在离线或弱网下组件挂载即立即可选）
 const DEFAULT_FALLBACK_VOICES: VoiceInfo[] = [
-  { voice_id: 'eve', name: 'Eve', language: 'multilingual' },
-  { voice_id: 'ara', name: 'Ara', language: 'multilingual' },
-  { voice_id: 'altair', name: 'Altair', language: 'multilingual' },
-  { voice_id: 'atlas', name: 'Atlas', language: 'multilingual' },
-  { voice_id: 'aurora', name: 'Aurora', language: 'multilingual' },
-  { voice_id: 'carina', name: 'Carina', language: 'multilingual' },
-  { voice_id: 'celeste', name: 'Celeste', language: 'multilingual' },
-  { voice_id: 'cosmo', name: 'Cosmo', language: 'multilingual' },
-  { voice_id: 'helios', name: 'Helios', language: 'multilingual' },
-  { voice_id: 'leo', name: 'Leo', language: 'multilingual' },
-  { voice_id: 'luna', name: 'Luna', language: 'multilingual' },
-  { voice_id: 'orion', name: 'Orion', language: 'multilingual' },
-  { voice_id: 'rex', name: 'Rex', language: 'multilingual' },
-  { voice_id: 'sirius', name: 'Sirius', language: 'multilingual' },
-  { voice_id: 'zenith', name: 'Zenith', language: 'multilingual' },
+  // 中文普通话 (精品)
+  { voice_id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 (女声·温柔亲切)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunxiNeural', name: '云希 (男声·阳光沉稳)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunjianNeural', name: '云健 (男声·深沉浑厚)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-XiaoyiNeural', name: '晓伊 (女声·活泼生活)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunyangNeural', name: '云扬 (男声·专业严肃)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunxiaNeural', name: '云夏 (男声·清澈少年)', language: 'zh-CN', category: '中文普通话 (精品)' },
+
+  // 中文方言 / 地方语言
+  { voice_id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 (辽宁女声·幽默风趣)', language: 'zh-CN-liaoning', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 (陕西女声·质朴地道)', language: 'zh-CN-shaanxi', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-HiuMaanNeural', name: '晓曼 (粤语女声·纯正自然)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-HiuGaaiNeural', name: '晓佳 (粤语女声·亲和日常)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-WanLungNeural', name: '云龙 (粤语男声·沉稳儒雅)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-HsiaoChenNeural', name: '晓臻 (台湾国语·温柔清新)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-HsiaoYuNeural', name: '晓雨 (台湾国语·知性亲切)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-YunJheNeural', name: '云哲 (台湾男声·知性自然)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+
+  // 国际多语种 (支持中英文跨语言)
+  { voice_id: 'en-US-AvaMultilingualNeural', name: 'Ava (美式女声·多语种支持)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-AndrewMultilingualNeural', name: 'Andrew (美式男声·多语种支持)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-EmmaMultilingualNeural', name: 'Emma (美式女声·自然亲和)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-BrianMultilingualNeural', name: 'Brian (美式男声·随和自然)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'de-DE-SeraphinaMultilingualNeural', name: 'Seraphina (德文女声·多语种支持)', language: 'de-DE', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'de-DE-FlorianMultilingualNeural', name: 'Florian (德文男声·多语种支持)', language: 'de-DE', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'fr-FR-VivienneMultilingualNeural', name: 'Vivienne (法文女声·多语种支持)', language: 'fr-FR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'fr-FR-RemyMultilingualNeural', name: 'Remy (法文男声·多语种支持)', language: 'fr-FR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ko-KR-HyunsuMultilingualNeural', name: 'Hyunsu (韩文男声·多语种支持)', language: 'ko-KR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'it-IT-GiuseppeMultilingualNeural', name: 'Giuseppe (意文男声·多语种支持)', language: 'it-IT', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ja-JP-NanamiNeural', name: '七海 (日文女声·Nanami)', language: 'ja-JP', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ja-JP-KeitaNeural', name: '圭太 (日文男声·Keita)', language: 'ja-JP', category: '国际多语种 (支持中英文跨语言)' },
+
+  // 纯正外语 (建议输入对应语种)
+  { voice_id: 'en-US-JennyNeural', name: 'Jenny (美式女声·纯正英文)', language: 'en-US', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'en-US-GuyNeural', name: 'Guy (美式男声·纯正英文)', language: 'en-US', gender: 'Male', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'en-GB-SoniaNeural', name: 'Sonia (英式女声·纯正英伦)', language: 'en-GB', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'ko-KR-SunHiNeural', name: '善姬 (韩文女声·标准韩语)', language: 'ko-KR', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'ru-RU-SvetlanaNeural', name: 'Svetlana (俄文女声·流畅纯正)', language: 'ru-RU', category: '纯正外语 (建议输入对应语种)' },
+]
+
+const DEFAULT_XFYUN_VOICES: VoiceInfo[] = [
+  { voice_id: 'x4_xiaoyan', name: '小燕 (女声·标准普通话·亲切甜美)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'x4_yezi', name: '小露 (女声·知性主播·温和自然)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'aisjiuxu', name: '许久 (男声·磁性低沉·沉稳儒雅)', language: 'zh-CN', gender: 'Male', category: '科大讯飞高保真' },
+  { voice_id: 'aisjinger', name: '小婧 (女声·亲和助理·灵动清脆)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'aisbabyxu', name: '许小宝 (童声·天真活泼·可爱萌系)', language: 'zh-CN', gender: 'Child', category: '科大讯飞高保真' },
 ]
 
 const voices = ref<VoiceInfo[]>([...DEFAULT_FALLBACK_VOICES])
@@ -140,9 +172,9 @@ const syncUserCredits = async () => {
 /**
  * 拉取音色列表
  */
-const fetchVoices = async () => {
+const fetchVoices = async (model = 'edge-tts') => {
   try {
-    const res = await getVoicesApi()
+    const res = await getVoicesApi(model)
     if (res.data?.voices && res.data.voices.length > 0) {
       voices.value = res.data.voices
       return
@@ -150,9 +182,13 @@ const fetchVoices = async () => {
   } catch (err) {
     console.warn('获取音色失败，自动使用默认保底音色', err)
   }
-  if (!voices.value || voices.value.length === 0) {
-    voices.value = [...DEFAULT_FALLBACK_VOICES]
+  if (!voices.value || voices.value.length === 0 || model === 'xfyun-tts') {
+    voices.value = model === 'xfyun-tts' ? [...DEFAULT_XFYUN_VOICES] : [...DEFAULT_FALLBACK_VOICES]
   }
+}
+
+const handleModelChange = (model: string) => {
+  fetchVoices(model)
 }
 
 /**

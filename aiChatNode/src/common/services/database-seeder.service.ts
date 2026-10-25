@@ -505,11 +505,95 @@ export class DatabaseSeederService implements OnModuleInit {
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
 
+        // ===== iFLYTEK (科大讯飞) 供应商及星火大模型与语音模型种子 =====
+    const iflytekProviderResult = await this.ensureProvider({
+      name: 'iFLYTEK',
+      description: '科大讯飞星辰 MaaS 大模型与智能语音开放平台',
+      website: 'https://www.xfyun.cn',
+    });
+    summary[
+      iflytekProviderResult.created ? 'createdProviders' : 'skippedProviders'
+    ] += 1;
+
+    const IFLYTEK_MODELS = [
+      {
+        modelId: 'spark-x2.6',
+        modelName: 'Spark-X2.6 (深度推理)',
+        description:
+          '科大讯飞旗舰 293B-A30B MoE 深度推理大模型，原生 1M 上下文与完整思考链，单次 1 积分',
+        category: 'chat' as const,
+        creditCost: 1,
+        sortOrder: 10,
+        isActive: true,
+      },
+      {
+        modelId: 'spark-x2.5',
+        modelName: 'Spark-X2.5 (256k)',
+        description:
+          '科大讯飞通用多语言大模型，支持 256k 上下文与多语言问答，单次 1 积分',
+        category: 'chat' as const,
+        creditCost: 1,
+        sortOrder: 11,
+        isActive: true,
+      },
+      {
+        modelId: 'spark-x2.6-4b',
+        modelName: 'Spark-X2.6-4B (轻量开源)',
+        description:
+          '端侧轻量高效语言模型，支持 1M 上下文与 0 元畅享调用，单次 0 积分',
+        category: 'chat' as const,
+        creditCost: 0,
+        sortOrder: 12,
+        isActive: true,
+      },
+      {
+        modelId: 'xfyun-tts',
+        modelName: '科大讯飞高保真语音 (TTS)',
+        description:
+          '科大讯飞官方高保真在线语音合成，涵盖小燕/小露/许久/小婧/许小宝等精品发音人，单次 1 积分',
+        category: 'voice' as const,
+        creditCost: 1,
+        sortOrder: 10,
+        isActive: true,
+      },
+      {
+        modelId: 'xfyun-iat',
+        modelName: '科大讯飞语音听写 (STT)',
+        description:
+          '科大讯飞流式极速语音识别引擎，支持中英文与方言高精度转写，单次 1 积分',
+        category: 'voice' as const,
+        creditCost: 1,
+        sortOrder: 11,
+        isActive: true,
+      },
+    ];
+
+    for (const model of IFLYTEK_MODELS) {
+      const result = await this.ensureModel({
+        providerId: iflytekProviderResult.provider.id,
+        modelName: model.modelName,
+        modelId: model.modelId,
+        inputPrice: 0,
+        outputPrice: 0,
+        contextLength: 0,
+        maxOutput: 0,
+        availability: 100,
+        tps: 0,
+        description: model.description,
+        billingMode: DEFAULT_MODEL_BILLING_MODE,
+        creditCost: model.creditCost,
+        sortOrder: model.sortOrder,
+        isActive: model.isActive,
+        category: model.category,
+      });
+      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    }
+
     // 同步数据库中所有已存在的聊天模型为固定 10 积分按次计费
     try {
       const allModels = await this.aiModelService.findAll();
       for (const m of allModels) {
-        if (m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-lite' && m.modelId !== 'grok-imagine-image-2.0')) {
+        if ((m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-lite' && m.modelId !== 'grok-imagine-image-2.0')) && !m.modelId.startsWith('spark-') && !m.modelId.startsWith('xfyun-')) {
           if (m.creditCost !== DEFAULT_CHAT_MODEL_CREDIT_COST || m.billingMode !== DEFAULT_CHAT_BILLING_MODE) {
             await this.aiModelService.update(m.id, {
               creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,

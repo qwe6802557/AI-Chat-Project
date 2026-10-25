@@ -186,6 +186,31 @@ export const resolveModelReasoningProfile = (params: {
     };
   }
 
+  if (
+    normalizedProviderName.includes('xfyun') ||
+    normalizedProviderName.includes('iflytek') ||
+    normalizedProviderName.includes('科大讯飞')
+  ) {
+    if (modelId.includes('x2.6') || matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS)) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'anthropic_blocks',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
+    };
+  }
+
   return {
     capability: 'none',
     strategy: 'summary_preferred',

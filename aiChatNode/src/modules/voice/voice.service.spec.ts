@@ -9,6 +9,7 @@ import { CreditBusinessType } from '../credits/types/credits.types';
 jest.mock('fs/promises', () => ({
   mkdir: jest.fn().mockResolvedValue(undefined),
   writeFile: jest.fn().mockResolvedValue(undefined),
+  stat: jest.fn().mockResolvedValue({ size: 1024 }),
   access: jest.fn().mockImplementation(async (filePath: string) => {
     if (filePath.includes('not-found')) {
       throw new Error('ENOENT');
@@ -66,7 +67,24 @@ describe('VoiceService', () => {
   });
 
   describe('getVoices', () => {
-    it('上游成功时应返回音色列表', async () => {
+    it('默认或 edge-tts 模型应返回全量 Edge 神经音色列表', async () => {
+      const res = await service.getVoices('edge-tts');
+      expect(res.voices).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ voice_id: 'zh-CN-XiaoxiaoNeural' }),
+        ]),
+      );
+      expect(res.voices.length).toBeGreaterThan(20);
+    });
+
+    it('指定 xfyun-tts 模型应返回科大讯飞官方精品发音人列表', async () => {
+      const res = await service.getVoices('xfyun-tts');
+      expect(res.voices.length).toBe(5);
+      expect(res.voices.some((v) => v.voice_id === 'x4_xiaoyan')).toBe(true);
+      expect(res.voices.some((v) => v.voice_id === 'aisjiuxu')).toBe(true);
+    });
+
+    it('指定 Grok 模型且上游成功时应返回上游音色列表', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -74,7 +92,7 @@ describe('VoiceService', () => {
         }),
       });
 
-      const res = await service.getVoices();
+      const res = await service.getVoices('grok-voice-latest');
       expect(res.voices).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ voice_id: 'eve', name: 'Eve' }),
@@ -82,17 +100,42 @@ describe('VoiceService', () => {
       );
     });
 
-    it('上游报错时应优雅回退内置音色列表', async () => {
+    it('指定 Grok 模型且上游报错时应优雅回退内置 Grok 音色列表', async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
 
-      const res = await service.getVoices();
+      const res = await service.getVoices('grok-voice-latest');
       expect(res.voices.length).toBeGreaterThan(0);
       expect(res.voices.some((v) => v.voice_id === 'eve')).toBe(true);
     });
   });
 
   describe('createTts', () => {
-    it('成功合成时应扣除 20 积分并保存音频', async () => {
+    it('使用 edge-tts 成功合成时应仅扣除 1 积分并保存音频', async () => {
+      jest
+        .spyOn(service as any, 'synthesizeWithEdgeTts')
+        .mockResolvedValue(undefined);
+
+      const task = await service.createTts('user-1', {
+        text: '测试 Edge-TTS 文本合成',
+        voiceId: 'zh-CN-XiaoxiaoNeural',
+        model: 'edge-tts',
+        language: 'zh',
+        speed: 1.0,
+      });
+
+      expect(creditsServiceMock.deductDirectCredits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          amount: 1,
+          businessType: CreditBusinessType.VOICE_TTS,
+        }),
+      );
+      expect(task.status).toBe('success');
+      expect(task.costCredits).toBe(1);
+      expect(task.audioUrl).toBe('/voice/media/tts_mock-voice-task-id.mp3');
+    });
+
+    it('使用 Grok 模型成功合成时应扣除 20 积分并保存音频', async () => {
       const mockAudioBuffer = Buffer.from('mock-audio-stream');
       global.fetch = jest.fn().mockResolvedValue({
         ok: true,
@@ -100,8 +143,9 @@ describe('VoiceService', () => {
       });
 
       const task = await service.createTts('user-1', {
-        text: '测试文本合成',
+        text: '测试 Grok 文本合成',
         voiceId: 'eve',
+        model: 'grok-voice-think-fast-1.0',
         language: 'zh',
         speed: 1.0,
       });
@@ -114,10 +158,11 @@ describe('VoiceService', () => {
         }),
       );
       expect(task.status).toBe('success');
+      expect(task.costCredits).toBe(20);
       expect(task.audioUrl).toBe('/voice/media/tts_mock-voice-task-id.mp3');
     });
 
-    it('上游异常时应触发全额退款并抛出 BadRequestException', async () => {
+    it('Grok 上游异常时应触发全额退款 (20积分) 并抛出 BadRequestException', async () => {
       global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -128,6 +173,7 @@ describe('VoiceService', () => {
         service.createTts('user-1', {
           text: '失败测试',
           voiceId: 'eve',
+          model: 'grok-voice-think-fast-1.0',
         }),
       ).rejects.toThrow(BadRequestException);
 
@@ -138,6 +184,34 @@ describe('VoiceService', () => {
           businessType: CreditBusinessType.VOICE_TTS,
         }),
       );
+    });
+
+    it('Edge-TTS 合成异常时应触发全额退款 (1积分) 并抛出 BadRequestException', async () => {
+      jest
+        .spyOn(service as any, 'synthesizeWithEdgeTts')
+        .mockRejectedValue(new Error('Spawn failed'));
+
+      await expect(
+        service.createTts('user-1', {
+          text: 'Edge-TTS 失败测试',
+          model: 'edge-tts',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(creditsServiceMock.refundDirectCredits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          amount: 1,
+          businessType: CreditBusinessType.VOICE_TTS,
+        }),
+      );
+    });
+
+    it('formatEdgeTtsError 应将 NoAudioReceived 转换为友好提示', () => {
+      const msg = service.formatEdgeTtsError(
+        'edge_tts.exceptions.NoAudioReceived: No audio was received. Please verify that your parameters are correct.',
+      );
+      expect(msg).toContain('所选发音人不支持当前语言文本');
     });
   });
 

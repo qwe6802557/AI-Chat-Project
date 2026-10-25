@@ -27,7 +27,7 @@
         <div class="header-right-hint">
           <span class="cost-estimate">
             <ThunderboltFilled class="cost-icon" />
-            每次消耗 {{ props.unitCost }} 积分 (失败返还)
+            每次消耗 {{ currentCost }} 积分 (失败返还)
           </span>
         </div>
       </div>
@@ -57,6 +57,12 @@
           </button>
         </div>
 
+        <!-- 纯外语发音人输入中文时的友好提示 -->
+        <div v-if="showVoiceTip" class="voice-foreign-tip-row">
+          <InfoCircleOutlined class="tip-icon" />
+          <span>提示：当前发音人属于纯外语模型，朗读中文将由系统自动调度晓晓（中文普通话）平滑发音</span>
+        </div>
+
         <div class="params-row">
           <div class="params-left">
             <!-- 音色选择 -->
@@ -67,16 +73,33 @@
                 size="small"
                 class="param-select voice-select"
                 :bordered="false"
-                :dropdown-match-select-width="180"
+                :dropdown-match-select-width="260"
                 :disabled="props.loading"
               >
-                <a-select-option
-                  v-for="v in effectiveVoices"
-                  :key="v.voice_id"
-                  :value="v.voice_id"
-                >
-                  {{ v.name }}
-                </a-select-option>
+                <template v-if="hasGroupedVoices">
+                  <a-select-opt-group
+                    v-for="(groupList, groupName) in groupedVoices"
+                    :key="groupName"
+                    :label="groupName"
+                  >
+                    <a-select-option
+                      v-for="v in groupList"
+                      :key="v.voice_id"
+                      :value="v.voice_id"
+                    >
+                      {{ v.name }}
+                    </a-select-option>
+                  </a-select-opt-group>
+                </template>
+                <template v-else>
+                  <a-select-option
+                    v-for="v in effectiveVoices"
+                    :key="v.voice_id"
+                    :value="v.voice_id"
+                  >
+                    {{ v.name }}
+                  </a-select-option>
+                </template>
               </a-select>
             </div>
 
@@ -259,7 +282,22 @@
             <!-- 识别模型 -->
             <div class="param-capsule model-select-wrapper">
               <ThunderboltOutlined class="param-capsule-icon" />
-              <span class="stt-model-name">grok-stt</span>
+              <a-select
+                v-model:value="sttModel"
+                size="small"
+                class="param-select model-select"
+                :bordered="false"
+                :dropdown-match-select-width="false"
+                :disabled="props.loading"
+              >
+                <a-select-option
+                  v-for="opt in sttModelOptions"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}
+                </a-select-option>
+              </a-select>
             </div>
           </div>
 
@@ -286,6 +324,7 @@ import {
   InboxOutlined,
   FileDoneOutlined,
   ReloadOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons-vue'
 import { message } from 'ant-design-vue'
 import type { VoiceInfo, CreateTtsParams } from '@/interface/voice'
@@ -296,21 +335,52 @@ defineOptions({
 
 
 const DEFAULT_FALLBACK_VOICES: VoiceInfo[] = [
-  { voice_id: 'eve', name: 'Eve', language: 'multilingual' },
-  { voice_id: 'ara', name: 'Ara', language: 'multilingual' },
-  { voice_id: 'altair', name: 'Altair', language: 'multilingual' },
-  { voice_id: 'atlas', name: 'Atlas', language: 'multilingual' },
-  { voice_id: 'aurora', name: 'Aurora', language: 'multilingual' },
-  { voice_id: 'carina', name: 'Carina', language: 'multilingual' },
-  { voice_id: 'celeste', name: 'Celeste', language: 'multilingual' },
-  { voice_id: 'cosmo', name: 'Cosmo', language: 'multilingual' },
-  { voice_id: 'helios', name: 'Helios', language: 'multilingual' },
-  { voice_id: 'leo', name: 'Leo', language: 'multilingual' },
-  { voice_id: 'luna', name: 'Luna', language: 'multilingual' },
-  { voice_id: 'orion', name: 'Orion', language: 'multilingual' },
-  { voice_id: 'rex', name: 'Rex', language: 'multilingual' },
-  { voice_id: 'sirius', name: 'Sirius', language: 'multilingual' },
-  { voice_id: 'zenith', name: 'Zenith', language: 'multilingual' },
+  // 中文普通话 (精品)
+  { voice_id: 'zh-CN-XiaoxiaoNeural', name: '晓晓 (女声·温柔亲切)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunxiNeural', name: '云希 (男声·阳光沉稳)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunjianNeural', name: '云健 (男声·深沉浑厚)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-XiaoyiNeural', name: '晓伊 (女声·活泼生活)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunyangNeural', name: '云扬 (男声·专业严肃)', language: 'zh-CN', category: '中文普通话 (精品)' },
+  { voice_id: 'zh-CN-YunxiaNeural', name: '云夏 (男声·清澈少年)', language: 'zh-CN', category: '中文普通话 (精品)' },
+
+  // 中文方言 / 地方语言
+  { voice_id: 'zh-CN-liaoning-XiaobeiNeural', name: '晓北 (辽宁女声·幽默风趣)', language: 'zh-CN-liaoning', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-CN-shaanxi-XiaoniNeural', name: '晓妮 (陕西女声·质朴地道)', language: 'zh-CN-shaanxi', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-HiuMaanNeural', name: '晓曼 (粤语女声·纯正自然)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-HiuGaaiNeural', name: '晓佳 (粤语女声·亲和日常)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-HK-WanLungNeural', name: '云龙 (粤语男声·沉稳儒雅)', language: 'zh-HK', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-HsiaoChenNeural', name: '晓臻 (台湾国语·温柔清新)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-HsiaoYuNeural', name: '晓雨 (台湾国语·知性亲切)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+  { voice_id: 'zh-TW-YunJheNeural', name: '云哲 (台湾男声·知性自然)', language: 'zh-TW', category: '中文方言 / 地方语言' },
+
+  // 国际多语种 (支持中英文跨语言)
+  { voice_id: 'en-US-AvaMultilingualNeural', name: 'Ava (美式女声·多语种支持)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-AndrewMultilingualNeural', name: 'Andrew (美式男声·多语种支持)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-EmmaMultilingualNeural', name: 'Emma (美式女声·自然亲和)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'en-US-BrianMultilingualNeural', name: 'Brian (美式男声·随和自然)', language: 'en-US', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'de-DE-SeraphinaMultilingualNeural', name: 'Seraphina (德文女声·多语种支持)', language: 'de-DE', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'de-DE-FlorianMultilingualNeural', name: 'Florian (德文男声·多语种支持)', language: 'de-DE', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'fr-FR-VivienneMultilingualNeural', name: 'Vivienne (法文女声·多语种支持)', language: 'fr-FR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'fr-FR-RemyMultilingualNeural', name: 'Remy (法文男声·多语种支持)', language: 'fr-FR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ko-KR-HyunsuMultilingualNeural', name: 'Hyunsu (韩文男声·多语种支持)', language: 'ko-KR', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'it-IT-GiuseppeMultilingualNeural', name: 'Giuseppe (意文男声·多语种支持)', language: 'it-IT', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ja-JP-NanamiNeural', name: '七海 (日文女声·Nanami)', language: 'ja-JP', category: '国际多语种 (支持中英文跨语言)' },
+  { voice_id: 'ja-JP-KeitaNeural', name: '圭太 (日文男声·Keita)', language: 'ja-JP', category: '国际多语种 (支持中英文跨语言)' },
+
+  // 纯正外语 (建议输入对应语种)
+  { voice_id: 'en-US-JennyNeural', name: 'Jenny (美式女声·纯正英文)', language: 'en-US', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'en-US-GuyNeural', name: 'Guy (美式男声·纯正英文)', language: 'en-US', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'en-GB-SoniaNeural', name: 'Sonia (英式女声·纯正英伦)', language: 'en-GB', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'ko-KR-SunHiNeural', name: '善姬 (韩文女声·标准韩语)', language: 'ko-KR', category: '纯正外语 (建议输入对应语种)' },
+  { voice_id: 'ru-RU-SvetlanaNeural', name: 'Svetlana (俄文女声·流畅纯正)', language: 'ru-RU', category: '纯正外语 (建议输入对应语种)' },
+]
+
+const DEFAULT_XFYUN_VOICES: VoiceInfo[] = [
+  { voice_id: 'x4_xiaoyan', name: '小燕 (女声·标准普通话·亲切甜美)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'x4_yezi', name: '小露 (女声·知性主播·温和自然)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'aisjiuxu', name: '许久 (男声·磁性低沉·沉稳儒雅)', language: 'zh-CN', gender: 'Male', category: '科大讯飞高保真' },
+  { voice_id: 'aisjinger', name: '小婧 (女声·亲和助理·灵动清脆)', language: 'zh-CN', gender: 'Female', category: '科大讯飞高保真' },
+  { voice_id: 'aisbabyxu', name: '许小宝 (童声·天真活泼·可爱萌系)', language: 'zh-CN', gender: 'Child', category: '科大讯飞高保真' },
 ]
 
 const props = withDefaults(
@@ -323,18 +393,41 @@ const props = withDefaults(
   {
     loading: false,
     unitCost: 20,
-    initialVoiceId: 'eve',
+    initialVoiceId: 'zh-CN-XiaoxiaoNeural',
   },
 )
 
 const emit = defineEmits<{
   'submit-tts': [params: CreateTtsParams]
   'submit-stt': [payload: { file: File | Blob; language: string; model: string }]
+  'model-change': [model: string]
   'stop': []
 }>()
 
 const effectiveVoices = computed<VoiceInfo[]>(() => {
-  return props.voices && props.voices.length > 0 ? props.voices : DEFAULT_FALLBACK_VOICES
+  if (props.voices && props.voices.length > 0) {
+    return props.voices
+  }
+  if (ttsModel.value === 'xfyun-tts' || ttsModel.value.startsWith('xfyun')) {
+    return DEFAULT_XFYUN_VOICES
+  }
+  return DEFAULT_FALLBACK_VOICES
+})
+
+const groupedVoices = computed(() => {
+  const groups: Record<string, VoiceInfo[]> = {}
+  effectiveVoices.value.forEach((v) => {
+    const cat = v.category || (v.voice_id.includes('Neural') ? 'Edge 神经语音' : v.voice_id.startsWith('x4_') || v.voice_id.startsWith('ais') ? '科大讯飞高保真' : '通用音色')
+    if (!groups[cat]) {
+      groups[cat] = []
+    }
+    groups[cat].push(v)
+  })
+  return groups
+})
+
+const hasGroupedVoices = computed(() => {
+  return Object.keys(groupedVoices.value).length > 1
 })
 
 const currentMode = ref<'tts' | 'stt'>('tts')
@@ -342,10 +435,33 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 
 // TTS 状态
 const ttsText = ref('')
-const ttsVoiceId = ref(props.initialVoiceId || 'eve')
+const ttsVoiceId = ref(props.initialVoiceId || 'zh-CN-XiaoxiaoNeural')
 const ttsSpeed = ref(1.0)
 const ttsLanguage = ref('zh')
-const ttsModel = ref('grok-voice-think-fast-1.0')
+const ttsModel = ref('edge-tts')
+
+const currentCost = computed(() => {
+  if (currentMode.value === 'stt') {
+    return (sttModel.value === 'xfyun-iat' || sttModel.value.startsWith('xfyun')) ? 1 : 20
+  }
+  return (ttsModel.value === 'edge-tts' || ttsModel.value === 'xfyun-tts' || ttsModel.value.startsWith('xfyun')) ? 1 : (props.unitCost || 20)
+})
+
+const selectedVoiceInfo = computed(() => {
+  return effectiveVoices.value.find((v) => v.voice_id === ttsVoiceId.value)
+})
+
+const isPureForeignVoice = computed(() => {
+  return Boolean(selectedVoiceInfo.value?.category?.includes('纯正外语'))
+})
+
+const hasChineseInText = computed(() => {
+  return /[\u4e00-\u9fa5]/.test(ttsText.value)
+})
+
+const showVoiceTip = computed(() => {
+  return isPureForeignVoice.value && hasChineseInText.value
+})
 
 interface VoiceModelOption {
   label: string
@@ -354,18 +470,56 @@ interface VoiceModelOption {
 }
 
 const voiceModelOptions = ref<VoiceModelOption[]>([
-  { label: 'grok-voice-think-fast-1.0', value: 'grok-voice-think-fast-1.0', isDefault: true },
+  { label: '微软 Edge 神经语音 (Edge-TTS)', value: 'edge-tts', isDefault: true },
+  { label: '科大讯飞高保真语音 (xfyun-tts)', value: 'xfyun-tts' },
+  { label: 'grok-voice-think-fast-1.0', value: 'grok-voice-think-fast-1.0' },
   { label: 'grok-voice-think-fast-2.0', value: 'grok-voice-think-fast-2.0' },
   { label: 'grok-voice-latest', value: 'grok-voice-latest' },
 ])
+
+interface SttModelOption {
+  label: string
+  value: string
+  creditCost?: number
+}
+
+const sttModel = ref('xfyun-iat')
+const sttModelOptions = ref<SttModelOption[]>([
+  { label: '科大讯飞语音听写 (1 积分)', value: 'xfyun-iat', creditCost: 1 },
+  { label: 'Grok 语音识别 (20 积分)', value: 'grok-stt', creditCost: 20 },
+])
+
+watch(ttsModel, (newModel) => {
+  if (newModel === 'edge-tts') {
+    if (!ttsVoiceId.value || !ttsVoiceId.value.includes('Neural')) {
+      ttsVoiceId.value = 'zh-CN-XiaoxiaoNeural'
+    }
+  } else if (newModel === 'xfyun-tts' || newModel.startsWith('xfyun')) {
+    if (!ttsVoiceId.value || !DEFAULT_XFYUN_VOICES.some(v => v.voice_id === ttsVoiceId.value)) {
+      ttsVoiceId.value = 'x4_xiaoyan'
+    }
+  } else {
+    if (ttsVoiceId.value && (ttsVoiceId.value.includes('Neural') || DEFAULT_XFYUN_VOICES.some(v => v.voice_id === ttsVoiceId.value))) {
+      ttsVoiceId.value = 'eve'
+    }
+  }
+  emit('model-change', newModel)
+})
 
 const loadActiveVoiceModels = async () => {
   try {
     const res = await getActiveModels({ category: 'voice' })
     if (res && res.code === 0 && Array.isArray(res.data)) {
-      const activeVoices = res.data.filter((m: BackendAiModel) => m.isActive && m.modelId !== 'grok-stt')
-      if (activeVoices.length > 0) {
-        voiceModelOptions.value = activeVoices.map((m: BackendAiModel) => ({
+      const activeTts = res.data.filter(
+        (m: BackendAiModel) =>
+          m.isActive &&
+          m.modelId !== 'grok-stt' &&
+          m.modelId !== 'xfyun-iat' &&
+          !m.modelId.includes('stt') &&
+          !m.modelId.includes('iat'),
+      )
+      if (activeTts.length > 0) {
+        voiceModelOptions.value = activeTts.map((m: BackendAiModel) => ({
           label: m.modelName || m.modelId,
           value: m.modelId,
           isDefault: m.isDefault,
@@ -373,6 +527,25 @@ const loadActiveVoiceModels = async () => {
         if (!voiceModelOptions.value.some(opt => opt.value === ttsModel.value)) {
           const defaultOpt = voiceModelOptions.value.find(opt => opt.isDefault) || voiceModelOptions.value[0]
           ttsModel.value = defaultOpt.value
+        }
+      }
+
+      const activeStt = res.data.filter(
+        (m: BackendAiModel) =>
+          m.isActive &&
+          (m.modelId === 'grok-stt' ||
+            m.modelId === 'xfyun-iat' ||
+            m.modelId.includes('stt') ||
+            m.modelId.includes('iat')),
+      )
+      if (activeStt.length > 0) {
+        sttModelOptions.value = activeStt.map((m: BackendAiModel) => ({
+          label: `${m.modelName || m.modelId} (${m.creditCost ?? (m.modelId === 'xfyun-iat' ? 1 : 20)} 积分)`,
+          value: m.modelId,
+          creditCost: m.creditCost,
+        }))
+        if (!sttModelOptions.value.some(opt => opt.value === sttModel.value)) {
+          sttModel.value = sttModelOptions.value[0].value
         }
       }
     }
@@ -388,7 +561,6 @@ onMounted(() => {
 // STT 状态
 const sttMethod = ref<'record' | 'upload'>('record')
 const sttLanguage = ref('zh')
-const sttModel = ref('grok-stt')
 const selectedFile = ref<File | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -1079,5 +1251,31 @@ onUnmounted(() => {
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
   }
+}
+
+.voice-foreign-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 2px;
+  padding: 5px 12px;
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  border-radius: 6px;
+  color: #854d0e;
+  font-size: 12px;
+  animation: fadeIn 0.2s ease;
+
+  .tip-icon {
+    font-size: 14px;
+    color: #eab308;
+    flex-shrink: 0;
+  }
+}
+
+[data-theme='dark'] .voice-foreign-tip-row {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.25);
+  color: #fef08a;
 }
 </style>

@@ -290,7 +290,7 @@ export class ChatController {
             };
             break;
           case 'reasoning_delta': {
-            const delta = chunk.delta?.content || '';
+            const delta = chunk.delta?.content || (chunk as any).reasoning?.content || '';
             reasoningBuffer += delta;
             if (finalReasoning) {
               finalReasoning.content = reasoningBuffer;

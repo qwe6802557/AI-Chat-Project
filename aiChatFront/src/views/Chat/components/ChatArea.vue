@@ -79,26 +79,16 @@
               <span class="stop-square-icon" aria-hidden="true"></span>
             </button>
 
-            <!-- 流式生成且输入框有待排队内容时，展示停止与排队双按钮并存 -->
-            <template v-else-if="props.loading && canQueue">
-              <button
-                type="button"
-                class="sub-stop-btn"
-                title="停止当前生成"
-                @click="handleStopClick"
-              >
-                <span class="stop-square-icon" aria-hidden="true"></span>
-              </button>
-
-              <button
-                type="button"
-                class="submit-btn active queue-btn"
-                title="加入排队 (Enter)"
-                @click="handleSend"
-              >
-                <ArrowUpOutlined class="btn-icon" />
-              </button>
-            </template>
+            <!-- 流式生成且输入框有待排队内容时，优雅转为加入排队按钮 -->
+            <button
+              v-else-if="props.loading && canQueue"
+              type="button"
+              class="submit-btn active queue-btn"
+              title="加入排队 (Enter)"
+              @click="handleSend"
+            >
+              <ArrowUpOutlined class="btn-icon" />
+            </button>
 
             <!-- 常规非流式状态下的发送按钮 -->
             <button
@@ -423,13 +413,11 @@ const handleEditQueued = (item: QueuedMessage) => {
       textarea.setSelectionRange(textarea.value.length, textarea.value.length)
     }
   })
-  message.info('已将排队消息提取回输入框')
 }
 
 const handleRemoveQueued = (item: QueuedMessage) => {
   if (activeConvId.value) {
     conversationStore.removeQueuedMessage(activeConvId.value, item.id)
-    message.info('已从排队队列中移除')
   }
 }
 
@@ -493,7 +481,6 @@ const handleSend = () => {
         options: sendOptions,
         model: props.selectedModel,
       })
-      message.success('已加入发送排队队列')
       inputMessage.value = ''
       clearFiles()
       scrollSignal.value += 1
@@ -732,6 +719,13 @@ $font-size-lg: 16px;
       outline: none;
     }
   }
+}
+
+.action-btn-cluster {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 2px;
 }
 
 .submit-btn {
