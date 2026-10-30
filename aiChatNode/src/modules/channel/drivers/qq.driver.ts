@@ -8,6 +8,9 @@ import {
 const QQ_AUTH_URL = 'https://bots.qq.com/app/getAppAccessToken';
 const QQ_API_BASE = 'https://api.sgroup.qq.com';
 
+/**
+ * 腾讯 QQ 官方开放平台机器人驱动 (WebSocket Gateway + REST 回复)
+ */
 export class QqDriver implements IChannelDriver {
   readonly channelType = 'qq';
   private readonly logger = new Logger(QqDriver.name);
@@ -47,6 +50,7 @@ export class QqDriver implements IChannelDriver {
     if (this.isRunning) return;
     if (!this.appId || !this.appSecret) {
       this.status = 'disconnected';
+      this.lastError = '缺少 AppID 或 AppSecret';
       return;
     }
 
@@ -86,21 +90,46 @@ export class QqDriver implements IChannelDriver {
     };
   }
 
-  async sendMessage(to: string, content: string): Promise<boolean> {
+  /**
+   * 发送 QQ 机器人消息（支持单聊与群聊、优先携带 msg_id 走被动回复通道）
+   */
+  async sendMessage(
+    to: string,
+    content: string,
+    msgId?: string,
+    isGroup?: boolean,
+  ): Promise<boolean> {
     if (!this.accessToken) return false;
     try {
-      const resp = await fetch(`${QQ_API_BASE}/v2/users/${encodeURIComponent(to)}/messages`, {
+      const url = isGroup
+        ? `${QQ_API_BASE}/v2/groups/${encodeURIComponent(to)}/messages`
+        : `${QQ_API_BASE}/v2/users/${encodeURIComponent(to)}/messages`;
+
+      const bodyPayload: Record<string, any> = {
+        content,
+        msg_type: 0,
+      };
+
+      // 携带 msg_id 走被动回复通道（避免触发严格的主动消息频控限制）
+      if (msgId) {
+        bodyPayload.msg_id = msgId;
+      }
+
+      const resp = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `QQBot ${this.accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          content,
-          msg_type: 0,
-        }),
+        body: JSON.stringify(bodyPayload),
       });
-      return resp.ok;
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        this.logger.error(`QQ 消息发送失败 HTTP ${resp.status}: ${errText}`);
+        return false;
+      }
+      return true;
     } catch (err: any) {
       this.logger.error(`QQ 消息发送异常: ${err.message}`);
       return false;
@@ -122,7 +151,8 @@ export class QqDriver implements IChannelDriver {
     });
 
     if (!resp.ok) {
-      throw new Error(`获取 QQ AccessToken 失败: HTTP ${resp.status}`);
+      const errText = await resp.text().catch(() => '');
+      throw new Error(`获取 QQ AccessToken 失败: HTTP ${resp.status} - ${errText}`);
     }
 
     const data = await resp.json();
@@ -141,7 +171,8 @@ export class QqDriver implements IChannelDriver {
     });
 
     if (!gatewayResp.ok) {
-      throw new Error(`获取 QQ Gateway 失败: HTTP ${gatewayResp.status}`);
+      const errText = await gatewayResp.text().catch(() => '');
+      throw new Error(`获取 QQ Gateway 失败: HTTP ${gatewayResp.status} - ${errText}`);
     }
 
     const gatewayData = await gatewayResp.json();
@@ -179,7 +210,7 @@ export class QqDriver implements IChannelDriver {
             this.sessionId = d.session_id;
             this.logger.log(`QQ 机器人鉴权成功，Bot: ${d.user?.username || ''}`);
           } else if (t === 'C2C_MESSAGE_CREATE' || t === 'GROUP_AT_MESSAGE_CREATE') {
-            this.handleEventMessage(d);
+            this.handleEventMessage(t, d);
           }
         }
       } catch (e: any) {
@@ -204,17 +235,24 @@ export class QqDriver implements IChannelDriver {
     };
   }
 
-  private handleEventMessage(d: any) {
+  private handleEventMessage(eventType: string, d: any) {
     const rawContent = (d.content || '').trim();
     const cleanContent = rawContent.replace(/<@!\d+>/g, '').trim();
-    const fromId = d.author?.user_openid || d.author?.id || '';
+    const isGroup = eventType === 'GROUP_AT_MESSAGE_CREATE';
+    const targetId = isGroup
+      ? (d.group_openid || '')
+      : (d.author?.user_openid || d.author?.id || '');
+    const contextFromId = isGroup
+      ? `${d.group_openid}:${d.author?.member_openid || d.author?.id || ''}`
+      : targetId;
+    const msgId = d.id;
 
-    if (!cleanContent || !fromId) return;
+    if (!cleanContent || !targetId) return;
 
-    this.inboundHandler('qq', fromId, cleanContent)
+    this.inboundHandler('qq', contextFromId, cleanContent)
       .then((reply) => {
         if (reply) {
-          this.sendMessage(fromId, reply);
+          this.sendMessage(targetId, reply, msgId, isGroup);
         }
       })
       .catch((e) => this.logger.error(`QQ 回复生成失败: ${e.message}`));
