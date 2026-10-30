@@ -5,6 +5,7 @@ import { ChannelConfig, ChannelType } from './entities/channel-config.entity';
 import { WeixinDriver } from './drivers/weixin.driver';
 import { QqDriver } from './drivers/qq.driver';
 import { FeishuDriver } from './drivers/feishu.driver';
+import { DingtalkDriver } from './drivers/dingtalk.driver';
 import { IChannelDriver, ChannelStatusInfo } from './drivers/channel-driver.interface';
 import { AIClientService } from '../chat/services/ai-client.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
@@ -86,6 +87,17 @@ export class ChannelManagerService implements OnModuleInit {
         (_ch, fromId, content) => this.handleInboundMessage(userId, 'feishu', fromId, content),
         async (creds) => {
           await this.updateSettings(userId, 'feishu', { credentials: creds });
+        },
+      );
+      this.drivers.set(key, driver);
+      return driver;
+    }
+
+    if (channelType === 'dingtalk') {
+      const driver = new DingtalkDriver(
+        (_ch, fromId, content) => this.handleInboundMessage(userId, 'dingtalk', fromId, content),
+        async (creds) => {
+          await this.updateSettings(userId, 'dingtalk', { credentials: creds });
         },
       );
       this.drivers.set(key, driver);
