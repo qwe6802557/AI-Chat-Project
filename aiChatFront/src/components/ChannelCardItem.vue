@@ -40,10 +40,6 @@
       </div>
 
       <div class="right-actions">
-        <a-button size="small" class="subtle-btn" @click="handleOpenDocs">
-          文档
-        </a-button>
-
         <a-button size="small" class="subtle-btn" @click="showConfig = !showConfig">
           <template #icon><SettingOutlined /></template>
           配置
@@ -76,7 +72,10 @@
       <div v-if="isWeixin && (isExpandingQr || channel.loginStatus === 'waiting_scan' || channel.loginStatus === 'scanned')" class="inline-qr-panel">
         <div class="qr-content-wrapper">
           <div class="qr-frame">
-            <img v-if="qrCodeImg" :src="qrCodeImg" alt="微信授权二维码" class="qr-image" />
+            <template v-if="qrCodeImg">
+              <img v-if="isBase64Image" :src="qrCodeImg" alt="微信授权二维码" class="qr-image" />
+              <a-qrcode v-else :value="qrCodeImg" :size="124" :bordered="false" />
+            </template>
             <div v-else class="qr-loading-box">
               <a-spin tip="生成专属二维码中..." />
             </div>
@@ -87,9 +86,7 @@
               <span class="pulse-beacon"></span>
               {{ channel.loginStatus === 'scanned' ? '已扫码，请在手机上点击确认' : '请使用手机微信扫描二维码授权' }}
             </div>
-            <p class="qr-desc">
-              采用腾讯微信官方 iLink 智能体协议，扫码后无需常驻手机端，免被封号风险。
-            </p>
+            <p class="qr-desc">采用腾讯微信官方iLink智能体协议</p>
             <div class="qr-action-bar">
               <a-button size="small" :loading="loadingQr" @click="refreshQr">刷新二维码</a-button>
               <a-button size="small" type="text" @click="isExpandingQr = false">收起</a-button>
@@ -154,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { SettingOutlined } from '@ant-design/icons-vue'
 import type { ChannelInfo } from '@/api/channel'
@@ -177,7 +174,7 @@ const emit = defineEmits<{
 const loadingAction = ref(false)
 const showConfig = ref(false)
 const isExpandingQr = ref(false)
-const qrCodeImg = ref('')
+const qrCodeImg = ref(props.channel.qrCodeUrl || '')
 const loadingQr = ref(false)
 const savingConfig = ref(false)
 
@@ -189,6 +186,17 @@ const qqAppSecret = ref('')
 const isWeixin = computed(() => props.channel.channelType === 'weixin')
 const isConnected = computed(() => props.channel.status === 'connected')
 const isConnecting = computed(() => props.channel.status === 'connecting' || props.channel.loginStatus === 'waiting_scan' || props.channel.loginStatus === 'scanned')
+const isBase64Image = computed(() => qrCodeImg.value?.startsWith('data:image/') || false)
+
+watch(
+  () => props.channel.qrCodeUrl,
+  (val) => {
+    if (val) {
+      qrCodeImg.value = val
+    }
+  },
+  { immediate: true }
+)
 
 const statusColorClass = computed(() => {
   if (isConnected.value) return 'dot-connected'
@@ -274,20 +282,6 @@ const handleSaveSettings = async () => {
     message.error(err.message || '保存配置失败')
   } finally {
     savingConfig.value = false
-  }
-}
-
-const handleOpenDocs = () => {
-  if (props.channel.channelType === 'weixin') {
-    window.open('https://github.com/zhayujie/chatgpt-on-wechat', '_blank')
-  } else if (props.channel.channelType === 'qq') {
-    window.open('https://q.qq.com/#/apps/bot', '_blank')
-  } else if (props.channel.channelType === 'feishu') {
-    window.open('https://open.feishu.cn/document', '_blank')
-  } else if (props.channel.channelType === 'dingtalk') {
-    window.open('https://open.dingtalk.com/document', '_blank')
-  } else {
-    window.open('https://work.weixin.qq.com/api/doc', '_blank')
   }
 }
 </script>
