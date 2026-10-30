@@ -86,6 +86,10 @@
               <ControlOutlined />
               <span style="margin-left: 8px;">模型管理</span>
             </a-menu-item>
+            <a-menu-item v-if="isAdmin" key="smart-assistant" @click="showAssistantModal = true">
+              <ApiOutlined />
+              <span style="margin-left: 8px;">智能助理</span>
+            </a-menu-item>
             <a-menu-item key="mobile" @click="handleDownloadMobile">
               <MobileOutlined />
               <span style="margin-left: 8px;">下载手机端</span>
@@ -111,6 +115,9 @@
     <!-- 模型管理控制台弹窗 (超管) -->
     <ModelManageModal v-if="isAdmin" v-model:open="showModelManageModal" />
 
+    <!-- 智能助理接入通道弹窗 (超管) -->
+    <AssistantChannelModal v-if="isAdmin" v-model:open="showAssistantModal" />
+
     <!-- 更新与帮助弹窗 -->
     <AboutModal v-model:open="showAboutModal" />
   </header>
@@ -128,6 +135,7 @@ import {
   DownOutlined,
   UserOutlined,
   ControlOutlined,
+  ApiOutlined,
   DeleteOutlined,
   QuestionCircleOutlined,
   LogoutOutlined,
@@ -138,6 +146,7 @@ import {
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
 import ModelManageModal from './ModelManageModal.vue'
+import AssistantChannelModal from './AssistantChannelModal.vue'
 
 defineOptions({
   name: 'AppHeaderNav',
@@ -153,6 +162,7 @@ const authStore = useAuthStore()
 const conversationStore = useConversationStore()
 const showAboutModal = ref(false)
 const showModelManageModal = ref(false)
+const showAssistantModal = ref(false)
 
 const isAdmin = computed(() => {
   return authStore.isAdmin || authStore.userProfile?.role === 'admin' || authStore.getUserAccount().role === 'admin'
