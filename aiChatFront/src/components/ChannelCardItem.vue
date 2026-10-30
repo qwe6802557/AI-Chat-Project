@@ -151,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { SettingOutlined } from '@ant-design/icons-vue'
 import type { ChannelInfo } from '@/api/channel'
@@ -258,6 +258,47 @@ const refreshQr = async () => {
     loadingQr.value = false
   }
 }
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const startQrPolling = () => {
+  stopQrPolling()
+  pollTimer = setInterval(() => {
+    if (isExpandingQr.value && !isConnected.value) {
+      emit('refresh')
+    }
+  }, 2000)
+}
+
+const stopQrPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+watch(
+  () => isConnected.value,
+  (connected, prev) => {
+    if (connected && !prev) {
+      isExpandingQr.value = false
+      stopQrPolling()
+      message.success(`${props.channel.name} 已成功连接！`)
+    }
+  }
+)
+
+watch(isExpandingQr, (val) => {
+  if (val) {
+    startQrPolling()
+  } else {
+    stopQrPolling()
+  }
+})
+
+onUnmounted(() => {
+  stopQrPolling()
+})
 
 const handleSaveSettings = async () => {
   try {

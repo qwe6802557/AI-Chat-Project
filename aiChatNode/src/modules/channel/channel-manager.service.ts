@@ -44,9 +44,11 @@ export class ChannelManagerService implements OnModuleInit {
       const driver = this.drivers.get(conf.channelType);
       if (driver) {
         const liveStatus = await driver.getStatus();
+        const effectiveEnabled = liveStatus.status === 'connected' ? true : (conf.isEnabled || liveStatus.isEnabled);
         results.push({
           ...liveStatus,
-          isEnabled: conf.isEnabled,
+          isEnabled: effectiveEnabled,
+          status: liveStatus.status || conf.status,
           boundModelId: conf.boundModelId,
           systemPrompt: conf.systemPrompt,
         });
@@ -130,6 +132,12 @@ export class ChannelManagerService implements OnModuleInit {
       this.handleInboundMessage.bind(this),
       async (creds) => {
         await this.updateSettings('weixin', { credentials: creds });
+        const config = await this.channelRepo.findOne({ where: { channelType: 'weixin' } });
+        if (config) {
+          config.isEnabled = true;
+          config.status = 'connected';
+          await this.channelRepo.save(config);
+        }
       },
     );
 
