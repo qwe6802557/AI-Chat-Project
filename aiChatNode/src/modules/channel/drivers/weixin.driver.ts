@@ -7,6 +7,7 @@ import {
 } from './channel-driver.interface';
 
 const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
+const CHANNEL_VERSION = '2.0.0';
 const CLIENT_VERSION = '131072';
 
 export class WeixinDriver implements IChannelDriver {
@@ -78,8 +79,8 @@ export class WeixinDriver implements IChannelDriver {
     return {
       channelType: this.channelType,
       name: '微信 (iLink Bot)',
-      isEnabled: this.isRunning,
-      status: this.loginStatus === 'logged_in' ? 'connected' : (this.isRunning ? 'connecting' : 'disconnected'),
+      isEnabled: this.isRunning && !!this.botToken,
+      status: this.loginStatus === 'logged_in' ? 'connected' : (this.loginStatus === 'waiting_scan' || this.loginStatus === 'scanned' ? 'connecting' : (this.isRunning ? 'connecting' : 'disconnected')),
       loginStatus: this.loginStatus,
       qrCodeUrl: this.currentQrUrl || null,
       boundModelId: this.boundModelId,
@@ -96,7 +97,10 @@ export class WeixinDriver implements IChannelDriver {
       const resp = await fetch(`${DEFAULT_BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=3`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ local_token_list: [] }),
+        body: JSON.stringify({
+          local_token_list: [],
+          base_info: { channel_version: CHANNEL_VERSION },
+        }),
       });
 
       if (!resp.ok) {
@@ -142,6 +146,7 @@ export class WeixinDriver implements IChannelDriver {
             item_list: [{ type: 1, text_item: { text: content } }],
             context_token: contextToken || '',
           },
+          base_info: { channel_version: CHANNEL_VERSION },
         }),
       });
 
@@ -179,6 +184,12 @@ export class WeixinDriver implements IChannelDriver {
             this.currentQrCode = '';
             this.currentQrUrl = '';
 
+            // 激活长轮询状态并准备中断控制器
+            this.isRunning = true;
+            if (!this.abortController) {
+              this.abortController = new AbortController();
+            }
+
             await this.onCredentialsUpdate({
               token: this.botToken,
               botId: this.botId,
@@ -210,12 +221,23 @@ export class WeixinDriver implements IChannelDriver {
         const resp = await fetch(`${this.baseUrl}/ilink/bot/getupdates`, {
           method: 'POST',
           headers: this.buildHeaders(this.botToken),
-          body: JSON.stringify({ get_updates_buf: this.updatesBuf }),
+          body: JSON.stringify({
+            get_updates_buf: this.updatesBuf,
+            base_info: { channel_version: CHANNEL_VERSION },
+          }),
           signal: this.abortController?.signal,
         });
 
         if (resp.ok) {
           const data = await resp.json();
+          if (data.ret === -14 || data.errcode === -14) {
+            this.logger.warn('微信凭证已过期 (-14)，需重新扫码');
+            this.loginStatus = 'idle';
+            this.botToken = '';
+            this.isRunning = false;
+            break;
+          }
+
           if (data.get_updates_buf) {
             this.updatesBuf = data.get_updates_buf;
           }
@@ -242,7 +264,7 @@ export class WeixinDriver implements IChannelDriver {
         }
       } catch (err: any) {
         if (err.name === 'AbortError') break;
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
   }
