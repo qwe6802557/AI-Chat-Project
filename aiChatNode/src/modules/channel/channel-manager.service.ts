@@ -44,11 +44,11 @@ export class ChannelManagerService implements OnModuleInit {
       const driver = this.drivers.get(conf.channelType);
       if (driver) {
         const liveStatus = await driver.getStatus();
-        const effectiveEnabled = liveStatus.status === 'connected' ? true : (conf.isEnabled || liveStatus.isEnabled);
+        const isConnected = conf.isEnabled && liveStatus.status === 'connected';
         results.push({
           ...liveStatus,
-          isEnabled: effectiveEnabled,
-          status: liveStatus.status || conf.status,
+          isEnabled: conf.isEnabled,
+          status: isConnected ? 'connected' : (conf.isEnabled ? liveStatus.status : 'disconnected'),
           boundModelId: conf.boundModelId,
           systemPrompt: conf.systemPrompt,
         });
@@ -73,6 +73,12 @@ export class ChannelManagerService implements OnModuleInit {
     if (!config) throw new NotFoundException(`通道 ${channelType} 不存在`);
 
     config.isEnabled = enabled;
+    config.status = enabled ? 'connecting' : 'disconnected';
+    if (!enabled && config.credentials) {
+      delete config.credentials.token;
+      delete config.credentials.botId;
+      delete config.credentials.connectedAt;
+    }
     await this.channelRepo.save(config);
 
     const driver = this.drivers.get(channelType);
@@ -89,7 +95,7 @@ export class ChannelManagerService implements OnModuleInit {
       channelType: config.channelType,
       name: config.name,
       isEnabled: config.isEnabled,
-      status: enabled ? 'connecting' : 'disconnected',
+      status: config.status,
     };
   }
 

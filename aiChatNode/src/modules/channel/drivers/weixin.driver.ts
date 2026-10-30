@@ -70,9 +70,11 @@ export class WeixinDriver implements IChannelDriver {
     }
     this.currentQrCode = '';
     this.currentQrUrl = '';
-    if (this.loginStatus !== 'logged_in') {
-      this.loginStatus = 'idle';
-    }
+    this.botToken = '';
+    this.botId = '';
+    this.loginStatus = 'idle';
+    this.connectedAt = null;
+    this.updatesBuf = '';
   }
 
   async getStatus(): Promise<ChannelStatusInfo> {
