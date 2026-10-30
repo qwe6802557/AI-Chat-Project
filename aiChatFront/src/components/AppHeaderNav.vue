@@ -86,7 +86,7 @@
               <ControlOutlined />
               <span style="margin-left: 8px;">模型管理</span>
             </a-menu-item>
-            <a-menu-item v-if="isAdmin" key="smart-assistant" @click="showAssistantModal = true">
+            <a-menu-item key="smart-assistant" @click="showAssistantModal = true">
               <ApiOutlined />
               <span style="margin-left: 8px;">智能助理</span>
             </a-menu-item>
@@ -115,8 +115,8 @@
     <!-- 模型管理控制台弹窗 (超管) -->
     <ModelManageModal v-if="isAdmin" v-model:open="showModelManageModal" />
 
-    <!-- 智能助理接入通道弹窗 (超管) -->
-    <AssistantChannelModal v-if="isAdmin" v-model:open="showAssistantModal" />
+    <!-- 智能助理接入通道弹窗 -->
+    <AssistantChannelModal v-model:open="showAssistantModal" />
 
     <!-- 更新与帮助弹窗 -->
     <AboutModal v-model:open="showAboutModal" />

@@ -125,7 +125,7 @@
             />
           </div>
 
-          <!-- QQ / 飞书 凭据字段 -->
+          <!-- QQ 凭据字段 -->
           <div v-if="channel.channelType === 'qq'" class="config-item-full">
             <div class="creds-row">
               <div class="creds-col">
@@ -135,6 +135,34 @@
               <div class="creds-col">
                 <label class="item-label">QQ AppSecret</label>
                 <a-input-password v-model:value="qqAppSecret" placeholder="开放平台 AppSecret" size="small" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 飞书凭据字段 -->
+          <div v-if="channel.channelType === 'feishu'" class="config-item-full">
+            <div class="creds-row">
+              <div class="creds-col">
+                <label class="item-label">飞书 App ID (cli_xxx)</label>
+                <a-input v-model:value="feishuAppId" placeholder="飞书开放平台 App ID" size="small" />
+              </div>
+              <div class="creds-col">
+                <label class="item-label">飞书 App Secret</label>
+                <a-input-password v-model:value="feishuAppSecret" placeholder="飞书开放平台 App Secret" size="small" />
+              </div>
+            </div>
+          </div>
+
+          <!-- 钉钉凭据字段 -->
+          <div v-if="channel.channelType === 'dingtalk'" class="config-item-full">
+            <div class="creds-row">
+              <div class="creds-col">
+                <label class="item-label">钉钉 Client ID (AppKey)</label>
+                <a-input v-model:value="dingtalkClientId" placeholder="开放平台 AppKey" size="small" />
+              </div>
+              <div class="creds-col">
+                <label class="item-label">钉钉 Client Secret (AppSecret)</label>
+                <a-input-password v-model:value="dingtalkClientSecret" placeholder="开放平台 AppSecret" size="small" />
               </div>
             </div>
           </div>
@@ -182,6 +210,10 @@ const modelBinding = ref(props.channel.boundModelId || undefined)
 const promptBinding = ref(props.channel.systemPrompt || '')
 const qqAppId = ref('')
 const qqAppSecret = ref('')
+const feishuAppId = ref('')
+const feishuAppSecret = ref('')
+const dingtalkClientId = ref('')
+const dingtalkClientSecret = ref('')
 
 const isWeixin = computed(() => props.channel.channelType === 'weixin')
 const isConnected = computed(() => props.channel.status === 'connected')
@@ -312,6 +344,16 @@ const handleSaveSettings = async () => {
       payload.credentials = {
         appId: qqAppId.value,
         appSecret: qqAppSecret.value,
+      }
+    } else if (props.channel.channelType === 'feishu' && (feishuAppId.value || feishuAppSecret.value)) {
+      payload.credentials = {
+        appId: feishuAppId.value,
+        appSecret: feishuAppSecret.value,
+      }
+    } else if (props.channel.channelType === 'dingtalk' && (dingtalkClientId.value || dingtalkClientSecret.value)) {
+      payload.credentials = {
+        appId: dingtalkClientId.value,
+        appSecret: dingtalkClientSecret.value,
       }
     }
 

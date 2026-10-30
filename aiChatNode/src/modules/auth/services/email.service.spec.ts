@@ -91,4 +91,33 @@ describe('EmailService', () => {
       ),
     );
   });
+
+  it('maps invalid access key errors to a clearer configuration message', async () => {
+    (redisService.set as jest.Mock)
+      .mockResolvedValueOnce('OK')
+      .mockResolvedValueOnce('OK');
+    (redisService.del as jest.Mock).mockResolvedValue(2);
+
+    const invalidAkError = Object.assign(
+      new Error('Specified access key is not found.'),
+      {
+        code: 'InvalidAccessKeyId.NotFound',
+      },
+    );
+
+    jest
+      .spyOn(
+        service as unknown as {
+          sendVerificationEmail: (email: string, code: string) => Promise<void>;
+        },
+        'sendVerificationEmail',
+      )
+      .mockRejectedValue(invalidAkError);
+
+    await expect(service.sendEmailCode('demo@example.com')).rejects.toEqual(
+      new InternalServerErrorException(
+        '阿里云 AccessKey 不存在或已失效，请检查 ALIYUN_ACCESS_KEY_ID 配置',
+      ),
+    );
+  });
 });

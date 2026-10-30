@@ -248,6 +248,24 @@ export class EmailService {
       );
     }
 
+    if (errorCode === 'InvalidAccessKeyId.NotFound') {
+      return new InternalServerErrorException(
+        '阿里云 AccessKey 不存在或已失效，请检查 ALIYUN_ACCESS_KEY_ID 配置',
+      );
+    }
+
+    if (errorCode === 'SignatureDoesNotMatch') {
+      return new InternalServerErrorException(
+        '阿里云 AccessKey Secret 不匹配，请检查 ALIYUN_ACCESS_KEY_SECRET 配置',
+      );
+    }
+
+    if (errorCode === 'Forbidden.RAM' || errorCode === 'NoPermission') {
+      return new InternalServerErrorException(
+        '阿里云 RAM 账号无权调用邮件推送服务，请授予 AliyunDirectMailFullAccess 权限',
+      );
+    }
+
     return new InternalServerErrorException('邮件发送失败，请稍后重试');
   }
 
