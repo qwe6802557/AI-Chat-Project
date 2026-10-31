@@ -5,6 +5,7 @@
     width="880px"
     :footer="null"
     destroy-on-close
+    style="top: 40px; margin-bottom: 24px;"
     class="assistant-channel-modal"
     @update:open="emit('update:open', $event)"
   >
@@ -252,24 +253,44 @@ watch(
 </script>
 
 <style scoped>
+:deep(.ant-modal-content) {
+  border-radius: 16px;
+  overflow: hidden;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.ant-modal-body) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 20px 20px;
+}
+
 .assistant-modal-body {
-  padding: 4px 4px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 100%;
 }
 
 .modal-tab-nav {
   display: flex;
   justify-content: center;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f1f5f9;
+  flex-shrink: 0;
 }
 
 .header-intro {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding: 4px 2px;
+  margin-bottom: 14px;
+  padding: 2px 2px;
+  flex-shrink: 0;
 }
 
 .intro-left {
@@ -300,6 +321,35 @@ watch(
 .channels-stack {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  max-height: min(660px, calc(100vh - 270px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scroll-behavior: smooth;
+}
+
+.channels-stack::-webkit-scrollbar {
+  width: 6px;
+}
+
+.channels-stack::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.channels-stack::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+.channels-stack::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
 }
 
 .loading-skeleton {

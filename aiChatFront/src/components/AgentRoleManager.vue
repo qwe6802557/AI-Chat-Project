@@ -333,14 +333,15 @@ defineExpose({
 .role-manager-container {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .role-header-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 4px 10px;
+  padding: 4px 4px 8px;
+  flex-shrink: 0;
 }
 
 .role-header-left {
@@ -364,6 +365,34 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: min(660px, calc(100vh - 270px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scroll-behavior: smooth;
+}
+
+.role-cards-stack::-webkit-scrollbar {
+  width: 6px;
+}
+
+.role-cards-stack::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.role-cards-stack::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+.role-cards-stack::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.65);
 }
 
 .role-card-item {
@@ -372,6 +401,7 @@ defineExpose({
   background: #ffffff;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .role-card-item:hover {
