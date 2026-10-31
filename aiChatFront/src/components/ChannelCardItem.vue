@@ -181,7 +181,7 @@
               cancel-text="取消"
               @confirm="handleDeleteInstance"
             >
-              <a-button size="small" danger class="del-btn">
+              <a-button size="small" class="del-btn">
                 <template #icon><DeleteOutlined /></template>
                 删除实例
               </a-button>
@@ -738,5 +738,20 @@ const handleSaveSettings = async () => {
     transform: scale(0.95);
     opacity: 0.8;
   }
+}
+
+.footer-left :deep(.del-btn),
+.del-btn {
+  color: #ff7875 !important;
+  border-color: #ffa39e !important;
+  background-color: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.footer-left :deep(.del-btn:hover),
+.del-btn:hover {
+  color: #ff4d4f !important;
+  border-color: #ff7875 !important;
+  background-color: #fff1f0 !important;
 }
 </style>

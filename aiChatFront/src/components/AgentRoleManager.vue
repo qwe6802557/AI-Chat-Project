@@ -67,7 +67,7 @@
               cancel-text="取消"
               @confirm="handleDelete(role.id)"
             >
-              <a-button size="small" danger class="subtle-btn">
+              <a-button size="small" class="role-delete-btn">
                 <template #icon><DeleteOutlined /></template>
                 删除
               </a-button>
@@ -423,6 +423,21 @@ defineExpose({
 
 .subtle-btn {
   color: #475569;
+}
+
+.role-actions-col :deep(.role-delete-btn),
+.role-delete-btn {
+  color: #ff7875 !important;
+  border-color: #ffa39e !important;
+  background-color: #ffffff;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.role-actions-col :deep(.role-delete-btn:hover),
+.role-delete-btn:hover {
+  color: #ff4d4f !important;
+  border-color: #ff7875 !important;
+  background-color: #fff1f0 !important;
 }
 
 .loading-box,
