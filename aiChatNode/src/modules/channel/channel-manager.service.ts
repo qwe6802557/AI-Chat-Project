@@ -22,6 +22,7 @@ import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditBusinessType } from '../credits/types/credits.types';
 import { ChatMessage } from '../chat/types/completion.types';
+import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
 
 export const INITIAL_CHANNELS: { channelType: ChannelType; name: string }[] = [
   { channelType: 'weixin', name: '微信 (iLink Bot)' },
@@ -50,6 +51,7 @@ export class ChannelManagerService implements OnModuleInit {
     private readonly aiClientService: AIClientService,
     private readonly aiModelService: AiModelService,
     private readonly creditsService: CreditsService,
+    private readonly ragService: HybridRagService,
   ) {}
 
   async onModuleInit() {
@@ -135,6 +137,7 @@ export class ChannelManagerService implements OnModuleInit {
       avatar?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
+      knowledgeBaseIds?: string[] | null;
       isDefault?: boolean;
     },
   ): Promise<AgentRole> {
@@ -150,6 +153,7 @@ export class ChannelManagerService implements OnModuleInit {
       boundModelId: dto.boundModelId || null,
       systemPrompt: dto.systemPrompt || null,
       isDefault: !!dto.isDefault,
+      knowledgeBaseIds: Array.isArray(dto.knowledgeBaseIds) ? dto.knowledgeBaseIds : [],
     });
 
     return this.roleRepo.save(role);
@@ -167,6 +171,7 @@ export class ChannelManagerService implements OnModuleInit {
       avatar?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
+      knowledgeBaseIds?: string[] | null;
       isDefault?: boolean;
     },
   ): Promise<AgentRole> {
@@ -178,6 +183,9 @@ export class ChannelManagerService implements OnModuleInit {
     if (dto.avatar !== undefined) role.avatar = dto.avatar;
     if (dto.boundModelId !== undefined) role.boundModelId = dto.boundModelId;
     if (dto.systemPrompt !== undefined) role.systemPrompt = dto.systemPrompt;
+    if (dto.knowledgeBaseIds !== undefined) {
+      role.knowledgeBaseIds = Array.isArray(dto.knowledgeBaseIds) ? dto.knowledgeBaseIds : [];
+    }
     if (dto.isDefault !== undefined) role.isDefault = dto.isDefault;
 
     const saved = await this.roleRepo.save(role);
@@ -579,12 +587,38 @@ export class ChannelManagerService implements OnModuleInit {
       return '可用积分已耗尽, 请联系管理员';
     }
 
+    // 2. 检索挂载的专属知识库 (Agent RAG)
+    let ragPrompt = '';
+    const kbIds = config.role?.knowledgeBaseIds;
+    if (kbIds && kbIds.length > 0) {
+      try {
+        const ragResults = await this.ragService.search({
+          userId,
+          query: content,
+          knowledgeBaseIds: kbIds,
+          limit: 5,
+        });
+        if (ragResults && ragResults.length > 0) {
+          ragPrompt = this.buildRagContextPrompt(ragResults);
+          this.logger.log(`[通道RAG] 角色[${config.role?.name}] 命中知识库切片 ${ragResults.length} 条`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`[通道RAG] 检索知识库失败: ${err.message}`);
+      }
+    }
+
     const sessionKey = `${userId}:${instanceId}:${fromId}`;
     const history = this.sessionMemories.get(sessionKey) || [];
 
     const messages: ChatMessage[] = [];
-    if (effectivePrompt) {
-      messages.push({ role: 'system', content: effectivePrompt });
+    let systemInstruction = effectivePrompt || '';
+    if (ragPrompt) {
+      systemInstruction = systemInstruction
+        ? `${systemInstruction}\n\n${ragPrompt}`
+        : ragPrompt;
+    }
+    if (systemInstruction) {
+      messages.push({ role: 'system', content: systemInstruction });
     }
 
     messages.push(...history.slice(-6));
@@ -614,6 +648,26 @@ export class ChannelManagerService implements OnModuleInit {
       this.logger.error(`[通道分发] 处理用户[${userId}]实例[${instanceId}]消息失败: ${err.message}`);
       return '抱歉，当前助理处理消息遇到了临时问题，请稍后重试。';
     }
+  }
+
+  /**
+   * 构造通道专属 RAG 上下文与防幻觉指令
+   */
+  private buildRagContextPrompt(results: RagSearchResult[]): string {
+    const docChunks = results
+      .map(
+        (r, i) =>
+          `[${i + 1}] 《${r.documentTitle}》（匹配度 ${(r.score * 100).toFixed(0)}%）:\n${r.content}`,
+      )
+      .join('\n\n');
+
+    return `【关联知识库资料】：
+以下是从您关联的知识库中检索出的真实参考切片：
+${docChunks}
+
+【回答指引】：
+1. 优先依据上述知识库资料回答问题，并在引用的论断或信息末尾使用引用角标标注来源，如 [1] 或 [2]；
+2. 若参考资料未包含回答所需的内容，请明确指出“在当前知识库中未检索到相关内容”，切勿编造虚假信息。`;
   }
 
   /**
@@ -687,14 +741,16 @@ export class ChannelManagerService implements OnModuleInit {
           "boundModelId" varchar(100),
           "systemPrompt" text,
           "isDefault" boolean DEFAULT false,
+          "knowledge_base_ids" jsonb DEFAULT '[]',
           "createdAt" timestamp DEFAULT now(),
           "updatedAt" timestamp DEFAULT now()
         );
         CREATE INDEX IF NOT EXISTS "idx_agent_roles_user_id" ON agent_roles ("userId");
       `);
 
-      // 2. 扩展 channel_config 字段
+      // 2. 扩展 channel_config 及 agent_roles 字段
       await this.channelRepo.query(`
+        ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS "knowledge_base_ids" jsonb DEFAULT '[]';
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "userId" uuid;
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "instanceName" varchar(100);
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "roleId" uuid;

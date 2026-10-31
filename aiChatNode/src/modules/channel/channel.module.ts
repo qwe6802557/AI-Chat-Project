@@ -8,9 +8,10 @@ import { ChatModule } from '../chat/chat.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
 import { CreditsModule } from '../credits/credits.module';
 import { UserModule } from '../user/user.module';
+import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 
 /**
- * 智能助理通道模块 (支持多实例与角色解耦)
+ * 智能助理通道模块 (支持多实例与角色解耦及知识库RAG)
  */
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UserModule } from '../user/user.module';
     AiProviderModule,
     CreditsModule,
     UserModule,
+    KnowledgeBaseModule,
   ],
   controllers: [ChannelController],
   providers: [ChannelManagerService],

@@ -44,6 +44,7 @@ export class ChannelController {
       avatar?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
+      knowledgeBaseIds?: string[] | null;
       isDefault?: boolean;
     },
   ) {
@@ -62,6 +63,7 @@ export class ChannelController {
       avatar?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
+      knowledgeBaseIds?: string[] | null;
       isDefault?: boolean;
     },
   ) {

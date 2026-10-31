@@ -8,6 +8,7 @@ export interface AgentRole {
   avatar?: string | null
   boundModelId?: string | null
   systemPrompt?: string | null
+  knowledgeBaseIds?: string[] | null
   isDefault?: boolean
   createdAt?: string
   updatedAt?: string
@@ -19,6 +20,7 @@ export interface CreateRoleDto {
   avatar?: string | null
   boundModelId?: string | null
   systemPrompt?: string | null
+  knowledgeBaseIds?: string[] | null
   isDefault?: boolean
 }
 

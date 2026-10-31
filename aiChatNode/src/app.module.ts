@@ -40,6 +40,7 @@ import { buildDatabaseCoreOptions } from './config/database-options';
 
         return {
           ...buildDatabaseCoreOptions(configService),
+          autoLoadEntities: true,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           synchronize: enableSynchronize,
