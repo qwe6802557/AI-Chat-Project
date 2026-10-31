@@ -96,6 +96,72 @@ export function toggleInstance(id: string, enabled: boolean) {
   return request.post<never, ResponseData<ChannelInfo>>(`/channels/instances/${id}/toggle`, { enabled })
 }
 
+// ================= 会话记忆与审计日志 API =================
+
+export interface ChannelRagSourceItem {
+  documentTitle: string
+  score: number
+  content: string
+  chunkIndex: number
+}
+
+export interface ChannelMessageItem {
+  id: string
+  userId: string
+  instanceId: string
+  channelType: string
+  fromId: string
+  senderName: string | null
+  roleId: string | null
+  roleName: string | null
+  modelId: string | null
+  senderType: 'user' | 'assistant' | 'system'
+  content: string
+  costCredits: number
+  ragSources: ChannelRagSourceItem[] | null
+  metadata: Record<string, any> | null
+  createdAt: string
+}
+
+export interface ChannelSessionSummary {
+  fromId: string
+  senderName: string | null
+  totalMessages: number
+  totalCredits: number
+  lastMessageAt: string
+  lastContent: string
+  lastSenderType: string
+}
+
+export function getInstanceSessions(
+  instanceId: string,
+  params?: { search?: string; limit?: number },
+) {
+  return request.get<never, ResponseData<ChannelSessionSummary[]>>(
+    `/channels/instances/${instanceId}/sessions`,
+    { params },
+  )
+}
+
+export function getSessionMessages(
+  instanceId: string,
+  fromId: string,
+  params?: { page?: number; limit?: number },
+) {
+  return request.get<
+    never,
+    ResponseData<{ list: ChannelMessageItem[]; total: number }>
+  >(`/channels/instances/${instanceId}/sessions/${encodeURIComponent(fromId)}/messages`, {
+    params,
+  })
+}
+
+export function clearSessionMemory(instanceId: string, fromId: string) {
+  return request.delete<never, ResponseData<{ success: boolean; message: string }>>(
+    `/channels/instances/${instanceId}/sessions/${encodeURIComponent(fromId)}/memory`,
+  )
+}
+
 // ================= 向后兼容 API =================
 
 export function getChannelList() {

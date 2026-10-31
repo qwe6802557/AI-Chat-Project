@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChannelConfig, ChannelType } from './entities/channel-config.entity';
 import { AgentRole } from './entities/agent-role.entity';
+import { ChannelMessage, type ChannelRagSourceItem } from './entities/channel-message.entity';
 import {
   IChannelDriver,
   ChannelStatusInfo,
@@ -23,6 +24,7 @@ import { CreditsService } from '../credits/credits.service';
 import { CreditBusinessType } from '../credits/types/credits.types';
 import { ChatMessage } from '../chat/types/completion.types';
 import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
+import { RedisService } from '../../common/redis/redis.service';
 
 export const INITIAL_CHANNELS: { channelType: ChannelType; name: string }[] = [
   { channelType: 'weixin', name: '微信 (iLink Bot)' },
@@ -40,23 +42,195 @@ export class ChannelManagerService implements OnModuleInit {
   private readonly logger = new Logger(ChannelManagerService.name);
   // 驱动实例池: Map<instanceId, IChannelDriver>
   private readonly drivers = new Map<string, IChannelDriver>();
-  // 会话记忆池: Map<userId:instanceId:fromId, ChatMessage[]>
-  private readonly sessionMemories = new Map<string, ChatMessage[]>();
 
   constructor(
     @InjectRepository(ChannelConfig)
     private readonly channelRepo: Repository<ChannelConfig>,
     @InjectRepository(AgentRole)
     private readonly roleRepo: Repository<AgentRole>,
+    @InjectRepository(ChannelMessage)
+    private readonly messageRepo: Repository<ChannelMessage>,
     private readonly aiClientService: AIClientService,
     private readonly aiModelService: AiModelService,
     private readonly creditsService: CreditsService,
     private readonly ragService: HybridRagService,
+    private readonly redisService: RedisService,
   ) {}
 
   async onModuleInit() {
     await this.migrateSchemaIfNeeded();
     await this.restoreActiveDrivers();
+  }
+
+  // ================= 会话记忆持久化与对话审计 =================
+
+  private getSessionRedisKey(userId: string, instanceId: string, fromId: string): string {
+    return `channel:memory:${userId}:${instanceId}:${fromId}`;
+  }
+
+  /**
+   * 从 Redis 或 PostgreSQL 中加载多轮会话记忆
+   */
+  async loadSessionMemory(userId: string, instanceId: string, fromId: string): Promise<ChatMessage[]> {
+    const redisKey = this.getSessionRedisKey(userId, instanceId, fromId);
+    try {
+      const cached = await this.redisService.get(redisKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (err: any) {
+      this.logger.warn(`读取Redis会话记忆失败: ${err.message}`);
+    }
+
+    // Redis 未命中时，从 PostgreSQL 中回溯最近 10 条
+    try {
+      const recentMsgs = await this.messageRepo.find({
+        where: { instanceId, fromId },
+        order: { createdAt: 'DESC' },
+        take: 10,
+      });
+
+      const history: ChatMessage[] = recentMsgs.reverse().map((m) => ({
+        role: m.senderType === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      }));
+
+      if (history.length > 0) {
+        await this.redisService.set(redisKey, JSON.stringify(history), { EX: 604800 }).catch(() => {});
+      }
+      return history;
+    } catch (err: any) {
+      this.logger.warn(`从数据库回溯会话记忆失败: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
+   * 写入最新多轮会话记忆至 Redis 缓存 (7天有效期)
+   */
+  async saveSessionMemory(userId: string, instanceId: string, fromId: string, history: ChatMessage[]): Promise<void> {
+    const redisKey = this.getSessionRedisKey(userId, instanceId, fromId);
+    const windowed = history.slice(-10);
+    try {
+      await this.redisService.set(redisKey, JSON.stringify(windowed), { EX: 604800 });
+    } catch (err: any) {
+      this.logger.warn(`写入Redis会话记忆失败: ${err.message}`);
+    }
+  }
+
+  /**
+   * 清除指定外部联系人的上下文记忆 (仅清空 Redis 记忆窗口，保留持久化审计记录)
+   */
+  async clearSessionMemory(
+    userId: string,
+    instanceId: string,
+    fromId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const config = await this.channelRepo.findOne({ where: { id: instanceId, userId } });
+    if (!config) throw new NotFoundException('通道实例不存在或无权限');
+
+    const redisKey = this.getSessionRedisKey(userId, instanceId, fromId);
+    await this.redisService.del(redisKey);
+    return { success: true, message: '会话上下文记忆已清空' };
+  }
+
+  /**
+   * 聚合查询通道实例下的全部外部会话联系人概览
+   */
+  async getInstanceSessions(
+    userId: string,
+    instanceId: string,
+    query?: { search?: string; limit?: number },
+  ): Promise<
+    {
+      fromId: string;
+      senderName: string | null;
+      totalMessages: number;
+      totalCredits: number;
+      lastMessageAt: Date;
+      lastContent: string;
+      lastSenderType: string;
+    }[]
+  > {
+    const config = await this.channelRepo.findOne({ where: { id: instanceId, userId } });
+    if (!config) throw new NotFoundException('通道实例不存在或无权限');
+
+    const limit = Math.min(Math.max(query?.limit || 50, 1), 200);
+    const search = (query?.search || '').trim();
+
+    let qb = this.messageRepo
+      .createQueryBuilder('m')
+      .select('m.fromId', 'fromId')
+      .addSelect('MAX(m.senderName)', 'senderName')
+      .addSelect('COUNT(m.id)::int', 'totalMessages')
+      .addSelect('COALESCE(SUM(m.costCredits), 0)::int', 'totalCredits')
+      .addSelect('MAX(m.createdAt)', 'lastMessageAt')
+      .where('m.instanceId = :instanceId', { instanceId })
+      .groupBy('m.fromId')
+      .orderBy('"lastMessageAt"', 'DESC')
+      .limit(limit);
+
+    if (search) {
+      qb = qb.andWhere('(m.fromId ILIKE :search OR m.senderName ILIKE :search)', {
+        search: `%${search}%`,
+      });
+    }
+
+    const rawList = await qb.getRawMany();
+
+    const results: {
+      fromId: string;
+      senderName: string | null;
+      totalMessages: number;
+      totalCredits: number;
+      lastMessageAt: Date;
+      lastContent: string;
+      lastSenderType: string;
+    }[] = [];
+    for (const raw of rawList) {
+      const latest = await this.messageRepo.findOne({
+        where: { instanceId, fromId: raw.fromId },
+        order: { createdAt: 'DESC' },
+        select: ['content', 'senderType'],
+      });
+
+      results.push({
+        fromId: raw.fromId,
+        senderName: raw.senderName || null,
+        totalMessages: Number(raw.totalMessages || 0),
+        totalCredits: Number(raw.totalCredits || 0),
+        lastMessageAt: raw.lastMessageAt,
+        lastContent: latest?.content || '',
+        lastSenderType: latest?.senderType || 'user',
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * 分页获取指定外部联系人与通道实例的对话消息流水
+   */
+  async getSessionMessages(
+    userId: string,
+    instanceId: string,
+    fromId: string,
+    query?: { page?: number; limit?: number },
+  ): Promise<{ list: ChannelMessage[]; total: number }> {
+    const config = await this.channelRepo.findOne({ where: { id: instanceId, userId } });
+    if (!config) throw new NotFoundException('通道实例不存在或无权限');
+
+    const page = Math.max(query?.page || 1, 1);
+    const limit = Math.min(Math.max(query?.limit || 50, 1), 200);
+
+    const [list, total] = await this.messageRepo.findAndCount({
+      where: { instanceId, fromId },
+      order: { createdAt: 'ASC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return { list, total };
   }
 
   /**
@@ -589,6 +763,7 @@ export class ChannelManagerService implements OnModuleInit {
 
     // 2. 检索挂载的专属知识库 (Agent RAG)
     let ragPrompt = '';
+    let ragSources: ChannelRagSourceItem[] | null = null;
     const kbIds = config.role?.knowledgeBaseIds;
     if (kbIds && kbIds.length > 0) {
       try {
@@ -600,6 +775,12 @@ export class ChannelManagerService implements OnModuleInit {
         });
         if (ragResults && ragResults.length > 0) {
           ragPrompt = this.buildRagContextPrompt(ragResults);
+          ragSources = ragResults.map((r) => ({
+            documentTitle: r.documentTitle,
+            score: r.score,
+            content: r.content,
+            chunkIndex: r.chunkIndex,
+          }));
           this.logger.log(`[通道RAG] 角色[${config.role?.name}] 命中知识库切片 ${ragResults.length} 条`);
         }
       } catch (err: any) {
@@ -607,8 +788,28 @@ export class ChannelManagerService implements OnModuleInit {
       }
     }
 
-    const sessionKey = `${userId}:${instanceId}:${fromId}`;
-    const history = this.sessionMemories.get(sessionKey) || [];
+    // 3. 持久化记录外部用户入站消息
+    await this.messageRepo
+      .save(
+        this.messageRepo.create({
+          userId,
+          instanceId,
+          channelType,
+          fromId,
+          senderName: null,
+          roleId: config.roleId || null,
+          roleName: config.role?.name || null,
+          modelId: targetModelId,
+          senderType: 'user',
+          content,
+          costCredits: 0,
+          ragSources: null,
+        }),
+      )
+      .catch((err) => this.logger.warn(`归档外部用户消息异常: ${err.message}`));
+
+    // 4. 加载双层会话记忆窗口并组装上下文
+    const history = await this.loadSessionMemory(userId, instanceId, fromId);
 
     const messages: ChatMessage[] = [];
     let systemInstruction = effectivePrompt || '';
@@ -628,20 +829,43 @@ export class ChannelManagerService implements OnModuleInit {
       const completion = await this.aiClientService.createChatCompletion(targetModelId, messages);
       const answer = completion.content || '';
 
+      // 5. 持久化记录智能助理回复流水 (包含切片来源与消耗点数)
+      await this.messageRepo
+        .save(
+          this.messageRepo.create({
+            userId,
+            instanceId,
+            channelType,
+            fromId,
+            senderName: config.role?.name || config.instanceName || 'AI智能助理',
+            roleId: config.roleId || null,
+            roleName: config.role?.name || null,
+            modelId: targetModelId,
+            senderType: 'assistant',
+            content: answer,
+            costCredits,
+            ragSources,
+          }),
+        )
+        .catch((err) => this.logger.warn(`归档助理回复消息异常: ${err.message}`));
+
+      // 6. 维护更新 Redis 滑动记忆窗口 (包含最新问答)
       history.push({ role: 'user', content });
       history.push({ role: 'assistant', content: answer });
-      this.sessionMemories.set(sessionKey, history.slice(-10));
+      await this.saveSessionMemory(userId, instanceId, fromId, history);
 
-      // 2. 对话完成，扣除通道所有者积分
-      await this.creditsService.deductDirectCredits({
-        userId,
-        amount: costCredits,
-        businessType: CreditBusinessType.CHAT_MESSAGE,
-        modelId: targetModelId,
-        remark: `智能助理[${config.instanceName || channelType}]对话消耗`,
-      }).catch((err) => {
-        this.logger.error(`扣除用户[${userId}]智能助理积分异常: ${err.message}`);
-      });
+      // 7. 对话完成，扣除通道所有者积分
+      await this.creditsService
+        .deductDirectCredits({
+          userId,
+          amount: costCredits,
+          businessType: CreditBusinessType.CHAT_MESSAGE,
+          modelId: targetModelId,
+          remark: `智能助理[${config.instanceName || channelType}]对话消耗`,
+        })
+        .catch((err) => {
+          this.logger.error(`扣除用户[${userId}]智能助理积分异常: ${err.message}`);
+        });
 
       return answer;
     } catch (err: any) {
@@ -766,6 +990,28 @@ ${docChunks}
         ALTER TABLE channel_config DROP CONSTRAINT IF EXISTS "UQ_48a7cf5559d70fd21c1d506b8e5";
         DROP INDEX IF EXISTS "idx_channel_config_user_type";
         CREATE INDEX IF NOT EXISTS "idx_channel_config_user_id" ON channel_config ("userId");
+
+        -- 3. 创建 channel_messages 审计记录表与索引
+        CREATE TABLE IF NOT EXISTS channel_messages (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          "userId" uuid NOT NULL,
+          "instanceId" uuid NOT NULL,
+          "channelType" varchar(50) NOT NULL,
+          "fromId" varchar(120) NOT NULL,
+          "senderName" varchar(120),
+          "roleId" uuid,
+          "roleName" varchar(100),
+          "modelId" varchar(100),
+          "senderType" varchar(20) NOT NULL,
+          content text NOT NULL,
+          "costCredits" int DEFAULT 0,
+          "ragSources" jsonb,
+          metadata jsonb,
+          "createdAt" timestamptz DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS "idx_channel_msg_user_instance" ON channel_messages ("userId", "instanceId");
+        CREATE INDEX IF NOT EXISTS "idx_channel_msg_instance_from" ON channel_messages ("instanceId", "fromId");
+        CREATE INDEX IF NOT EXISTS "idx_channel_msg_created_at" ON channel_messages ("createdAt");
       `);
 
       // 3. 数据平滑自动聚合：扫描存量通道配置，自动创建对应角色并关联
