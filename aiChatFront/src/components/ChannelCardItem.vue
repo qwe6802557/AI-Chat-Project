@@ -43,6 +43,11 @@
       </div>
 
       <div class="right-actions">
+        <a-button size="small" class="subtle-btn" @click="showAuditModal = true">
+          <template #icon><HistoryOutlined /></template>
+          对话日志
+        </a-button>
+
         <a-button size="small" class="subtle-btn" @click="showConfig = !showConfig">
           <template #icon><SettingOutlined /></template>
           配置
@@ -196,13 +201,21 @@
         </div>
       </div>
     </transition>
+
+    <!-- 会话记忆与审计日志弹窗 -->
+    <ChannelAuditModal
+      v-if="showAuditModal"
+      v-model:open="showAuditModal"
+      :instance="channel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { SettingOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { SettingOutlined, DeleteOutlined, HistoryOutlined } from '@ant-design/icons-vue'
+import ChannelAuditModal from './ChannelAuditModal.vue'
 import type { ChannelInfo, AgentRole } from '@/api/channel'
 import {
   toggleInstance,
@@ -233,6 +246,7 @@ const emit = defineEmits<{
 
 const loadingAction = ref(false)
 const showConfig = ref(false)
+const showAuditModal = ref(false)
 const isExpandingQr = ref(false)
 const qrCodeImg = ref(props.channel.qrCodeUrl || '')
 const loadingQr = ref(false)

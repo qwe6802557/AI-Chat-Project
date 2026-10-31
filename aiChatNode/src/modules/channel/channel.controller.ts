@@ -7,6 +7,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -132,6 +133,47 @@ export class ChannelController {
     @Body() body: { enabled: boolean },
   ) {
     return this.channelManager.toggleInstance(req.user.id, id, body.enabled);
+  }
+
+  // ================= 对话审计与会话记忆 (Sessions & Audit) =================
+
+  @Get('instances/:id/sessions')
+  @ApiOperation({ summary: '获取指定通道实例下的外部会话联系人列表' })
+  async getInstanceSessions(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.channelManager.getInstanceSessions(req.user.id, id, {
+      search,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Get('instances/:id/sessions/:fromId/messages')
+  @ApiOperation({ summary: '获取指定通道实例与外部联系人的对话历史消息流水' })
+  async getSessionMessages(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('fromId') fromId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.channelManager.getSessionMessages(req.user.id, id, fromId, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Delete('instances/:id/sessions/:fromId/memory')
+  @ApiOperation({ summary: '重置清除指定联系人的上下文记忆缓存' })
+  async clearSessionMemory(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('fromId') fromId: string,
+  ) {
+    return this.channelManager.clearSessionMemory(req.user.id, id, fromId);
   }
 
   // ================= 向后兼容接口 (Legacy Compat) =================
