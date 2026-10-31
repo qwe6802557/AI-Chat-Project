@@ -43,6 +43,15 @@
                 模型: {{ role.boundModelId }}
               </a-tag>
               <a-tag v-else color="warning" class="tag-badge">跟随系统默认模型</a-tag>
+              <a-tooltip
+                v-if="role.knowledgeBaseIds && role.knowledgeBaseIds.length > 0"
+                :title="getKnowledgeBaseNames(role.knowledgeBaseIds)"
+              >
+                <a-tag color="cyan" class="tag-badge">
+                  <template #icon><BookOutlined /></template>
+                  知识库 ({{ role.knowledgeBaseIds.length }})
+                </a-tag>
+              </a-tooltip>
             </div>
 
             <p class="role-desc">
@@ -120,6 +129,25 @@
         </div>
 
         <div class="form-item">
+          <div class="form-label-row">
+            <label class="form-label">挂载专属知识库 (Agent RAG)</label>
+            <span class="form-tip">对话时自动检索知识库内容注入人设背景</span>
+          </div>
+          <a-select
+            v-model:value="formData.knowledgeBaseIds"
+            mode="multiple"
+            placeholder="选择关联的知识库（支持多选）"
+            allow-clear
+            :max-tag-count="3"
+            style="width: 100%"
+          >
+            <a-select-option v-for="kb in knowledgeBases" :key="kb.id" :value="kb.id">
+              {{ kb.name }} ({{ kb.documentCount || 0 }} 篇文档)
+            </a-select-option>
+          </a-select>
+        </div>
+
+        <div class="form-item">
           <label class="form-label">专属角色设定 (System Prompt)</label>
           <a-textarea
             v-model:value="formData.systemPrompt"
@@ -145,6 +173,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   RobotOutlined,
+  BookOutlined,
 } from '@ant-design/icons-vue'
 import {
   getRoleList,
@@ -153,6 +182,8 @@ import {
   deleteRole,
   type AgentRole,
 } from '@/api/channel'
+import { getKnowledgeBases } from '@/api/knowledge'
+import type { KnowledgeBaseItem } from '@/interface/knowledge'
 import type { BackendAiModel } from '@/api/model'
 
 defineProps<{
@@ -165,6 +196,7 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 const roles = ref<AgentRole[]>([])
+const knowledgeBases = ref<KnowledgeBaseItem[]>([])
 const editModalVisible = ref(false)
 const isEditing = ref(false)
 const editingId = ref<string | null>(null)
@@ -175,8 +207,28 @@ const formData = ref({
   description: '',
   boundModelId: undefined as string | undefined,
   systemPrompt: '',
+  knowledgeBaseIds: [] as string[],
   isDefault: false,
 })
+
+const fetchKnowledgeBases = async () => {
+  try {
+    const res = await getKnowledgeBases()
+    if (res.data) {
+      knowledgeBases.value = res.data
+    }
+  } catch (err: any) {
+    console.warn('拉取知识库列表异常:', err)
+  }
+}
+
+const getKnowledgeBaseNames = (ids?: string[] | null): string => {
+  if (!ids || ids.length === 0) return ''
+  const names = ids
+    .map((id) => knowledgeBases.value.find((kb) => kb.id === id)?.name)
+    .filter(Boolean)
+  return names.length > 0 ? `已关联知识库：${names.join('、')}` : '已关联知识库'
+}
 
 const fetchRoles = async () => {
   try {
@@ -193,6 +245,7 @@ const fetchRoles = async () => {
 }
 
 const openCreateModal = () => {
+  fetchKnowledgeBases()
   isEditing.value = false
   editingId.value = null
   formData.value = {
@@ -200,12 +253,14 @@ const openCreateModal = () => {
     description: '',
     boundModelId: undefined,
     systemPrompt: '',
+    knowledgeBaseIds: [],
     isDefault: roles.value.length === 0,
   }
   editModalVisible.value = true
 }
 
 const openEditModal = (role: AgentRole) => {
+  fetchKnowledgeBases()
   isEditing.value = true
   editingId.value = role.id
   formData.value = {
@@ -213,6 +268,7 @@ const openEditModal = (role: AgentRole) => {
     description: role.description || '',
     boundModelId: role.boundModelId || undefined,
     systemPrompt: role.systemPrompt || '',
+    knowledgeBaseIds: Array.isArray(role.knowledgeBaseIds) ? [...role.knowledgeBaseIds] : [],
     isDefault: !!role.isDefault,
   }
   editModalVisible.value = true
@@ -226,23 +282,20 @@ const handleSaveRole = async () => {
 
   try {
     submitting.value = true
+    const payload = {
+      name: formData.value.name.trim(),
+      description: formData.value.description.trim() || null,
+      boundModelId: formData.value.boundModelId || null,
+      systemPrompt: formData.value.systemPrompt || null,
+      knowledgeBaseIds: formData.value.knowledgeBaseIds || [],
+      isDefault: formData.value.isDefault,
+    }
+
     if (isEditing.value && editingId.value) {
-      await updateRole(editingId.value, {
-        name: formData.value.name.trim(),
-        description: formData.value.description.trim() || null,
-        boundModelId: formData.value.boundModelId || null,
-        systemPrompt: formData.value.systemPrompt || null,
-        isDefault: formData.value.isDefault,
-      })
+      await updateRole(editingId.value, payload)
       message.success('角色更新成功')
     } else {
-      await createRole({
-        name: formData.value.name.trim(),
-        description: formData.value.description.trim() || null,
-        boundModelId: formData.value.boundModelId || null,
-        systemPrompt: formData.value.systemPrompt || null,
-        isDefault: formData.value.isDefault,
-      })
+      await createRole(payload)
       message.success('角色创建成功')
     }
     editModalVisible.value = false
@@ -268,6 +321,7 @@ const handleDelete = async (id: string) => {
 
 onMounted(() => {
   fetchRoles()
+  fetchKnowledgeBases()
 })
 
 defineExpose({
@@ -427,17 +481,17 @@ defineExpose({
 
 .role-actions-col :deep(.role-delete-btn),
 .role-delete-btn {
-  color: #ff7875 !important;
-  border-color: #ffa39e !important;
-  background-color: #ffffff;
+  color: #ff4d4f !important;
+  border-color: #ffccc7 !important;
+  background-color: #fff1f0 !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .role-actions-col :deep(.role-delete-btn:hover),
 .role-delete-btn:hover {
-  color: #ff4d4f !important;
-  border-color: #ff7875 !important;
-  background-color: #fff1f0 !important;
+  color: #cf1322 !important;
+  border-color: #ffa39e !important;
+  background-color: #ffe8e6 !important;
 }
 
 .loading-box,
@@ -458,6 +512,18 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.form-tip {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: normal;
 }
 
 .form-item-inline {
