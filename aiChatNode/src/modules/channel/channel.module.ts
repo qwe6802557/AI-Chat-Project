@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChannelConfig } from './entities/channel-config.entity';
+import { AgentRole } from './entities/agent-role.entity';
 import { ChannelManagerService } from './channel-manager.service';
 import { ChannelController } from './channel.controller';
 import { ChatModule } from '../chat/chat.module';
@@ -9,11 +10,11 @@ import { CreditsModule } from '../credits/credits.module';
 import { UserModule } from '../user/user.module';
 
 /**
- * 智能助理通道模块
+ * 智能助理通道模块 (支持多实例与角色解耦)
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChannelConfig]),
+    TypeOrmModule.forFeature([ChannelConfig, AgentRole]),
     forwardRef(() => ChatModule),
     AiProviderModule,
     CreditsModule,

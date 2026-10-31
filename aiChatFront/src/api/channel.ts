@@ -1,8 +1,34 @@
 import request, { type ResponseData } from '@/utils/request'
 
+export interface AgentRole {
+  id: string
+  userId?: string
+  name: string
+  description?: string | null
+  avatar?: string | null
+  boundModelId?: string | null
+  systemPrompt?: string | null
+  isDefault?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface CreateRoleDto {
+  name: string
+  description?: string | null
+  avatar?: string | null
+  boundModelId?: string | null
+  systemPrompt?: string | null
+  isDefault?: boolean
+}
+
 export interface ChannelInfo {
+  id?: string
   channelType: string
   name: string
+  instanceName?: string | null
+  roleId?: string | null
+  roleName?: string | null
   isEnabled: boolean
   status: 'disconnected' | 'connecting' | 'connected' | 'error'
   loginStatus?: 'idle' | 'waiting_scan' | 'scanned' | 'logged_in' | 'error'
@@ -14,23 +40,70 @@ export interface ChannelInfo {
   connectedAt?: string | null
 }
 
-/**
- * 获取全量通道状态与配置列表
- */
+// ================= 智能体角色管理 API =================
+
+export function getRoleList() {
+  return request.get<never, ResponseData<AgentRole[]>>('/channels/roles')
+}
+
+export function createRole(data: CreateRoleDto) {
+  return request.post<never, ResponseData<AgentRole>>('/channels/roles', data)
+}
+
+export function updateRole(id: string, data: Partial<CreateRoleDto>) {
+  return request.put<never, ResponseData<AgentRole>>(`/channels/roles/${id}`, data)
+}
+
+export function deleteRole(id: string) {
+  return request.delete<never, ResponseData<{ success: boolean; message: string }>>(`/channels/roles/${id}`)
+}
+
+// ================= 通道多实例管理 API =================
+
+export function getInstanceList() {
+  return request.get<never, ResponseData<ChannelInfo[]>>('/channels/instances')
+}
+
+export function createInstance(data: {
+  channelType: string
+  instanceName?: string
+  roleId?: string | null
+  credentials?: Record<string, any>
+}) {
+  return request.post<never, ResponseData<ChannelInfo>>('/channels/instances', data)
+}
+
+export function deleteInstance(id: string) {
+  return request.delete<never, ResponseData<{ success: boolean; message: string }>>(`/channels/instances/${id}`)
+}
+
+export function updateInstanceSettings(
+  id: string,
+  payload: {
+    instanceName?: string
+    roleId?: string | null
+    boundModelId?: string | null
+    systemPrompt?: string | null
+    credentials?: Record<string, any>
+  },
+) {
+  return request.patch<never, ResponseData<ChannelInfo>>(`/channels/instances/${id}/settings`, payload)
+}
+
+export function toggleInstance(id: string, enabled: boolean) {
+  return request.post<never, ResponseData<ChannelInfo>>(`/channels/instances/${id}/toggle`, { enabled })
+}
+
+// ================= 向后兼容 API =================
+
 export function getChannelList() {
   return request.get<never, ResponseData<ChannelInfo[]>>('/channels/list')
 }
 
-/**
- * 启用或关闭指定外部通道
- */
 export function toggleChannel(channelType: string, enabled: boolean) {
   return request.post<never, ResponseData<ChannelInfo>>('/channels/toggle', { channelType, enabled })
 }
 
-/**
- * 更新通道关联的底座模型与角色设定
- */
 export function updateChannelSettings(
   channelType: string,
   payload: {
@@ -42,9 +115,7 @@ export function updateChannelSettings(
   return request.patch<never, ResponseData<any>>(`/channels/${channelType}/settings`, payload)
 }
 
-/**
- * 请求微信官方 iLink Bot 授权登录二维码
- */
-export function getWeixinQrCode() {
-  return request.get<never, ResponseData<{ qrCodeUrl: string; status: string }>>('/channels/weixin/qrcode')
+export function getWeixinQrCode(instanceId?: string) {
+  const url = instanceId ? `/channels/weixin/qrcode?instanceId=${instanceId}` : '/channels/weixin/qrcode'
+  return request.get<never, ResponseData<{ qrCodeUrl: string; status: string }>>(url)
 }
