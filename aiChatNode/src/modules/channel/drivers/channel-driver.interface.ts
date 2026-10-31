@@ -1,6 +1,10 @@
 export interface ChannelStatusInfo {
+  id?: string;
   channelType: string;
   name: string;
+  instanceName?: string | null;
+  roleId?: string | null;
+  roleName?: string | null;
   isEnabled: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   loginStatus?: 'idle' | 'waiting_scan' | 'scanned' | 'logged_in' | 'error';

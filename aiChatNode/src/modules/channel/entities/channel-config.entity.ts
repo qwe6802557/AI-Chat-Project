@@ -9,15 +9,16 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
+import { AgentRole } from './agent-role.entity';
 
 export type ChannelType = 'weixin' | 'qq' | 'feishu' | 'dingtalk' | 'wecom_bot';
 export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 /**
- * 智能助理通道配置实体 (多租户独立)
+ * 智能助理通道配置实体 (支持多实例与角色解耦)
  */
 @Entity('channel_config')
-@Index('idx_channel_config_user_type', ['userId', 'channelType'], { unique: true })
+@Index('idx_channel_config_user_id', ['userId'])
 export class ChannelConfig {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -34,6 +35,16 @@ export class ChannelConfig {
 
   @Column({ type: 'varchar', length: 100 })
   name: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  instanceName: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  roleId: string | null;
+
+  @ManyToOne(() => AgentRole, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'roleId' })
+  role?: AgentRole | null;
 
   @Column({ type: 'boolean', default: false })
   isEnabled: boolean;

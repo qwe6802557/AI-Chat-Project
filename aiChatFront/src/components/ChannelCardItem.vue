@@ -27,7 +27,10 @@
 
         <div class="channel-meta">
           <div class="name-row">
-            <span class="channel-name">{{ channel.name }}</span>
+            <span class="channel-name">{{ channel.instanceName || channel.name }}</span>
+            <span v-if="channel.roleName" class="role-tag">
+              角色: {{ channel.roleName }}
+            </span>
             <span v-if="channel.boundModelId" class="bound-tag">
               模型: {{ channel.boundModelId }}
             </span>
@@ -100,29 +103,30 @@
     <transition name="fold">
       <div v-if="showConfig" class="inline-config-panel">
         <div class="config-grid">
+          <!-- 实例备注名 -->
           <div class="config-item">
-            <label class="item-label">驱动大模型</label>
-            <a-select
-              v-model:value="modelBinding"
-              placeholder="跟随系统默认模型"
+            <label class="item-label">实例名称</label>
+            <a-input
+              v-model:value="instanceName"
+              placeholder="例如：飞书技术支持机器人"
               size="small"
-              style="width: 100%;"
-              allow-clear
-            >
-              <a-select-option v-for="m in modelList" :key="m.modelId" :value="m.modelId">
-                {{ m.modelName }} ({{ m.modelId }})
-              </a-select-option>
-            </a-select>
+            />
           </div>
 
+          <!-- 绑定智能体角色 (解耦核心) -->
           <div class="config-item">
-            <label class="item-label">专属角色设定 (System Prompt)</label>
-            <a-textarea
-              v-model:value="promptBinding"
-              placeholder="为当前通道设置定制的人设与回答基调（可选）..."
+            <label class="item-label">绑定智能体角色 (Role)</label>
+            <a-select
+              v-model:value="selectedRoleId"
+              placeholder="选择挂载的角色人设"
               size="small"
-              :rows="2"
-            />
+              style="width: 100%"
+              allow-clear
+            >
+              <a-select-option v-for="r in roleList" :key="r.id" :value="r.id">
+                {{ r.name }} {{ r.isDefault ? '(默认)' : '' }}
+              </a-select-option>
+            </a-select>
           </div>
 
           <!-- QQ 凭据字段 -->
@@ -169,9 +173,26 @@
         </div>
 
         <div class="config-footer">
-          <a-button size="small" type="primary" :loading="savingConfig" @click="handleSaveSettings">
-            保存配置
-          </a-button>
+          <div class="footer-left">
+            <a-popconfirm
+              v-if="canDelete"
+              title="确定删除此机器人实例吗？删除后长连接将立即终止。"
+              ok-text="确认删除"
+              cancel-text="取消"
+              @confirm="handleDeleteInstance"
+            >
+              <a-button size="small" danger class="del-btn">
+                <template #icon><DeleteOutlined /></template>
+                删除实例
+              </a-button>
+            </a-popconfirm>
+          </div>
+
+          <div class="footer-right">
+            <a-button size="small" type="primary" :loading="savingConfig" @click="handleSaveSettings">
+              保存配置
+            </a-button>
+          </div>
         </div>
       </div>
     </transition>
@@ -181,19 +202,30 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
-import { SettingOutlined } from '@ant-design/icons-vue'
-import type { ChannelInfo } from '@/api/channel'
+import { SettingOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import type { ChannelInfo, AgentRole } from '@/api/channel'
 import {
+  toggleInstance,
+  updateInstanceSettings,
+  deleteInstance,
+  getWeixinQrCode,
   toggleChannel,
   updateChannelSettings,
-  getWeixinQrCode,
 } from '@/api/channel'
 import type { BackendAiModel } from '@/api/model'
 
-const props = defineProps<{
-  channel: ChannelInfo
-  modelList: BackendAiModel[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    channel: ChannelInfo
+    modelList: BackendAiModel[]
+    roleList?: AgentRole[]
+    canDelete?: boolean
+  }>(),
+  {
+    roleList: () => [],
+    canDelete: false,
+  },
+)
 
 const emit = defineEmits<{
   (e: 'refresh'): void
@@ -206,8 +238,9 @@ const qrCodeImg = ref(props.channel.qrCodeUrl || '')
 const loadingQr = ref(false)
 const savingConfig = ref(false)
 
-const modelBinding = ref(props.channel.boundModelId || undefined)
-const promptBinding = ref(props.channel.systemPrompt || '')
+const instanceName = ref(props.channel.instanceName || props.channel.name)
+const selectedRoleId = ref<string | undefined>(props.channel.roleId || undefined)
+
 const qqAppId = ref('')
 const qqAppSecret = ref('')
 const feishuAppId = ref('')
@@ -217,17 +250,24 @@ const dingtalkClientSecret = ref('')
 
 const isWeixin = computed(() => props.channel.channelType === 'weixin')
 const isConnected = computed(() => props.channel.status === 'connected')
-const isConnecting = computed(() => props.channel.status === 'connecting' || props.channel.loginStatus === 'waiting_scan' || props.channel.loginStatus === 'scanned')
+const isConnecting = computed(
+  () =>
+    props.channel.status === 'connecting' ||
+    props.channel.loginStatus === 'waiting_scan' ||
+    props.channel.loginStatus === 'scanned',
+)
 const isBase64Image = computed(() => qrCodeImg.value?.startsWith('data:image/') || false)
 
 watch(
-  () => props.channel.qrCodeUrl,
+  () => props.channel,
   (val) => {
     if (val) {
-      qrCodeImg.value = val
+      instanceName.value = val.instanceName || val.name
+      selectedRoleId.value = val.roleId || undefined
+      if (val.qrCodeUrl) qrCodeImg.value = val.qrCodeUrl
     }
   },
-  { immediate: true }
+  { deep: true },
 )
 
 const statusColorClass = computed(() => {
@@ -253,8 +293,12 @@ const handleConnect = async () => {
 
   try {
     loadingAction.value = true
-    await toggleChannel(props.channel.channelType, true)
-    message.success(`${props.channel.name} 接入服务已启动`)
+    if (props.channel.id) {
+      await toggleInstance(props.channel.id, true)
+    } else {
+      await toggleChannel(props.channel.channelType, true)
+    }
+    message.success(`${instanceName.value} 接入服务已启动`)
     emit('refresh')
   } catch (err: any) {
     message.error(err.message || '接入失败')
@@ -266,8 +310,12 @@ const handleConnect = async () => {
 const handleDisconnect = async () => {
   try {
     loadingAction.value = true
-    await toggleChannel(props.channel.channelType, false)
-    message.success(`${props.channel.name} 已断开连接`)
+    if (props.channel.id) {
+      await toggleInstance(props.channel.id, false)
+    } else {
+      await toggleChannel(props.channel.channelType, false)
+    }
+    message.success(`${instanceName.value} 已断开连接`)
     isExpandingQr.value = false
     emit('refresh')
   } catch (err: any) {
@@ -280,7 +328,7 @@ const handleDisconnect = async () => {
 const refreshQr = async () => {
   try {
     loadingQr.value = true
-    const res = await getWeixinQrCode()
+    const res = await getWeixinQrCode(props.channel.id)
     if (res.data?.qrCodeUrl) {
       qrCodeImg.value = res.data.qrCodeUrl
     }
@@ -299,7 +347,7 @@ const startQrPolling = () => {
     if (isExpandingQr.value && !isConnected.value) {
       emit('refresh')
     }
-  }, 2000)
+  }, 3000)
 }
 
 const stopQrPolling = () => {
@@ -309,35 +357,32 @@ const stopQrPolling = () => {
   }
 }
 
-watch(
-  () => isConnected.value,
-  (connected, prev) => {
-    if (connected && !prev) {
-      isExpandingQr.value = false
-      stopQrPolling()
-      message.success(`${props.channel.name} 已成功连接！`)
-    }
-  }
-)
-
 watch(isExpandingQr, (val) => {
-  if (val) {
-    startQrPolling()
-  } else {
-    stopQrPolling()
-  }
+  if (val) startQrPolling()
+  else stopQrPolling()
 })
 
 onUnmounted(() => {
   stopQrPolling()
 })
 
+const handleDeleteInstance = async () => {
+  if (!props.channel.id) return
+  try {
+    await deleteInstance(props.channel.id)
+    message.success('实例已删除')
+    emit('refresh')
+  } catch (err: any) {
+    message.error(err.message || '删除实例失败')
+  }
+}
+
 const handleSaveSettings = async () => {
   try {
     savingConfig.value = true
     const payload: any = {
-      boundModelId: modelBinding.value || null,
-      systemPrompt: promptBinding.value || null,
+      instanceName: instanceName.value.trim(),
+      roleId: selectedRoleId.value || null,
     }
 
     if (props.channel.channelType === 'qq' && (qqAppId.value || qqAppSecret.value)) {
@@ -350,14 +395,22 @@ const handleSaveSettings = async () => {
         appId: feishuAppId.value,
         appSecret: feishuAppSecret.value,
       }
-    } else if (props.channel.channelType === 'dingtalk' && (dingtalkClientId.value || dingtalkClientSecret.value)) {
+    } else if (
+      props.channel.channelType === 'dingtalk' &&
+      (dingtalkClientId.value || dingtalkClientSecret.value)
+    ) {
       payload.credentials = {
         appId: dingtalkClientId.value,
         appSecret: dingtalkClientSecret.value,
       }
     }
 
-    await updateChannelSettings(props.channel.channelType, payload)
+    if (props.channel.id) {
+      await updateInstanceSettings(props.channel.id, payload)
+    } else {
+      await updateChannelSettings(props.channel.channelType, payload)
+    }
+
     message.success('通道配置保存成功')
     showConfig.value = false
     emit('refresh')
@@ -454,22 +507,31 @@ const handleSaveSettings = async () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .channel-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: #1e293b;
-  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.role-tag {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .bound-tag {
   font-size: 11px;
   padding: 1px 7px;
   border-radius: 4px;
-  background: #f1f5f9;
+  background: #f8fafc;
   color: #64748b;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+  border: 1px solid #e2e8f0;
 }
 
 .status-row {
@@ -482,17 +544,18 @@ const handleSaveSettings = async () => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  display: inline-block;
 }
 
 .dot-connected {
   background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
 
 .dot-connecting {
   background: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
-  animation: pulse 1.8s infinite;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  animation: pulse 1.5s infinite;
 }
 
 .dot-disconnected {
@@ -511,45 +574,37 @@ const handleSaveSettings = async () => {
 }
 
 .subtle-btn {
-  background: #f8fafc;
-  border-color: #e2e8f0;
   color: #475569;
 }
 
-.subtle-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
-/* 微信扫码内嵌折叠展开面板 */
+/* 微信内嵌二维码 */
 .inline-qr-panel {
-  border-top: 1px solid #f1f5f9;
-  background: #fafafa;
-  padding: 18px 20px;
+  border-top: 1px dashed #e2e8f0;
+  background: #f8fafc;
+  padding: 16px 20px;
 }
 
 .qr-content-wrapper {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
 }
 
 .qr-frame {
-  width: 140px;
-  height: 140px;
-  border-radius: 8px;
+  width: 136px;
+  height: 136px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6px;
-  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .qr-image {
-  width: 100%;
-  height: 100%;
+  width: 124px;
+  height: 124px;
   object-fit: contain;
 }
 
@@ -557,8 +612,6 @@ const handleSaveSettings = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  color: #94a3b8;
 }
 
 .qr-info-pane {
@@ -568,10 +621,10 @@ const handleSaveSettings = async () => {
 }
 
 .qr-title-badge {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
   color: #0f172a;
 }
@@ -579,61 +632,57 @@ const handleSaveSettings = async () => {
 .pulse-beacon {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
   background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-  animation: pulse 1.5s infinite;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+  animation: pulse 1.8s infinite;
 }
 
 .qr-desc {
-  margin: 0;
   font-size: 12px;
   color: #64748b;
-  line-height: 1.6;
+  margin: 0;
 }
 
 .qr-action-bar {
   display: flex;
-  align-items: center;
   gap: 8px;
-  margin-top: 4px;
 }
 
-/* 内嵌配置面板 */
+/* 折叠配置面板 */
 .inline-config-panel {
   border-top: 1px solid #f1f5f9;
-  background: #f8fafc;
+  background: #fcfdfe;
   padding: 16px 20px;
 }
 
 .config-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .config-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .config-item-full {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  grid-column: span 2;
 }
 
 .creds-row {
-  display: flex;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
 .creds-col {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .item-label {
@@ -644,16 +693,27 @@ const handleSaveSettings = async () => {
 
 .config-footer {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
 }
 
-/* 动效 */
+.footer-left {
+  display: flex;
+  align-items: center;
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+}
+
+/* 过渡动效 */
 .fold-enter-active,
 .fold-leave-active {
-  transition: all 0.25s ease-out;
-  max-height: 260px;
-  opacity: 1;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 500px;
 }
 
 .fold-enter-from,
@@ -662,11 +722,21 @@ const handleSaveSettings = async () => {
   opacity: 0;
   padding-top: 0;
   padding-bottom: 0;
+  overflow: hidden;
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
 }
 </style>
