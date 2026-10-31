@@ -430,6 +430,7 @@ const handleSaveSettings = async () => {
   margin-bottom: 12px;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .channel-card-item:hover {
