@@ -42,6 +42,13 @@ export interface ChannelInfo {
   connectedAt?: string | null
 }
 
+export interface ChannelMetrics {
+  totalRequests: number
+  successRate: number
+  avgLatencyMs: number
+  errorCount: number
+}
+
 // ================= 智能体角色管理 API =================
 
 export function getRoleList() {
@@ -94,6 +101,10 @@ export function updateInstanceSettings(
 
 export function toggleInstance(id: string, enabled: boolean) {
   return request.post<never, ResponseData<ChannelInfo>>(`/channels/instances/${id}/toggle`, { enabled })
+}
+
+export function getInstanceMetrics(instanceId: string) {
+  return request.get<never, ResponseData<ChannelMetrics>>(`/channels/instances/${instanceId}/metrics`)
 }
 
 // ================= 会话记忆与审计日志 API =================

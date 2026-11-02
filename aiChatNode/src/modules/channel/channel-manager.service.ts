@@ -25,6 +25,7 @@ import { CreditBusinessType } from '../credits/types/credits.types';
 import { ChatMessage } from '../chat/types/completion.types';
 import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
 import { RedisService } from '../../common/redis/redis.service';
+import { ChannelMetricsService, type ChannelMetrics } from './channel-metrics.service';
 
 export const INITIAL_CHANNELS: { channelType: ChannelType; name: string }[] = [
   { channelType: 'weixin', name: '微信 (iLink Bot)' },
@@ -55,6 +56,7 @@ export class ChannelManagerService implements OnModuleInit {
     private readonly creditsService: CreditsService,
     private readonly ragService: HybridRagService,
     private readonly redisService: RedisService,
+    private readonly channelMetricsService: ChannelMetricsService,
   ) {}
 
   async onModuleInit() {
@@ -436,6 +438,7 @@ export class ChannelManagerService implements OnModuleInit {
           status: isConnected ? 'connected' : conf.isEnabled ? liveStatus.status : 'disconnected',
           boundModelId: effectiveModelId,
           systemPrompt: effectiveSystemPrompt,
+          credentialsMasked: liveStatus.credentialsMasked || this.maskCredentials(conf.credentials),
         });
       } else {
         results.push({
@@ -450,6 +453,7 @@ export class ChannelManagerService implements OnModuleInit {
           loginStatus: 'idle',
           boundModelId: effectiveModelId,
           systemPrompt: effectiveSystemPrompt,
+          credentialsMasked: this.maskCredentials(conf.credentials),
         });
       }
     }
@@ -744,6 +748,7 @@ export class ChannelManagerService implements OnModuleInit {
 
     const effectivePrompt = config.role?.systemPrompt || config.systemPrompt || null;
     const roleTag = config.role ? `[角色:${config.role.name}]` : '[默认人设]';
+    const startTime = Date.now();
 
     this.logger.log(
       `[通道入站] 用户[${userId}] 实例[${config.instanceName || config.name}] ${roleTag} 来源[${fromId}] 消息="${content}" 目标模型[${targetModelId}]`,
@@ -867,8 +872,11 @@ export class ChannelManagerService implements OnModuleInit {
           this.logger.error(`扣除用户[${userId}]智能助理积分异常: ${err.message}`);
         });
 
+      const latencyMs = Date.now() - startTime;
+      await this.channelMetricsService.recordSuccess(instanceId, latencyMs);
       return answer;
     } catch (err: any) {
+      await this.channelMetricsService.recordError(instanceId);
       this.logger.error(`[通道分发] 处理用户[${userId}]实例[${instanceId}]消息失败: ${err.message}`);
       return '抱歉，当前助理处理消息遇到了临时问题，请稍后重试。';
     }
@@ -1048,5 +1056,33 @@ ${docChunks}
     } catch (err: any) {
       this.logger.warn(`ChannelConfig/AgentRole 自动迁移检测: ${err.message}`);
     }
+  }
+  /**
+   * 获取指定通道实例最近 24 小时运行指标
+   */
+  async getInstanceMetrics(userId: string, instanceId: string): Promise<ChannelMetrics> {
+    const config = await this.channelRepo.findOne({ where: { id: instanceId, userId } });
+    if (!config) throw new NotFoundException('通道实例不存在或无权限');
+    return this.channelMetricsService.getMetrics(instanceId);
+  }
+
+  /**
+   * 脱敏第三方敏感凭据（避免 API 泄露明文密钥）
+   */
+  private maskCredentials(creds?: Record<string, any>): Record<string, string> {
+    if (!creds || typeof creds !== 'object') return {};
+    const masked: Record<string, string> = {};
+    for (const [k, v] of Object.entries(creds)) {
+      if (typeof v === 'string' && v.length > 0) {
+        if (k.toLowerCase().includes('secret') || k.toLowerCase().includes('token')) {
+          masked[k] = v.length > 8 ? `${v.slice(0, 3)}****${v.slice(-3)}` : '********';
+        } else if (k.toLowerCase().includes('id') || k.toLowerCase().includes('app')) {
+          masked[k] = v.length > 6 ? `${v.slice(0, 3)}***${v.slice(-2)}` : `${v.slice(0, 2)}***`;
+        } else {
+          masked[k] = v;
+        }
+      }
+    }
+    return masked;
   }
 }

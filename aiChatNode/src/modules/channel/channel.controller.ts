@@ -17,7 +17,7 @@ import { ChannelManagerService } from './channel-manager.service';
 import { ChannelType } from './entities/channel-config.entity';
 
 /**
- * 智能助理通道与角色控制器 (支持多实例与角色解耦)
+ * 智能助理通道与角色控制器 (支持多实例与角色解耦、运行指标监控及对话审计)
  */
 @ApiTags('智能助理-通道与角色')
 @ApiBearerAuth()
@@ -133,6 +133,12 @@ export class ChannelController {
     @Body() body: { enabled: boolean },
   ) {
     return this.channelManager.toggleInstance(req.user.id, id, body.enabled);
+  }
+
+  @Get('instances/:id/metrics')
+  @ApiOperation({ summary: '获取指定通道实例最近 24 小时运行指标' })
+  async getInstanceMetrics(@Request() req: any, @Param('id') id: string) {
+    return this.channelManager.getInstanceMetrics(req.user.id, id);
   }
 
   // ================= 对话审计与会话记忆 (Sessions & Audit) =================
