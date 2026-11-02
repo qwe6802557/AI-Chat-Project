@@ -322,7 +322,7 @@ export function useStreamChat() {
                 if (toolCall) {
                   const currentMsg = conversationStore.currentConversation?.messages.find((m) => m.id === messageId)
                   const existingTools = [...(currentMsg?.toolCalls || [])]
-                  const index = existingTools.findIndex(t => t.id === toolCall.id)
+                  const index = existingTools.findIndex(t => t.id === toolCall.id || (t.name === toolCall.name && t.status === 'calling'))
                   if (index >= 0) {
                     existingTools[index] = { ...existingTools[index], ...toolCall }
                   } else {
