@@ -319,3 +319,17 @@ export async function uploadFiles(files: File[]): Promise<ResponseData<UploadedF
   // 不手动设置 Content-Type，让 axios 自动处理 boundary
   return request.post<never, ResponseData<UploadedFileResponse[]>>('/files/upload', formData)
 }
+
+
+/**
+ * 高危工具审批裁决
+ */
+export function decideApproval(
+  approvalId: string,
+  data: { decision: 'approved' | 'rejected'; reason?: string },
+) {
+  return request.post<never, ResponseData<{ approvalId: string; status: string; decisionReason?: string }>>(
+    `/chat/approval/${approvalId}/decide`,
+    data,
+  )
+}

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
-import type { IToolPlugin, ToolExecutionResult, ToolMetadata } from '../types/tools.types';
+import type { IToolPlugin, ToolExecutionResult, ToolMetadata, ToolRiskEvaluation } from '../types/tools.types';
 
 @Injectable()
 export class CodeInterpreterPlugin implements IToolPlugin {
@@ -21,6 +21,7 @@ export class CodeInterpreterPlugin implements IToolPlugin {
     category: 'data',
     supportsPresetMode: true,
     supportsFunctionCall: true,
+    riskLevel: 'high',
     parametersSchema: {
       type: 'object',
       properties: {
@@ -41,6 +42,29 @@ export class CodeInterpreterPlugin implements IToolPlugin {
   /**
    * 执行沙箱代码
    */
+/**
+   * 动态评估执行风险
+   */
+  evaluateRisk(args: Record<string, any>): ToolRiskEvaluation {
+    const code = typeof args.code === 'string' ? args.code : '';
+    const dangerousPatterns = [
+      /import\s+(os|sys|subprocess|shutil|socket|pty)/i,
+      /child_process|fs|net|dgram|cluster/i,
+      /eval\(|exec\(|Function\(|process\./i,
+      /open\([^)]+['"][wa\+]/i,
+      /rmdir|unlink|rm\s+-rf|del\s+/i,
+    ];
+    const isDangerous = dangerousPatterns.some((pattern) => pattern.test(code));
+
+    return {
+      level: 'high',
+      requiresApproval: true,
+      reason: isDangerous
+        ? '检测到底层系统操作、进程交互或高危函数指令，必须授权后执行'
+        : '沙箱代码执行涉及动态脚本运行，需授权确认',
+    };
+  }
+
   async execute(args: Record<string, any>): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     const language = (args.language || 'python').toLowerCase();

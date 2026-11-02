@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -40,6 +41,7 @@ import {
 import { WebSearchService } from '../web-search/web-search.service';
 import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
 import { ToolRegistryService } from '../tools/tools.registry.service';
+import { ApprovalManagerService } from './services/approval-manager.service';
 import type { ToolExecutionRecord } from '../tools/types/tools.types';
 import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
 
@@ -129,6 +131,7 @@ export class ChatService {
     private readonly webSearchService: WebSearchService,
     private readonly toolRegistryService: ToolRegistryService,
     private readonly ragService: HybridRagService,
+    private readonly approvalManagerService: ApprovalManagerService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -1255,6 +1258,72 @@ export class ChatService {
         }
 
         const plugin = this.toolRegistryService.getPlugin(call.name);
+
+        // 评估工具执行风险并进行动态风控拦截
+        const riskEvaluation = this.toolRegistryService.evaluateToolRisk(
+          call.name,
+          parsedArgs,
+          params.context,
+        );
+
+        if (riskEvaluation.requiresApproval) {
+          const pendingApproval = await this.approvalManagerService.createPendingApproval({
+            sessionId: params.context.sessionId,
+            userId: params.context.userId,
+            toolCallId: call.id,
+            toolName: call.name,
+            args: parsedArgs,
+            riskEvaluation,
+          });
+
+          yield {
+            type: 'tool_approval_required',
+            toolCall: {
+              id: call.id,
+              name: call.name,
+              title: plugin?.metadata.title || call.name,
+              icon: plugin?.metadata.icon || 'tool',
+              status: 'pending_approval',
+              args: parsedArgs,
+              approvalId: pendingApproval.approvalId,
+              riskLevel: riskEvaluation.level,
+              riskReason: riskEvaluation.reason,
+            },
+          };
+
+          const decisionResult = await this.approvalManagerService.waitForDecision(
+            pendingApproval.approvalId,
+          );
+
+          if (decisionResult.decision !== 'approved') {
+            const rejectionReason =
+              decisionResult.decision === 'timeout'
+                ? '审批超时（超过 10 分钟未确认），系统自动终止该高危工具执行'
+                : decisionResult.reason || '操作者已拒绝执行此高危工具';
+
+            yield {
+              type: 'tool_call_result',
+              toolCall: {
+                id: call.id,
+                name: call.name,
+                title: plugin?.metadata.title || call.name,
+                icon: plugin?.metadata.icon || 'tool',
+                status: 'rejected',
+                args: parsedArgs,
+                error: rejectionReason,
+              },
+            };
+
+            currentMessages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              name: call.name,
+              content: `工具调用已被操作者拒绝: ${rejectionReason}`,
+            });
+            continue;
+          }
+        }
+
         const execRecord = await this.toolRegistryService.executeTool(
           call.name,
           parsedArgs,
@@ -1311,6 +1380,39 @@ export class ChatService {
    * 保存流式对话的完整消息
    * （流式传输结束后调用）
    */
+/**
+   * 提交高危工具审批裁决
+   */
+  async decideApproval(
+    approvalId: string,
+    decision: 'approved' | 'rejected',
+    userId: string,
+    reason?: string,
+  ) {
+    const approval = await this.approvalManagerService.getPendingApproval(approvalId);
+    if (!approval) {
+      throw new NotFoundException('未找到对应待审批任务或已过期');
+    }
+
+    if (approval.userId && approval.userId !== userId) {
+      throw new ForbiddenException('无权对此审批任务进行裁决');
+    }
+
+    const resolved = await this.approvalManagerService.resolveApproval(
+      approvalId,
+      decision,
+      userId,
+      reason,
+    );
+
+    return {
+      approvalId: resolved.approvalId,
+      status: resolved.status,
+      decisionReason: resolved.decisionReason,
+      decidedAt: resolved.decidedAt,
+    };
+  }
+
   async saveStreamMessage(
     userId: string,
     sessionId: string,

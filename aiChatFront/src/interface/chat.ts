@@ -135,8 +135,19 @@ export interface ToolCallItem {
   arguments?: any
   args?: any
   result?: any
-  status: 'calling' | 'executing' | 'completed' | 'failed' | 'success' | 'error'
+  status:
+    | 'calling'
+    | 'executing'
+    | 'completed'
+    | 'failed'
+    | 'success'
+    | 'error'
+    | 'pending_approval'
+    | 'rejected'
   durationMs?: number
+  approvalId?: string
+  riskLevel?: 'low' | 'medium' | 'high'
+  riskReason?: string
 }
 
 /**
@@ -166,6 +177,7 @@ export interface StreamChunk {
     | 'search_sources'
     | 'tool_call_start'
     | 'tool_call_result'
+    | 'tool_approval_required'
     | 'tool_start'
     | 'tool_result'
     | 'reasoning_start'

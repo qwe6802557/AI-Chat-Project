@@ -2,6 +2,14 @@
  * 工具插件类型定义
  */
 
+export type ToolRiskLevel = 'low' | 'medium' | 'high';
+
+export interface ToolRiskEvaluation {
+  level: ToolRiskLevel;
+  requiresApproval: boolean;
+  reason?: string;
+}
+
 export interface ToolMetadata {
   id: string;
   name: string;
@@ -11,6 +19,7 @@ export interface ToolMetadata {
   category: 'system' | 'data' | 'utility' | 'network';
   supportsPresetMode: boolean;
   supportsFunctionCall: boolean;
+  riskLevel?: ToolRiskLevel;
   parametersSchema: {
     type: 'object';
     properties: Record<string, any>;
@@ -34,6 +43,7 @@ export interface ToolExecutionContext {
 
 export interface IToolPlugin {
   readonly metadata: ToolMetadata;
+  evaluateRisk?(args: Record<string, any>, context?: ToolExecutionContext): ToolRiskEvaluation;
   execute(args: Record<string, any>, context?: ToolExecutionContext): Promise<ToolExecutionResult>;
 }
 
@@ -44,5 +54,6 @@ export interface ToolExecutionRecord {
   callType: 'user_preset' | 'model_function_call';
   args: Record<string, any>;
   result: ToolExecutionResult;
+  riskEvaluation?: ToolRiskEvaluation;
   createdAt: string;
 }

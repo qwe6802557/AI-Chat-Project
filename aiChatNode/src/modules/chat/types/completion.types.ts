@@ -43,11 +43,20 @@ export interface StreamingToolCallEvent {
   name: string;
   title: string;
   icon: string;
-  status: 'calling' | 'executing' | 'success' | 'error';
+  status:
+    | 'calling'
+    | 'executing'
+    | 'success'
+    | 'error'
+    | 'pending_approval'
+    | 'rejected';
   args?: Record<string, any>;
   durationMs?: number;
   output?: any;
   error?: string;
+  approvalId?: string;
+  riskLevel?: string;
+  riskReason?: string;
 }
 
 /**
@@ -122,6 +131,7 @@ export interface CompletionChunk {
     | 'answer_delta'
     | 'tool_call_start'
     | 'tool_call_result'
+    | 'tool_approval_required'
     | 'failover_notice'
     | 'done'
     | 'error';
@@ -142,8 +152,6 @@ export interface CompletionChunk {
   toolCall?: StreamingToolCallEvent;
   failover?: FailoverEvent;
 }
-
-
 
 /**
  * 模型响应测速与健康指标

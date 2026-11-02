@@ -62,7 +62,7 @@ describe('ToolRegistryService & Plugins', () => {
   it('数学计算器插件能准确计算复合表达式', async () => {
     const res = await calculator.execute({ expression: 'sqrt(144) + 2^4 - 6 / 2' });
     expect(res.status).toBe('success');
-    expect(res.output.result).toBe(12 + 16 - 3); // 25
+    expect(res.output.result).toBe(12 + 16 - 3);
   });
 
   it('时钟日历插件能返回有效实时时间与星期', async () => {
@@ -95,5 +95,43 @@ describe('ToolRegistryService & Plugins', () => {
     expect(records.length).toBe(1);
     expect(records[0].name).toBe('clock_calendar');
     expect(records[0].result.status).toBe('success');
+  });
+
+  it('evaluateToolRisk 能对低风险工具识别为不需要审批', () => {
+    const risk = service.evaluateToolRisk('calculator', { expression: '1 + 1' });
+    expect(risk.level).toBe('low');
+    expect(risk.requiresApproval).toBe(false);
+  });
+
+  it('evaluateToolRisk 能对代码解释器执行精准识别高危与审批要求', () => {
+    const normalRisk = service.evaluateToolRisk('code_interpreter', {
+      language: 'javascript',
+      code: 'console.log(1 + 1)',
+    });
+    expect(normalRisk.level).toBe('high');
+    expect(normalRisk.requiresApproval).toBe(true);
+
+    const dangerousRisk = service.evaluateToolRisk('code_interpreter', {
+      language: 'javascript',
+      code: 'require("child_process").execSync("whoami")',
+    });
+    expect(dangerousRisk.level).toBe('high');
+    expect(dangerousRisk.requiresApproval).toBe(true);
+    expect(dangerousRisk.reason).toContain('底层系统操作');
+  });
+
+  it('evaluateToolRisk 能识别 url_fetcher 的内网私有地址 SSRF 风险并要求审批', () => {
+    const publicRisk = service.evaluateToolRisk('url_fetcher', {
+      url: 'https://example.com/article',
+    });
+    expect(publicRisk.level).toBe('medium');
+    expect(publicRisk.requiresApproval).toBe(false);
+
+    const internalRisk = service.evaluateToolRisk('url_fetcher', {
+      url: 'http://127.0.0.1:8080/admin',
+    });
+    expect(internalRisk.level).toBe('high');
+    expect(internalRisk.requiresApproval).toBe(true);
+    expect(internalRisk.reason).toContain('SSRF');
   });
 });

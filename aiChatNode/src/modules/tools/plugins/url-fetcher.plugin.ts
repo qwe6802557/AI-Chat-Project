@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { IToolPlugin, ToolExecutionResult, ToolMetadata } from '../types/tools.types';
+import type { IToolPlugin, ToolExecutionResult, ToolMetadata, ToolRiskEvaluation } from '../types/tools.types';
 
 @Injectable()
 export class UrlFetcherPlugin implements IToolPlugin {
@@ -15,6 +15,7 @@ export class UrlFetcherPlugin implements IToolPlugin {
     category: 'network',
     supportsPresetMode: true,
     supportsFunctionCall: true,
+    riskLevel: 'medium',
     parametersSchema: {
       type: 'object',
       properties: {
@@ -30,6 +31,48 @@ export class UrlFetcherPlugin implements IToolPlugin {
   /**
    * 抓取网页并提取正文
    */
+/**
+   * 动态评估目标地址风险（拦截 SSRF 及内网敏感地址）
+   */
+  evaluateRisk(args: Record<string, any>): ToolRiskEvaluation {
+    const rawUrl = typeof args.url === 'string' ? args.url.trim() : '';
+    if (!rawUrl) {
+      return { level: 'low', requiresApproval: false };
+    }
+
+    try {
+      const parsed = new URL(rawUrl);
+      const host = parsed.hostname.toLowerCase();
+      const isInternal =
+        host === 'localhost' ||
+        host === '127.0.0.1' ||
+        host === '0.0.0.0' ||
+        host === '::1' ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[0-1])\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        host.endsWith('.local') ||
+        host.endsWith('.internal') ||
+        host.endsWith('.lan');
+
+      if (isInternal) {
+        return {
+          level: 'high',
+          requiresApproval: true,
+          reason: `目标地址指向局域网或私有本地地址 (${host})，存在内网穿透与 SSRF 风险，需审批授权`,
+        };
+      }
+    } catch {
+      // 畸变地址交给后续 execute 校验
+    }
+
+    return {
+      level: 'medium',
+      requiresApproval: false,
+    };
+  }
+
   async execute(args: Record<string, any>): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     const rawUrl = typeof args.url === 'string' ? args.url.trim() : '';

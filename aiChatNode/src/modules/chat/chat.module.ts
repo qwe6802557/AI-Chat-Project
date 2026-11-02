@@ -6,6 +6,7 @@ import { ChatService } from './chat.service';
 import { ChatSessionService } from './chat-session.service';
 import { AIClientService } from './services/ai-client.service';
 import { AgentExecutorService } from './services/agent-executor.service';
+import { ApprovalManagerService } from './services/approval-manager.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from './adapters/grok2api.adapter';
@@ -31,7 +32,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     UserModule,
     forwardRef(() => AiProviderModule),
     CreditsModule,
-    FilesModule, // 导入文件模块
+    FilesModule,
     RedisModule,
     WebSearchModule,
     ToolsModule,
@@ -41,16 +42,23 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
   providers: [
     ChatService,
     ChatSessionService,
-    AIClientService, // AI 客户端服务
-    ClaudeAdapter, // Claude 适配器
-    ZaiwenAdapter, // 在问适配器
-    Grok2APIAdapter, // Grok2API 本地池适配器（OpenAI 兼容）
-    ZhipuAdapter, // 智谱 AI 适配器
-    SiliconFlowAdapter, // 硅基流动适配器
-    OFMAdapter, // Our Free Model 本地免密适配器
+    AIClientService,
+    ClaudeAdapter,
+    ZaiwenAdapter,
+    Grok2APIAdapter,
+    ZhipuAdapter,
+    SiliconFlowAdapter,
+    OFMAdapter,
     XfyunMaaSAdapter,
     AgentExecutorService,
+    ApprovalManagerService,
   ],
-  exports: [ChatService, ChatSessionService, AIClientService, AgentExecutorService],
+  exports: [
+    ChatService,
+    ChatSessionService,
+    AIClientService,
+    AgentExecutorService,
+    ApprovalManagerService,
+  ],
 })
 export class ChatModule {}

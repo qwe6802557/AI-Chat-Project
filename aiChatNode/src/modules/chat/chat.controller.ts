@@ -9,6 +9,7 @@ import {
   HttpException,
   UseGuards,
   ForbiddenException,
+  Param,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,7 +22,7 @@ import {
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
-import { CreateChatDto } from './dto';
+import { CreateChatDto, DecideApprovalDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type {
   CompletionChunk,
@@ -499,5 +500,31 @@ export class ChatController {
     }
 
     return this.chatService.getUserChatHistory(currentUserId, limit);
+  }
+
+  /**
+   * 高危工具审批裁决
+   */
+  @Post('approval/:approvalId/decide')
+  @ApiOperation({
+    summary: '高危工具审批裁决',
+    description: '对挂起的高危工具执行流提交允许 (approved) 或 拒绝 (rejected) 裁决',
+  })
+  async decideApproval(
+    @Param('approvalId') approvalId: string,
+    @Body() body: DecideApprovalDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    const result = await this.chatService.decideApproval(
+      approvalId,
+      body.decision,
+      userId,
+      body.reason,
+    );
+    return {
+      code: 0,
+      data: result,
+      message: '审批裁决已生效',
+    };
   }
 }

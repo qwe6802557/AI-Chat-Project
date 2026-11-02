@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AIClientService } from './ai-client.service';
 import { ToolRegistryService } from '../../tools/tools.registry.service';
-import type { ChatMessage, CompletionResponse } from '../types/completion.types';
+import type { ChatMessage } from '../types/completion.types';
 
 export interface AgentTrajectoryStep {
   loopIndex: number;
@@ -83,7 +83,6 @@ export class AgentExecutorService {
       const isTimeExhausted = timeoutMs - elapsed < 2000;
       const isFinalRound = loopCount >= maxLoops || isTimeExhausted;
 
-      // 超时预警或达到最大循环时剥离工具权限，强制输出最终结论
       const roundTools = isFinalRound || openAiTools.length === 0 ? undefined : openAiTools;
 
       const completion = await this.aiClientService.createChatCompletion(
@@ -100,7 +99,6 @@ export class AgentExecutorService {
 
       const thought = completion.reasoning?.content || (completion as any).reasoningContent || undefined;
 
-      // 无工具调用需求或已达最终轮次，收敛输出最终回答
       if (!completion.toolCalls || completion.toolCalls.length === 0 || isFinalRound) {
         finalContent = completion.content || completion.reasoning?.content || '';
         break;
@@ -119,6 +117,33 @@ export class AgentExecutorService {
           parsedArgs = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
         } catch {
           parsedArgs = { raw: tc.function?.arguments };
+        }
+
+        // 高危工具静态风控策略拦截：外部通道或离线执行无权直接放行高危操作
+        const riskEvaluation = this.toolRegistryService.evaluateToolRisk(
+          fnName,
+          parsedArgs,
+          options.context,
+        );
+
+        if (riskEvaluation.requiresApproval) {
+          const observation = `【安全策略拦截】该操作涉及高风险工具或敏感指令（原因: ${riskEvaluation.reason || '未经授权的操作'}）。外部通道环境无权直接授权高危操作，请通过 Web 控制台由管理员核准执行。`;
+          trajectory.push({
+            loopIndex: loopCount + 1,
+            thought,
+            actionName: fnName,
+            actionArgs: parsedArgs,
+            observation,
+            durationMs: 0,
+            status: 'error',
+          });
+          currentMessages.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            name: fnName,
+            content: observation,
+          });
+          continue;
         }
 
         const toolStart = Date.now();
