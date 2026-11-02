@@ -318,6 +318,8 @@ export class ChannelManagerService implements OnModuleInit {
       knowledgeBaseIds?: string[] | null;
       enabledTools?: string[] | null;
       isDefault?: boolean;
+      isTeam?: boolean;
+      teamConfig?: Record<string, any> | null;
     },
   ): Promise<AgentRole> {
     if (!dto.name || !dto.name.trim()) {
@@ -332,6 +334,8 @@ export class ChannelManagerService implements OnModuleInit {
       boundModelId: dto.boundModelId || null,
       systemPrompt: dto.systemPrompt || null,
       isDefault: !!dto.isDefault,
+      isTeam: !!dto.isTeam,
+      teamConfig: dto.teamConfig || null,
       knowledgeBaseIds: Array.isArray(dto.knowledgeBaseIds) ? dto.knowledgeBaseIds : [],
       enabledTools: Array.isArray(dto.enabledTools) ? dto.enabledTools : [],
     });
@@ -354,6 +358,8 @@ export class ChannelManagerService implements OnModuleInit {
       knowledgeBaseIds?: string[] | null;
       enabledTools?: string[] | null;
       isDefault?: boolean;
+      isTeam?: boolean;
+      teamConfig?: Record<string, any> | null;
     },
   ): Promise<AgentRole> {
     const role = await this.roleRepo.findOne({ where: { id: roleId, userId } });
@@ -371,6 +377,8 @@ export class ChannelManagerService implements OnModuleInit {
       role.enabledTools = Array.isArray(dto.enabledTools) ? dto.enabledTools : [];
     }
     if (dto.isDefault !== undefined) role.isDefault = dto.isDefault;
+    if (dto.isTeam !== undefined) role.isTeam = !!dto.isTeam;
+    if (dto.teamConfig !== undefined) role.teamConfig = dto.teamConfig;
 
     const saved = await this.roleRepo.save(role);
 
@@ -1006,6 +1014,8 @@ ${docChunks}
       // 2. 扩展 channel_config 及 agent_roles 字段
       await this.channelRepo.query(`
         ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS "knowledge_base_ids" jsonb DEFAULT '[]';
+        ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS "is_team" boolean DEFAULT false;
+        ALTER TABLE agent_roles ADD COLUMN IF NOT EXISTS "team_config" jsonb DEFAULT '{}';
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "userId" uuid;
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "instanceName" varchar(100);
         ALTER TABLE channel_config ADD COLUMN IF NOT EXISTS "roleId" uuid;

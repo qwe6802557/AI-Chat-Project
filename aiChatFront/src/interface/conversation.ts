@@ -90,6 +90,7 @@ export interface Message {
   searchStatus?: 'searching' | 'done'
   searchQuery?: string
   toolCalls?: ToolCallItem[]
+  agentTimeline?: import('@/interface/chat').SwarmTimelineEvent[]
   attachments?: MessageAttachment[]
   artifacts?: import('@/views/Chat/utils/assistantContent').ExtractedArtifactTag[]
   error?: string

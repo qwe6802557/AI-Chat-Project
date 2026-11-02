@@ -170,6 +170,39 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
     });
   });
 
+  describe('AgentRole Team Management', () => {
+    it('should create and update a multi-agent team role with teamConfig', async () => {
+      const created = await service.createRole(mockUserId, {
+        name: '研发专家协同团队',
+        isTeam: true,
+        teamConfig: {
+          subAgentRoleIds: ['role-code-1', 'role-review-2'],
+          routerStrategy: 'supervisor',
+          maxHandoffs: 3,
+        },
+      });
+
+      expect(created.isTeam).toBe(true);
+      expect(created.teamConfig?.subAgentRoleIds).toHaveLength(2);
+
+      (mockRoleRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'team-role-1',
+        userId: mockUserId,
+        name: '研发专家协同团队',
+        isTeam: true,
+        teamConfig: { subAgentRoleIds: ['role-code-1'] },
+      });
+
+      const updated = await service.updateRole(mockUserId, 'team-role-1', {
+        name: '更新后的协同团队',
+        teamConfig: { subAgentRoleIds: ['role-code-1', 'role-review-2', 'role-qa-3'] },
+      });
+
+      expect(updated.name).toBe('更新后的协同团队');
+      expect(updated.teamConfig?.subAgentRoleIds).toHaveLength(3);
+    });
+  });
+
   describe('getAllChannels (Multi-tenant lazy init)', () => {
     it('should lazy-init default channel configs for user if none exist', async () => {
       (mockChannelRepo.find as jest.Mock)

@@ -10,8 +10,14 @@ import {
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 
+export interface AgentTeamConfig {
+  subAgentRoleIds: string[];
+  routerStrategy?: 'supervisor' | 'sequential';
+  maxHandoffs?: number;
+}
+
 /**
- * 智能体角色实体 (用户专属人设库)
+ * 智能体角色实体 (用户专属人设库与协同团队编排)
  */
 @Entity('agent_roles')
 @Index('idx_agent_roles_user_id', ['userId'])
@@ -43,6 +49,12 @@ export class AgentRole {
 
   @Column({ type: 'boolean', default: false })
   isDefault: boolean;
+
+  @Column({ name: 'is_team', type: 'boolean', default: false })
+  isTeam: boolean;
+
+  @Column({ name: 'team_config', type: 'jsonb', nullable: true, default: () => "'{}'" })
+  teamConfig: AgentTeamConfig | null;
 
   @Column({ name: 'knowledge_base_ids', type: 'jsonb', nullable: true, default: () => "'[]'" })
   knowledgeBaseIds: string[] | null;

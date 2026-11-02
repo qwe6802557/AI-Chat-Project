@@ -7,7 +7,9 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
+import { AgentRole } from '../channel/entities/agent-role.entity';
+import { SwarmOrchestratorService } from './services/swarm-orchestrator.service';
 import { ConfigService } from '@nestjs/config';
 import { AIClientService } from './services/ai-client.service';
 import { CreateChatDto, FileDataDto } from './dto';

@@ -280,6 +280,13 @@ export class ChatController {
               toolCall: chunk.toolCall,
             };
             break;
+          case 'agent_timeline_event':
+            sseData = {
+              type: 'agent_timeline_event',
+              sessionId,
+              timelineEvent: chunk.timelineEvent,
+            };
+            break;
           case 'reasoning_start':
             finalReasoning = {
               mode: chunk.reasoning?.mode || 'raw',

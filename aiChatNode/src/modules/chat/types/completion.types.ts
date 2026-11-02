@@ -132,6 +132,7 @@ export interface CompletionChunk {
     | 'tool_call_start'
     | 'tool_call_result'
     | 'tool_approval_required'
+    | 'agent_timeline_event'
     | 'failover_notice'
     | 'done'
     | 'error';
@@ -151,6 +152,7 @@ export interface CompletionChunk {
   error?: string;
   toolCall?: StreamingToolCallEvent;
   failover?: FailoverEvent;
+  timelineEvent?: any;
 }
 
 /**
