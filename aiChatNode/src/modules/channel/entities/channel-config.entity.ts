@@ -10,12 +10,13 @@ import {
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { AgentRole } from './agent-role.entity';
+import { EncryptedJsonTransformer } from '../transformers/encrypted-json.transformer';
 
 export type ChannelType = 'weixin' | 'qq' | 'feishu' | 'dingtalk' | 'wecom_bot';
 export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 /**
- * 智能助理通道配置实体 (支持多实例与角色解耦)
+ * 智能助理通道配置实体 (支持多实例与角色解耦及敏感凭证透明加密)
  */
 @Entity('channel_config')
 @Index('idx_channel_config_user_id', ['userId'])
@@ -58,7 +59,11 @@ export class ChannelConfig {
   @Column({ type: 'text', nullable: true })
   systemPrompt: string | null;
 
-  @Column({ type: 'jsonb', default: () => "'{}'" })
+  @Column({
+    type: 'jsonb',
+    default: () => "'{}'",
+    transformer: new EncryptedJsonTransformer(),
+  })
   credentials: Record<string, any>;
 
   @Column({ type: 'jsonb', default: () => "'{}'" })

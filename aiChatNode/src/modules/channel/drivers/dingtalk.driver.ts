@@ -5,9 +5,10 @@ import {
   IChannelDriver,
   InboundMessageHandler,
 } from './channel-driver.interface';
+import { ChannelReconnector } from '../utils/channel-reconnector';
 
 /**
- * 钉钉机器人驱动 (官方 Stream 模式长连接 + sessionWebhook / OpenAPI 回复)
+ * 钉钉机器人驱动 (官方 Stream 模式长连接 + sessionWebhook / OpenAPI 回复，支持指数退避自愈)
  */
 export class DingtalkDriver implements IChannelDriver {
   readonly channelType = 'dingtalk';
@@ -24,6 +25,20 @@ export class DingtalkDriver implements IChannelDriver {
   private connectedAt: string | null = null;
   // 会话缓存: targetId -> sessionWebhook
   private readonly sessionWebhooks = new Map<string, { url: string; expiresAt: number }>();
+
+  private readonly reconnector = new ChannelReconnector(
+    async () => {
+      if (!this.isRunning) return;
+      await this.connectStream();
+    },
+    (state) => {
+      this.status = state.status;
+      if (state.errorMsg) {
+        this.lastError = state.errorMsg;
+      }
+    },
+    { initialDelayMs: 2000, maxDelayMs: 60000, maxAttempts: 10, jitter: true },
+  );
 
   constructor(
     private readonly inboundHandler: InboundMessageHandler,
@@ -52,40 +67,19 @@ export class DingtalkDriver implements IChannelDriver {
     this.isRunning = true;
     this.status = 'connecting';
     this.lastError = null;
+    this.reconnector.reset();
 
     try {
-      this.client = new DWClient({
-        clientId: this.clientId,
-        clientSecret: this.clientSecret,
-        debug: false,
-      });
-
-      this.client.registerCallbackListener(TOPIC_ROBOT, async (res: any) => {
-        try {
-          const messageId = res?.headers?.messageId;
-          if (messageId && this.client) {
-            this.client.socketCallBackResponse(messageId, { status: 200 });
-          }
-          await this.handleRobotMessage(res?.data);
-        } catch (err: any) {
-          this.logger.error(`钉钉消息处理异常: ${err.message}`, err.stack);
-        }
-      });
-
-      await this.client.connect();
-      this.status = 'connected';
-      this.connectedAt = new Date().toISOString();
-      this.logger.log(`钉钉机器人 Stream 长连接建立成功 [ClientId: ${this.clientId}]`);
+      await this.connectStream();
     } catch (err: any) {
-      this.status = 'error';
-      this.lastError = err.message || '钉钉 Stream 连接失败';
-      this.logger.error(`钉钉机器人启动失败: ${err.message}`, err.stack);
-      this.isRunning = false;
+      this.logger.error(`钉钉 Stream 初次建立连接异常: ${err.message}`);
+      this.reconnector.schedule(err);
     }
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
+    this.reconnector.destroy();
     if (this.client) {
       try {
         this.client.disconnect();
@@ -138,8 +132,41 @@ export class DingtalkDriver implements IChannelDriver {
       }
     }
 
-    // 备用：若无 sessionWebhook 或已过期，则通过 DingTalk OpenAPI 发送
     return this.sendViaOpenApi(to, content);
+  }
+
+  private async connectStream(): Promise<void> {
+    if (this.client) {
+      try {
+        this.client.disconnect();
+      } catch {}
+      this.client = null;
+    }
+
+    this.client = new DWClient({
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      debug: false,
+    });
+
+    this.client.registerCallbackListener(TOPIC_ROBOT, async (res: any) => {
+      try {
+        const messageId = res?.headers?.messageId;
+        if (messageId && this.client) {
+          this.client.socketCallBackResponse(messageId, { status: 200 });
+        }
+        await this.handleRobotMessage(res?.data);
+      } catch (err: any) {
+        this.logger.error(`钉钉消息处理异常: ${err.message}`, err.stack);
+      }
+    });
+
+    await this.client.connect();
+    this.status = 'connected';
+    this.connectedAt = new Date().toISOString();
+    this.lastError = null;
+    this.reconnector.reset();
+    this.logger.log(`钉钉机器人 Stream 长连接建立成功 [ClientId: ${this.clientId}]`);
   }
 
   private async sendViaOpenApi(userId: string, content: string): Promise<boolean> {
@@ -190,7 +217,7 @@ export class DingtalkDriver implements IChannelDriver {
 
     const senderStaffId = payload?.senderStaffId || payload?.senderId;
     const conversationId = payload?.conversationId;
-    const conversationType = payload?.conversationType; // '1' 单聊, '2' 群聊
+    const conversationType = payload?.conversationType;
     const isGroup = conversationType === '2';
     const targetId = isGroup && conversationId ? conversationId : senderStaffId;
 
@@ -199,7 +226,6 @@ export class DingtalkDriver implements IChannelDriver {
       return;
     }
 
-    // 缓存 sessionWebhook (有效期 90 分钟，留 5 分钟缓冲)
     if (payload.sessionWebhook) {
       this.sessionWebhooks.set(targetId, {
         url: payload.sessionWebhook,
@@ -209,7 +235,6 @@ export class DingtalkDriver implements IChannelDriver {
 
     this.logger.log(`钉钉收到用户消息 [${isGroup ? '群聊' : '单聊'} ${targetId}]: ${cleanText.slice(0, 50)}`);
 
-    // 统一交由 ChannelManagerService 调度
     await this.inboundHandler(this.channelType, targetId, cleanText);
   }
 }

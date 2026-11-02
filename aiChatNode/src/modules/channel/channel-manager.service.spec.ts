@@ -1,17 +1,27 @@
 import { ChannelManagerService } from './channel-manager.service';
 import { ChannelConfig } from './entities/channel-config.entity';
+import { AgentRole } from './entities/agent-role.entity';
+import { ChannelMessage } from './entities/channel-message.entity';
 import type { Repository } from 'typeorm';
 import type { AIClientService } from '../chat/services/ai-client.service';
 import type { AiModelService } from '../ai-provider/ai-model.service';
 import type { CreditsService } from '../credits/credits.service';
 import { CreditBusinessType } from '../credits/types/credits.types';
+import type { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
+import type { RedisService } from '../../common/redis/redis.service';
+import type { ChannelMetricsService } from './channel-metrics.service';
 
 describe('ChannelManagerService (Multi-tenant & Credits)', () => {
   let service: ChannelManagerService;
   let mockChannelRepo: Partial<Repository<ChannelConfig>>;
+  let mockRoleRepo: Partial<Repository<AgentRole>>;
+  let mockMessageRepo: Partial<Repository<ChannelMessage>>;
   let mockAiClientService: Partial<AIClientService>;
   let mockAiModelService: Partial<AiModelService>;
   let mockCreditsService: Partial<CreditsService>;
+  let mockRagService: Partial<HybridRagService>;
+  let mockRedisService: Partial<RedisService>;
+  let mockChannelMetricsService: Partial<ChannelMetricsService>;
 
   const mockUserId = 'user-uuid-1234';
 
@@ -24,6 +34,20 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       query: jest.fn().mockResolvedValue([]),
     };
 
+    mockRoleRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockImplementation((val) => Promise.resolve(val)),
+      create: jest.fn().mockImplementation((val) => val),
+    };
+
+    mockMessageRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      findOne: jest.fn().mockResolvedValue(null),
+      save: jest.fn().mockResolvedValue({} as any),
+      create: jest.fn().mockImplementation((val) => val),
+    };
+
     mockAiClientService = {
       createChatCompletion: jest.fn().mockResolvedValue({
         content: '您好，我是智能助理！',
@@ -33,7 +57,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
     };
 
     mockAiModelService = {
-      getDefaultModel: jest.fn().mockResolvedValue({ modelId: 'spark-x2.6', creditCost: 2 } as any),
+      findAll: jest.fn().mockResolvedValue([{ modelId: 'spark-x2.6', isDefault: true, isActive: true }]),
       findByModelId: jest.fn().mockResolvedValue({ modelId: 'spark-x2.6', creditCost: 2 } as any),
     };
 
@@ -42,11 +66,32 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       deductDirectCredits: jest.fn().mockResolvedValue({} as any),
     };
 
+    mockRagService = {
+      search: jest.fn().mockResolvedValue([]),
+    };
+
+    mockRedisService = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+    };
+
+    mockChannelMetricsService = {
+      recordSuccess: jest.fn().mockResolvedValue(undefined),
+      recordError: jest.fn().mockResolvedValue(undefined),
+      getMetrics: jest.fn().mockResolvedValue({ totalRequests: 0, successRate: 100, avgLatencyMs: 0, errorCount: 0 }),
+    };
+
     service = new ChannelManagerService(
       mockChannelRepo as Repository<ChannelConfig>,
+      mockRoleRepo as Repository<AgentRole>,
+      mockMessageRepo as Repository<ChannelMessage>,
       mockAiClientService as AIClientService,
       mockAiModelService as AiModelService,
       mockCreditsService as CreditsService,
+      mockRagService as HybridRagService,
+      mockRedisService as RedisService,
+      mockChannelMetricsService as ChannelMetricsService,
     );
   });
 
@@ -60,7 +105,6 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
         isEnabled: true,
       });
 
-      // User has 1 credit, but model costs 2
       (mockCreditsService.getSnapshotForUser as jest.Mock).mockResolvedValue({
         remaining: 1,
         total: 100,
@@ -68,7 +112,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       });
 
       const response = await (service as any).handleInboundMessage(
-        mockUserId,
+        'conf-1',
         'weixin',
         'wx_openid_123',
         '你好',
@@ -88,7 +132,6 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
         isEnabled: true,
       });
 
-      // User has 10 credits, model costs 2
       (mockCreditsService.getSnapshotForUser as jest.Mock).mockResolvedValue({
         remaining: 10,
         total: 100,
@@ -96,7 +139,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       });
 
       const response = await (service as any).handleInboundMessage(
-        mockUserId,
+        'conf-1',
         'weixin',
         'wx_openid_123',
         '你好',
@@ -111,14 +154,15 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
           businessType: CreditBusinessType.CHAT_MESSAGE,
         }),
       );
+      expect(mockChannelMetricsService.recordSuccess).toHaveBeenCalled();
     });
   });
 
   describe('getAllChannels (Multi-tenant lazy init)', () => {
     it('should lazy-init default channel configs for user if none exist', async () => {
       (mockChannelRepo.find as jest.Mock)
-        .mockResolvedValueOnce([]) // First call inside initUserConfigs
-        .mockResolvedValueOnce([   // Second call in getAllChannels
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
           {
             id: 'conf-wx',
             userId: mockUserId,
@@ -126,6 +170,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
             name: '微信扫码',
             isEnabled: false,
             status: 'disconnected',
+            credentials: {},
           },
         ]);
 

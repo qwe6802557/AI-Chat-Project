@@ -4,6 +4,7 @@ import { ChannelConfig } from './entities/channel-config.entity';
 import { AgentRole } from './entities/agent-role.entity';
 import { ChannelMessage } from './entities/channel-message.entity';
 import { ChannelManagerService } from './channel-manager.service';
+import { ChannelMetricsService } from './channel-metrics.service';
 import { ChannelController } from './channel.controller';
 import { ChatModule } from '../chat/chat.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
@@ -13,7 +14,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 import { RedisModule } from '../../common/redis/redis.module';
 
 /**
- * 智能助理通道模块 (支持多实例与角色解耦、知识库RAG及会话记忆审计)
+ * 智能助理通道模块 (支持多实例与角色解耦、运行指标监控、知识库RAG及会话记忆审计)
  */
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { RedisModule } from '../../common/redis/redis.module';
     RedisModule,
   ],
   controllers: [ChannelController],
-  providers: [ChannelManagerService],
-  exports: [ChannelManagerService],
+  providers: [ChannelManagerService, ChannelMetricsService],
+  exports: [ChannelManagerService, ChannelMetricsService],
 })
 export class ChannelModule {}

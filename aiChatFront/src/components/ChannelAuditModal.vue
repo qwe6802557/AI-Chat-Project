@@ -35,6 +35,20 @@
           </div>
         </div>
         <div class="header-right">
+          <div v-if="metrics" class="header-metrics-group">
+            <div class="metric-chip">
+              <span class="chip-label">24h请求</span>
+              <span class="chip-val">{{ metrics.totalRequests }}</span>
+            </div>
+            <div class="metric-chip">
+              <span class="chip-label">成功率</span>
+              <span class="chip-val success">{{ metrics.successRate }}%</span>
+            </div>
+            <div class="metric-chip">
+              <span class="chip-label">平均耗时</span>
+              <span class="chip-val">{{ metrics.avgLatencyMs }}ms</span>
+            </div>
+          </div>
           <button class="custom-close-btn" @click="handleClose">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -244,6 +258,8 @@ import {
   getInstanceSessions,
   getSessionMessages,
   clearSessionMemory,
+  getInstanceMetrics,
+  type ChannelMetrics,
 } from '@/api/channel'
 
 const props = defineProps<{
@@ -262,6 +278,7 @@ const messages = ref<ChannelMessageItem[]>([])
 const loadingSessions = ref(false)
 const loadingMessages = ref(false)
 const clearingMemory = ref(false)
+const metrics = ref<ChannelMetrics | null>(null)
 const messageScrollContainer = ref<HTMLElement | null>(null)
 const expandedRagMsgIds = ref<Set<string>>(new Set())
 
@@ -367,6 +384,16 @@ const selectSession = (item: ChannelSessionSummary) => {
   fetchMessages()
 }
 
+const fetchMetrics = async () => {
+  if (!props.instance?.id) return
+  try {
+    const res = await getInstanceMetrics(props.instance.id)
+    metrics.value = res.data || null
+  } catch {
+    metrics.value = null
+  }
+}
+
 const fetchSessions = async () => {
   if (!props.instance?.id) return
   try {
@@ -423,10 +450,12 @@ watch(
   (isOpen) => {
     if (isOpen && props.instance?.id) {
       fetchSessions()
+      fetchMetrics()
     } else {
       activeSession.value = null
       messages.value = []
       searchKeyword.value = ''
+      metrics.value = null
       expandedRagMsgIds.value.clear()
     }
   },
@@ -534,6 +563,43 @@ watch(
 .sub-title {
   font-size: 12px;
   color: #64748b;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-metrics-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.chip-label {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.chip-val {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.chip-val.success {
+  color: #16a34a;
 }
 
 .custom-close-btn {

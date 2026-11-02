@@ -4,12 +4,13 @@ import {
   IChannelDriver,
   InboundMessageHandler,
 } from './channel-driver.interface';
+import { ChannelReconnector } from '../utils/channel-reconnector';
 
 const QQ_AUTH_URL = 'https://bots.qq.com/app/getAppAccessToken';
 const QQ_API_BASE = 'https://api.sgroup.qq.com';
 
 /**
- * 腾讯 QQ 官方开放平台机器人驱动 (WebSocket Gateway + REST 回复)
+ * 腾讯 QQ 官方开放平台机器人驱动 (WebSocket Gateway + REST 回复，支持指数退避自愈)
  */
 export class QqDriver implements IChannelDriver {
   readonly channelType = 'qq';
@@ -29,6 +30,20 @@ export class QqDriver implements IChannelDriver {
   private status: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
   private lastError: string | null = null;
   private connectedAt: string | null = null;
+
+  private readonly reconnector = new ChannelReconnector(
+    async () => {
+      if (!this.isRunning) return;
+      await this.connectGateway();
+    },
+    (state) => {
+      this.status = state.status;
+      if (state.errorMsg) {
+        this.lastError = state.errorMsg;
+      }
+    },
+    { initialDelayMs: 2000, maxDelayMs: 60000, maxAttempts: 10, jitter: true },
+  );
 
   constructor(
     private readonly inboundHandler: InboundMessageHandler,
@@ -57,18 +72,19 @@ export class QqDriver implements IChannelDriver {
     this.isRunning = true;
     this.status = 'connecting';
     this.lastError = null;
+    this.reconnector.reset();
 
     try {
       await this.connectGateway();
     } catch (err: any) {
-      this.status = 'error';
-      this.lastError = err.message;
-      this.logger.error(`QQ 机器人连接网关异常: ${err.message}`);
+      this.logger.error(`QQ 机器人初次连接网关异常: ${err.message}`);
+      this.reconnector.schedule(err);
     }
   }
 
   async stop(): Promise<void> {
     this.isRunning = false;
+    this.reconnector.destroy();
     this.cleanupSocket();
     this.status = 'disconnected';
   }
@@ -110,7 +126,6 @@ export class QqDriver implements IChannelDriver {
         msg_type: 0,
       };
 
-      // 携带 msg_id 走被动回复通道（避免触发严格的主动消息频控限制）
       if (msgId) {
         bodyPayload.msg_id = msgId;
       }
@@ -208,6 +223,8 @@ export class QqDriver implements IChannelDriver {
             this.status = 'connected';
             this.connectedAt = new Date().toISOString();
             this.sessionId = d.session_id;
+            this.lastError = null;
+            this.reconnector.reset();
             this.logger.log(`QQ 机器人鉴权成功，Bot: ${d.user?.username || ''}`);
           } else if (t === 'C2C_MESSAGE_CREATE' || t === 'GROUP_AT_MESSAGE_CREATE') {
             this.handleEventMessage(t, d);
@@ -220,15 +237,13 @@ export class QqDriver implements IChannelDriver {
 
     this.ws.onerror = (err: any) => {
       this.logger.error(`QQ WebSocket 错误: ${err.message || 'unknown'}`);
-      this.status = 'error';
       this.lastError = '连接断开或网络异常';
     };
 
     this.ws.onclose = () => {
       this.cleanupSocket();
       if (this.isRunning) {
-        this.status = 'connecting';
-        setTimeout(() => this.connectGateway(), 5000);
+        this.reconnector.schedule(new Error('QQ Gateway 连接已关闭'));
       } else {
         this.status = 'disconnected';
       }
