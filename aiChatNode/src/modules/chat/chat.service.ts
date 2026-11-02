@@ -1201,8 +1201,9 @@ export class ChatService {
           for (const tc of chunk.delta.tool_calls) {
             const index = tc.index ?? 0;
             if (!toolCallMap.has(index)) {
+              const callId = tc.id || `call_${Date.now()}_${index}`;
               toolCallMap.set(index, {
-                id: tc.id || '',
+                id: callId,
                 name: tc.function?.name || '',
                 arguments: tc.function?.arguments || '',
               });
@@ -1210,7 +1211,7 @@ export class ChatService {
               yield {
                 type: 'tool_call_start',
                 toolCall: {
-                  id: tc.id || `call_${Date.now()}_${index}`,
+                  id: callId,
                   name: tc.function?.name || '',
                   title: plugin?.metadata.title || tc.function?.name || '未知工具',
                   icon: plugin?.metadata.icon || 'tool',
@@ -1220,7 +1221,7 @@ export class ChatService {
               };
             } else {
               const existing = toolCallMap.get(index)!;
-              if (tc.id) existing.id = tc.id;
+              if (tc.id && !existing.id) existing.id = tc.id;
               if (tc.function?.name) existing.name = tc.function.name;
               if (tc.function?.arguments) existing.arguments += tc.function.arguments;
             }

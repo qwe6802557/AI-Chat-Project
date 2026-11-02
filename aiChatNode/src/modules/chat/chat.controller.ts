@@ -273,6 +273,13 @@ export class ChatController {
               toolCall: chunk.toolCall,
             };
             break;
+          case 'tool_approval_required':
+            sseData = {
+              type: 'tool_approval_required',
+              sessionId,
+              toolCall: chunk.toolCall,
+            };
+            break;
           case 'reasoning_start':
             finalReasoning = {
               mode: chunk.reasoning?.mode || 'raw',
