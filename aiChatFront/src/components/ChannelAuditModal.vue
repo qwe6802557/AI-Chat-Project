@@ -83,7 +83,7 @@
             </div>
 
             <div v-else-if="filteredSessions.length === 0" class="empty-sessions">
-              <span class="empty-icon">💬</span>
+              <div class="empty-icon-wrap"><MessageOutlined /></div>
               <p class="empty-text">{{ searchKeyword ? '未搜到匹配的外部会话' : '暂无外部联系人会话数据' }}</p>
             </div>
 
@@ -165,7 +165,7 @@
             </div>
 
             <div v-else-if="!activeSession" class="no-selection-box">
-              <div class="guide-art">👈</div>
+              <div class="guide-art-icon"><InfoCircleOutlined /></div>
               <p class="guide-title">请在左侧选择一个外部联系人会话</p>
               <p class="guide-desc">可查看上下文问答、知识库切片引用与积分消耗明细</p>
             </div>
@@ -183,7 +183,7 @@
               >
                 <!-- 助手头像/角色 -->
                 <div v-if="msg.senderType === 'assistant'" class="avatar-tag assistant-avatar">
-                  🤖
+                  <RobotOutlined />
                 </div>
 
                 <div class="bubble-wrapper">
@@ -203,12 +203,75 @@
 
                   <!-- 消息气泡正文 -->
                   <div class="bubble-content" :class="msg.senderType">
+                    <!-- ReAct 思考与工具链时间轴 (Stitch 风格折叠微标) -->
+                    <div
+                      v-if="msg.metadata?.trajectory && msg.metadata.trajectory.length > 0"
+                      class="react-trajectory-box"
+                    >
+                      <div class="react-toggle-bar" @click="toggleTrajectoryExpanded(msg.id)">
+                        <div class="react-title-col">
+                          <span class="react-badge-pill">ReAct</span>
+                          <span class="react-summary-text">
+                            自主调用 {{ msg.metadata.trajectory.length }} 次工具
+                          </span>
+                        </div>
+                        <div class="react-right-col">
+                          <span class="react-steps-preview">
+                            <span
+                              v-for="(st, idx) in msg.metadata.trajectory"
+                              :key="idx"
+                              class="step-micro-tag"
+                            >
+                              {{ st.actionName }}
+                            </span>
+                          </span>
+                          <span class="toggle-arrow" :class="{ 'is-open': expandedTrajectoryMsgIds.has(msg.id) }">▾</span>
+                        </div>
+                      </div>
+
+                      <div v-if="expandedTrajectoryMsgIds.has(msg.id)" class="react-steps-list">
+                        <div
+                          v-for="(step, sIdx) in msg.metadata.trajectory"
+                          :key="sIdx"
+                          class="trajectory-step-card"
+                          :class="step.status === 'success' ? 'is-success' : 'is-error'"
+                        >
+                          <div class="step-header">
+                            <div class="step-num-name">
+                              <span class="step-order">#{{ step.loopIndex }}</span>
+                              <span class="step-fn-name">{{ step.actionName }}</span>
+                            </div>
+                            <div class="step-duration-badge">
+                              {{ step.durationMs }}ms
+                            </div>
+                          </div>
+
+                          <div v-if="step.thought" class="step-thought-row">
+                            <span class="step-sub-label">思考:</span>
+                            <span class="step-thought-text">{{ step.thought }}</span>
+                          </div>
+
+                          <div class="step-args-row">
+                            <span class="step-sub-label">入参:</span>
+                            <pre class="step-code-block">{{ formatJsonArgs(step.actionArgs) }}</pre>
+                          </div>
+
+                          <div class="step-obs-row">
+                            <span class="step-sub-label">观测:</span>
+                            <div class="step-obs-text">{{ step.observation }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div class="text-body">{{ msg.content }}</div>
 
                     <!-- RAG 命中知识库切片溯源折叠 -->
                     <div v-if="msg.ragSources && msg.ragSources.length > 0" class="rag-sources-box">
                       <div class="rag-toggle-bar" @click="toggleRagExpanded(msg.id)">
-                        <span class="rag-indicator">📚 知识库参考 (命中 {{ msg.ragSources.length }} 条切片)</span>
+                        <span class="rag-indicator">
+                          <BookOutlined class="rag-icon" /> 知识库参考 (命中 {{ msg.ragSources.length }} 条切片)
+                        </span>
                         <span class="toggle-arrow" :class="{ 'is-open': expandedRagMsgIds.has(msg.id) }">▾</span>
                       </div>
                       <div v-if="expandedRagMsgIds.has(msg.id)" class="rag-chunks-list">
@@ -230,7 +293,7 @@
 
                 <!-- 访客头像 -->
                 <div v-if="msg.senderType === 'user'" class="avatar-tag user-avatar">
-                  👤
+                  <UserOutlined />
                 </div>
               </div>
             </div>
@@ -248,6 +311,11 @@ import {
   SearchOutlined,
   ReloadOutlined,
   ClearOutlined,
+  MessageOutlined,
+  BookOutlined,
+  UserOutlined,
+  RobotOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons-vue'
 import type {
   ChannelInfo,
@@ -281,6 +349,7 @@ const clearingMemory = ref(false)
 const metrics = ref<ChannelMetrics | null>(null)
 const messageScrollContainer = ref<HTMLElement | null>(null)
 const expandedRagMsgIds = ref<Set<string>>(new Set())
+const expandedTrajectoryMsgIds = ref<Set<string>>(new Set())
 
 const filteredSessions = computed(() => {
   const kw = searchKeyword.value.trim().toLowerCase()
@@ -352,6 +421,23 @@ const toggleRagExpanded = (msgId: string) => {
     expandedRagMsgIds.value.delete(msgId)
   } else {
     expandedRagMsgIds.value.add(msgId)
+  }
+}
+
+const toggleTrajectoryExpanded = (msgId: string) => {
+  if (expandedTrajectoryMsgIds.value.has(msgId)) {
+    expandedTrajectoryMsgIds.value.delete(msgId)
+  } else {
+    expandedTrajectoryMsgIds.value.add(msgId)
+  }
+}
+
+const formatJsonArgs = (args: any): string => {
+  if (!args) return '{}'
+  try {
+    return typeof args === 'string' ? args : JSON.stringify(args, null, 2)
+  } catch {
+    return String(args)
   }
 }
 
@@ -662,6 +748,12 @@ watch(
   text-align: center;
 }
 
+.empty-icon-wrap {
+  font-size: 28px;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
 .empty-icon {
   font-size: 32px;
   margin-bottom: 8px;
@@ -889,6 +981,12 @@ watch(
   color: #94a3b8;
 }
 
+.guide-art-icon {
+  font-size: 36px;
+  color: #cbd5e1;
+  margin-bottom: 8px;
+}
+
 .guide-art {
   font-size: 40px;
   margin-bottom: 8px;
@@ -1005,6 +1103,163 @@ watch(
 
 .text-body {
   white-space: pre-wrap;
+}
+
+/* ReAct 思考与工具链折叠样式 (Stitch 规范) */
+.react-trajectory-box {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.react-toggle-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s;
+}
+
+.react-toggle-bar:hover {
+  background-color: #f1f5f9;
+}
+
+.react-title-col {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.react-badge-pill {
+  font-family: monospace;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: -0.02em;
+}
+
+.react-summary-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.react-right-col {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.react-steps-preview {
+  display: flex;
+  gap: 4px;
+}
+
+.step-micro-tag {
+  font-family: monospace;
+  font-size: 10px;
+  background-color: #e2e8f0;
+  color: #475569;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.react-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.trajectory-step-card {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 11.5px;
+}
+
+.trajectory-step-card.is-error {
+  border-color: #fecaca;
+  background-color: #fef2f2;
+}
+
+.step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.step-num-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-order {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.step-fn-name {
+  font-family: monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.step-duration-badge {
+  font-family: monospace;
+  font-size: 10px;
+  background-color: #e2e8f0;
+  color: #475569;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.step-thought-row,
+.step-args-row,
+.step-obs-row {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.step-sub-label {
+  font-weight: 600;
+  color: #64748b;
+  margin-right: 4px;
+}
+
+.step-thought-text {
+  color: #475569;
+  font-style: italic;
+}
+
+.step-code-block {
+  font-family: monospace;
+  font-size: 11px;
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 6px 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+
+.step-obs-text {
+  color: #334155;
+  line-height: 1.4;
+  word-break: break-all;
 }
 
 /* RAG 切片溯源折叠样式 */

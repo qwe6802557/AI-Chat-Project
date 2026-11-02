@@ -52,6 +52,15 @@
                   知识库 ({{ role.knowledgeBaseIds.length }})
                 </a-tag>
               </a-tooltip>
+              <a-tooltip
+                v-if="role.enabledTools && role.enabledTools.length > 0"
+                :title="getToolTitles(role.enabledTools)"
+              >
+                <a-tag color="purple" class="tag-badge">
+                  <template #icon><ToolOutlined /></template>
+                  工具 ({{ role.enabledTools.length }})
+                </a-tag>
+              </a-tooltip>
             </div>
 
             <p class="role-desc">
@@ -148,6 +157,25 @@
         </div>
 
         <div class="form-item">
+          <div class="form-label-row">
+            <label class="form-label">启用扩展工具 (ReAct Tools)</label>
+            <span class="form-tip">智能体可在思考过程中自主调用此白名单中的工具</span>
+          </div>
+          <a-select
+            v-model:value="formData.enabledTools"
+            mode="multiple"
+            placeholder="选择允许智能体自主调用的工具（支持多选）"
+            allow-clear
+            :max-tag-count="3"
+            style="width: 100%"
+          >
+            <a-select-option v-for="t in availableTools" :key="t.id" :value="t.id">
+              {{ t.title }} ({{ t.id }}) - {{ t.description }}
+            </a-select-option>
+          </a-select>
+        </div>
+
+        <div class="form-item">
           <label class="form-label">专属角色设定 (System Prompt)</label>
           <a-textarea
             v-model:value="formData.systemPrompt"
@@ -174,6 +202,7 @@ import {
   DeleteOutlined,
   RobotOutlined,
   BookOutlined,
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 import {
   getRoleList,
@@ -202,14 +231,31 @@ const isEditing = ref(false)
 const editingId = ref<string | null>(null)
 const submitting = ref(false)
 
+const availableTools = [
+  { id: 'web_search', title: '联网搜索', description: '全网信息实时检索' },
+  { id: 'calculator', title: '数学计算器', description: '高精度数值计算' },
+  { id: 'code_interpreter', title: '代码沙箱', description: 'Python/JS 安全运算' },
+  { id: 'weather', title: '实时天气', description: '城市天气与气温查询' },
+  { id: 'url_fetcher', title: '网页抓取', description: '解析外部 URL 网页正文' },
+  { id: 'clock_calendar', title: '时钟日历', description: '精准时间与日历查询' },
+]
+
 const formData = ref({
   name: '',
   description: '',
   boundModelId: undefined as string | undefined,
   systemPrompt: '',
   knowledgeBaseIds: [] as string[],
+  enabledTools: [] as string[],
   isDefault: false,
 })
+
+const getToolTitles = (toolIds?: string[] | null): string => {
+  if (!toolIds || toolIds.length === 0) return ''
+  return toolIds
+    .map((id) => availableTools.find((t) => t.id === id)?.title || id)
+    .join('、')
+}
 
 const fetchKnowledgeBases = async () => {
   try {
@@ -254,6 +300,7 @@ const openCreateModal = () => {
     boundModelId: undefined,
     systemPrompt: '',
     knowledgeBaseIds: [],
+    enabledTools: [],
     isDefault: roles.value.length === 0,
   }
   editModalVisible.value = true
@@ -269,6 +316,7 @@ const openEditModal = (role: AgentRole) => {
     boundModelId: role.boundModelId || undefined,
     systemPrompt: role.systemPrompt || '',
     knowledgeBaseIds: Array.isArray(role.knowledgeBaseIds) ? [...role.knowledgeBaseIds] : [],
+    enabledTools: Array.isArray(role.enabledTools) ? [...role.enabledTools] : [],
     isDefault: !!role.isDefault,
   }
   editModalVisible.value = true
@@ -288,6 +336,7 @@ const handleSaveRole = async () => {
       boundModelId: formData.value.boundModelId || null,
       systemPrompt: formData.value.systemPrompt || null,
       knowledgeBaseIds: formData.value.knowledgeBaseIds || [],
+      enabledTools: formData.value.enabledTools || [],
       isDefault: formData.value.isDefault,
     }
 

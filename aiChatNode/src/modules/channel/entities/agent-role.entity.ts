@@ -47,6 +47,9 @@ export class AgentRole {
   @Column({ name: 'knowledge_base_ids', type: 'jsonb', nullable: true, default: () => "'[]'" })
   knowledgeBaseIds: string[] | null;
 
+  @Column({ name: 'enabled_tools', type: 'jsonb', nullable: true, default: () => "'[]'" })
+  enabledTools: string[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
