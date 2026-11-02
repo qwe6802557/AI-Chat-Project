@@ -46,6 +46,7 @@ export class ChannelController {
       boundModelId?: string | null;
       systemPrompt?: string | null;
       knowledgeBaseIds?: string[] | null;
+      enabledTools?: string[] | null;
       isDefault?: boolean;
     },
   ) {
@@ -65,6 +66,7 @@ export class ChannelController {
       boundModelId?: string | null;
       systemPrompt?: string | null;
       knowledgeBaseIds?: string[] | null;
+      enabledTools?: string[] | null;
       isDefault?: boolean;
     },
   ) {

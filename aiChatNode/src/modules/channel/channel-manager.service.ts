@@ -19,6 +19,7 @@ import { QqDriver } from './drivers/qq.driver';
 import { FeishuDriver } from './drivers/feishu.driver';
 import { DingtalkDriver } from './drivers/dingtalk.driver';
 import { AIClientService } from '../chat/services/ai-client.service';
+import { AgentExecutorService } from '../chat/services/agent-executor.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditBusinessType } from '../credits/types/credits.types';
@@ -57,6 +58,7 @@ export class ChannelManagerService implements OnModuleInit {
     private readonly ragService: HybridRagService,
     private readonly redisService: RedisService,
     private readonly channelMetricsService: ChannelMetricsService,
+    private readonly agentExecutorService: AgentExecutorService,
   ) {}
 
   async onModuleInit() {
@@ -314,6 +316,7 @@ export class ChannelManagerService implements OnModuleInit {
       boundModelId?: string | null;
       systemPrompt?: string | null;
       knowledgeBaseIds?: string[] | null;
+      enabledTools?: string[] | null;
       isDefault?: boolean;
     },
   ): Promise<AgentRole> {
@@ -330,6 +333,7 @@ export class ChannelManagerService implements OnModuleInit {
       systemPrompt: dto.systemPrompt || null,
       isDefault: !!dto.isDefault,
       knowledgeBaseIds: Array.isArray(dto.knowledgeBaseIds) ? dto.knowledgeBaseIds : [],
+      enabledTools: Array.isArray(dto.enabledTools) ? dto.enabledTools : [],
     });
 
     return this.roleRepo.save(role);
@@ -348,6 +352,7 @@ export class ChannelManagerService implements OnModuleInit {
       boundModelId?: string | null;
       systemPrompt?: string | null;
       knowledgeBaseIds?: string[] | null;
+      enabledTools?: string[] | null;
       isDefault?: boolean;
     },
   ): Promise<AgentRole> {
@@ -361,6 +366,9 @@ export class ChannelManagerService implements OnModuleInit {
     if (dto.systemPrompt !== undefined) role.systemPrompt = dto.systemPrompt;
     if (dto.knowledgeBaseIds !== undefined) {
       role.knowledgeBaseIds = Array.isArray(dto.knowledgeBaseIds) ? dto.knowledgeBaseIds : [];
+    }
+    if (dto.enabledTools !== undefined) {
+      role.enabledTools = Array.isArray(dto.enabledTools) ? dto.enabledTools : [];
     }
     if (dto.isDefault !== undefined) role.isDefault = dto.isDefault;
 
@@ -831,10 +839,24 @@ export class ChannelManagerService implements OnModuleInit {
     messages.push({ role: 'user', content });
 
     try {
-      const completion = await this.aiClientService.createChatCompletion(targetModelId, messages);
-      const answer = completion.content || '';
+      const enabledTools = Array.isArray(config.role?.enabledTools)
+        ? config.role.enabledTools
+        : [];
 
-      // 5. 持久化记录智能助理回复流水 (包含切片来源与消耗点数)
+      const agentResult = await this.agentExecutorService.execute({
+        modelId: targetModelId,
+        messages,
+        enabledTools,
+        maxLoops: 3,
+        timeoutMs: 12000,
+        context: {
+          userId,
+          sessionId: instanceId,
+          userMessage: content,
+        },
+      });
+      const answer = agentResult.content || '';
+
       await this.messageRepo
         .save(
           this.messageRepo.create({
@@ -850,6 +872,7 @@ export class ChannelManagerService implements OnModuleInit {
             content: answer,
             costCredits,
             ragSources,
+            metadata: agentResult.trajectory.length > 0 ? { trajectory: agentResult.trajectory } : null,
           }),
         )
         .catch((err) => this.logger.warn(`归档助理回复消息异常: ${err.message}`));

@@ -9,6 +9,7 @@ export interface AgentRole {
   boundModelId?: string | null
   systemPrompt?: string | null
   knowledgeBaseIds?: string[] | null
+  enabledTools?: string[] | null
   isDefault?: boolean
   createdAt?: string
   updatedAt?: string
@@ -21,6 +22,7 @@ export interface CreateRoleDto {
   boundModelId?: string | null
   systemPrompt?: string | null
   knowledgeBaseIds?: string[] | null
+  enabledTools?: string[] | null
   isDefault?: boolean
 }
 
@@ -116,6 +118,16 @@ export interface ChannelRagSourceItem {
   chunkIndex: number
 }
 
+export interface AgentTrajectoryStep {
+  loopIndex: number
+  thought?: string
+  actionName: string
+  actionArgs: Record<string, any>
+  observation: string
+  durationMs: number
+  status: 'success' | 'error'
+}
+
 export interface ChannelMessageItem {
   id: string
   userId: string
@@ -130,7 +142,10 @@ export interface ChannelMessageItem {
   content: string
   costCredits: number
   ragSources: ChannelRagSourceItem[] | null
-  metadata: Record<string, any> | null
+  metadata: {
+    trajectory?: AgentTrajectoryStep[]
+    [key: string]: any
+  } | null
   createdAt: string
 }
 

@@ -5,6 +5,7 @@ import { ChatSessionController } from './chat-session.controller';
 import { ChatService } from './chat.service';
 import { ChatSessionService } from './chat-session.service';
 import { AIClientService } from './services/ai-client.service';
+import { AgentExecutorService } from './services/agent-executor.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from './adapters/grok2api.adapter';
@@ -47,8 +48,9 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     ZhipuAdapter, // 智谱 AI 适配器
     SiliconFlowAdapter, // 硅基流动适配器
     OFMAdapter, // Our Free Model 本地免密适配器
-    XfyunMaaSAdapter, // 科大讯飞星辰 MaaS 适配器 (Spark-X2.6)
+    XfyunMaaSAdapter,
+    AgentExecutorService,
   ],
-  exports: [ChatService, ChatSessionService, AIClientService],
+  exports: [ChatService, ChatSessionService, AIClientService, AgentExecutorService],
 })
 export class ChatModule {}

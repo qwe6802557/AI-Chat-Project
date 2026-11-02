@@ -10,6 +10,7 @@ import { CreditBusinessType } from '../credits/types/credits.types';
 import type { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
 import type { RedisService } from '../../common/redis/redis.service';
 import type { ChannelMetricsService } from './channel-metrics.service';
+import type { AgentExecutorService } from '../chat/services/agent-executor.service';
 
 describe('ChannelManagerService (Multi-tenant & Credits)', () => {
   let service: ChannelManagerService;
@@ -22,6 +23,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
   let mockRagService: Partial<HybridRagService>;
   let mockRedisService: Partial<RedisService>;
   let mockChannelMetricsService: Partial<ChannelMetricsService>;
+  let mockAgentExecutorService: Partial<AgentExecutorService>;
 
   const mockUserId = 'user-uuid-1234';
 
@@ -82,6 +84,15 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       getMetrics: jest.fn().mockResolvedValue({ totalRequests: 0, successRate: 100, avgLatencyMs: 0, errorCount: 0 }),
     };
 
+    mockAgentExecutorService = {
+      execute: jest.fn().mockResolvedValue({
+        content: '您好，我是智能助理！',
+        trajectory: [],
+        totalUsage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+        totalDurationMs: 150,
+      }),
+    };
+
     service = new ChannelManagerService(
       mockChannelRepo as Repository<ChannelConfig>,
       mockRoleRepo as Repository<AgentRole>,
@@ -92,6 +103,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       mockRagService as HybridRagService,
       mockRedisService as RedisService,
       mockChannelMetricsService as ChannelMetricsService,
+      mockAgentExecutorService as AgentExecutorService,
     );
   });
 
@@ -146,7 +158,7 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       );
 
       expect(response).toBe('您好，我是智能助理！');
-      expect(mockAiClientService.createChatCompletion).toHaveBeenCalledTimes(1);
+      expect(mockAgentExecutorService.execute).toHaveBeenCalledTimes(1);
       expect(mockCreditsService.deductDirectCredits).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: mockUserId,
