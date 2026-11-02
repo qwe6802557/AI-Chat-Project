@@ -12,6 +12,7 @@ import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { ToolRegistryService } from '../tools/tools.registry.service';
+import { ApprovalManagerService } from './services/approval-manager.service';
 import { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
 import { DEFAULT_CHAT_BILLING_MODE, DEFAULT_CHAT_MODEL_CREDIT_COST } from '../credits/types/credits.types';
 
@@ -22,12 +23,20 @@ describe('ChatService - Billing & Credits', () => {
     search: jest.fn().mockResolvedValue([]),
   };
 
+const mockApprovalManagerService = {
+    createPendingApproval: jest.fn(),
+    waitForDecision: jest.fn(),
+    resolveApproval: jest.fn(),
+    getPendingApproval: jest.fn(),
+  };
+
   const mockToolRegistryService = {
     autoExecutePresetTools: jest.fn().mockResolvedValue([]),
     executeTool: jest.fn(),
     listTools: jest.fn().mockReturnValue([]),
     toOpenAITools: jest.fn().mockReturnValue([]),
     getPlugin: jest.fn(),
+    evaluateToolRisk: jest.fn().mockReturnValue({ level: 'low', requiresApproval: false }),
   };
 
   const mockWebSearchService = {
@@ -101,6 +110,7 @@ describe('ChatService - Billing & Credits', () => {
         { provide: CreditsService, useValue: mockCreditsService },
         { provide: WebSearchService, useValue: mockWebSearchService },
         { provide: ToolRegistryService, useValue: mockToolRegistryService },
+        { provide: ApprovalManagerService, useValue: mockApprovalManagerService },
         { provide: HybridRagService, useValue: mockHybridRagService },
       ],
     }).compile();

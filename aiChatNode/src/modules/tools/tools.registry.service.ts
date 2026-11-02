@@ -11,6 +11,7 @@ import type {
   ToolExecutionRecord,
   ToolExecutionResult,
   ToolMetadata,
+  ToolRiskEvaluation,
 } from './types/tools.types';
 import { randomUUID } from 'crypto';
 
@@ -59,6 +60,34 @@ export class ToolRegistryService {
   /**
    * 执行指定插件
    */
+/**
+   * 评估指定工具及入参的执行风险
+   */
+  evaluateToolRisk(
+    name: string,
+    args: Record<string, any>,
+    context?: ToolExecutionContext,
+  ): ToolRiskEvaluation {
+    const plugin = this.getPlugin(name);
+    if (!plugin) {
+      return {
+        level: 'low',
+        requiresApproval: false,
+      };
+    }
+
+    if (plugin.evaluateRisk) {
+      return plugin.evaluateRisk(args, context);
+    }
+
+    const baselineRisk = plugin.metadata.riskLevel || 'low';
+    return {
+      level: baselineRisk,
+      requiresApproval: baselineRisk === 'high',
+      reason: baselineRisk === 'high' ? `高风险工具 ${plugin.metadata.title} 执行需操作者授权` : undefined,
+    };
+  }
+
   async executeTool(
     name: string,
     args: Record<string, any>,
@@ -84,6 +113,7 @@ export class ToolRegistryService {
     }
 
     this.logger.log(`开始执行工具: ${name}, 入参: ${JSON.stringify(args).slice(0, 150)}`);
+    const riskEvaluation = this.evaluateToolRisk(name, args, context);
     const result: ToolExecutionResult = await plugin.execute(args, context);
     this.logger.log(`工具执行完成: ${name}, 状态: ${result.status}, 耗时: ${result.durationMs}ms`);
 

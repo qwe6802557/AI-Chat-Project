@@ -105,4 +105,60 @@ describe('ToolExecutionCard', () => {
 
     expect(wrapper.text()).toContain('City not found')
   })
+
+  it('renders pending_approval state with Stitch authorization micro-card', () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_danger_1',
+        name: 'code_interpreter',
+        status: 'pending_approval',
+        arguments: { language: 'python', code: 'import os; os.system("whoami")' },
+        approvalId: 'app_test_123',
+        riskLevel: 'high',
+        riskReason: '检测到底层系统操作指令，必须授权后执行',
+      },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
+    })
+
+    expect(wrapper.text()).toContain('待审批确认')
+    expect(wrapper.find('.badge-approval').exists()).toBe(true)
+    expect(wrapper.find('.tool-card.is-pending-approval').exists()).toBe(true)
+
+    // 默认自动展开
+    expect(wrapper.find('.tool-card-body').exists()).toBe(true)
+    expect(wrapper.text()).toContain('高危操作授权确认')
+    expect(wrapper.text()).toContain('HIGH RISK')
+    expect(wrapper.text()).toContain('检测到底层系统操作指令，必须授权后执行')
+
+    // 触感按键
+    expect(wrapper.find('.stitch-btn-approve').exists()).toBe(true)
+    expect(wrapper.find('.stitch-btn-reject').exists()).toBe(true)
+    expect(wrapper.text()).toContain('放行执行')
+    expect(wrapper.text()).toContain('终止调用')
+  })
+
+  it('renders rejected state correctly', async () => {
+    const toolCalls: ToolCallItem[] = [
+      {
+        id: 'call_danger_rej',
+        name: 'code_interpreter',
+        status: 'rejected',
+        arguments: { language: 'python', code: 'del c:' },
+        error: '操作者已终止执行此高危操作',
+      },
+    ]
+
+    const wrapper = mount(ToolExecutionCard, {
+      props: { toolCalls },
+    })
+
+    expect(wrapper.text()).toContain('已终止执行')
+    expect(wrapper.find('.badge-rejected').exists()).toBe(true)
+
+    await wrapper.find('.tool-card-header').trigger('click')
+    expect(wrapper.text()).toContain('已被就地终止')
+  })
 })

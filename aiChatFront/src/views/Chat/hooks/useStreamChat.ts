@@ -315,7 +315,8 @@ export function useStreamChat() {
 
             switch (chunk.type) {
               case 'tool_call_start':
-              case 'tool_call_result': {
+              case 'tool_call_result':
+              case 'tool_approval_required': {
                 const messageId = ensureAssistantMessage()
                 const toolCall = chunk.toolCall
                 if (toolCall) {

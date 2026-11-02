@@ -19,6 +19,10 @@ describe('AgentExecutorService', () => {
         })),
       ),
       executeTool: jest.fn(),
+      evaluateToolRisk: jest.fn().mockReturnValue({
+        level: 'low',
+        requiresApproval: false,
+      }),
     };
 
     service = new AgentExecutorService(
@@ -98,6 +102,45 @@ describe('AgentExecutorService', () => {
     expect(result.totalUsage.totalTokens).toBe(77);
   });
 
+  it('在外部通道环境中遇到需要审批的高危工具时应触发静态安全策略拦截', async () => {
+    (toolRegistryServiceMock.evaluateToolRisk as jest.Mock).mockReturnValueOnce({
+      level: 'high',
+      requiresApproval: true,
+      reason: '高风险系统操作',
+    });
+
+    (aiClientServiceMock.createChatCompletion as jest.Mock)
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          {
+            id: 'call_danger',
+            type: 'function',
+            function: {
+              name: 'code_interpreter',
+              arguments: JSON.stringify({ code: 'os.system("rm -rf /")' }),
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        content: '抱歉，当前外部通道环境无法执行高危操作。',
+        toolCalls: [],
+      });
+
+    const result = await service.execute({
+      modelId: 'test-model',
+      messages: [{ role: 'user', content: '执行高危脚本' }],
+      enabledTools: ['code_interpreter'],
+    });
+
+    expect(toolRegistryServiceMock.executeTool).not.toHaveBeenCalled();
+    expect(result.trajectory).toHaveLength(1);
+    expect(result.trajectory[0].status).toBe('error');
+    expect(result.trajectory[0].observation).toContain('安全策略拦截');
+    expect(result.content).toBe('抱歉，当前外部通道环境无法执行高危操作。');
+  });
+
   it('应该在达到最大循环轮数时剥离工具权限强制收敛', async () => {
     (aiClientServiceMock.createChatCompletion as jest.Mock)
       .mockResolvedValueOnce({
@@ -121,7 +164,6 @@ describe('AgentExecutorService', () => {
     });
 
     expect(result.content).toBe('经过计算结果为 4。');
-    // 第二次调用时因为 loopCount >= maxLoops，roundTools 应该被设为 undefined
     const secondCall = (aiClientServiceMock.createChatCompletion as jest.Mock).mock.calls[1];
     expect(secondCall[2].tools).toBeUndefined();
   });
