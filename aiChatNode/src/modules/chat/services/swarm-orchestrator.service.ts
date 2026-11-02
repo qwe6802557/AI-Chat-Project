@@ -202,9 +202,11 @@ export class SwarmOrchestratorService {
       timelineEvent.outputSnippet = subResult.content.slice(0, 160);
       options.onTimelineEvent?.(timelineEvent);
 
-      accumulatedUsage.promptTokens += subResult.usage.promptTokens;
-      accumulatedUsage.completionTokens += subResult.usage.completionTokens;
-      accumulatedUsage.totalTokens = accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+      if (subResult.totalUsage) {
+        accumulatedUsage.promptTokens += subResult.totalUsage.promptTokens || 0;
+        accumulatedUsage.completionTokens += subResult.totalUsage.completionTokens || 0;
+        accumulatedUsage.totalTokens = accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+      }
 
       // 回填子智能体产出供主控继续推理
       currentMessages.push({
@@ -290,9 +292,11 @@ export class SwarmOrchestratorService {
       timelineEvent.outputSnippet = subResult.content.slice(0, 160);
       options.onTimelineEvent?.(timelineEvent);
 
-      accumulatedUsage.promptTokens += subResult.usage.promptTokens;
-      accumulatedUsage.completionTokens += subResult.usage.completionTokens;
-      accumulatedUsage.totalTokens = accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+      if (subResult.totalUsage) {
+        accumulatedUsage.promptTokens += subResult.totalUsage.promptTokens || 0;
+        accumulatedUsage.completionTokens += subResult.totalUsage.completionTokens || 0;
+        accumulatedUsage.totalTokens = accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+      }
 
       currentInput = subResult.content;
       previousAgentName = subRole.name;

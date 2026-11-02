@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChannelConfig, ChannelType } from './entities/channel-config.entity';
-import { AgentRole } from './entities/agent-role.entity';
+import { AgentRole, AgentTeamConfig } from './entities/agent-role.entity';
 import { ChannelMessage, type ChannelRagSourceItem } from './entities/channel-message.entity';
 import {
   IChannelDriver,
@@ -319,7 +319,7 @@ export class ChannelManagerService implements OnModuleInit {
       enabledTools?: string[] | null;
       isDefault?: boolean;
       isTeam?: boolean;
-      teamConfig?: Record<string, any> | null;
+      teamConfig?: AgentTeamConfig | null;
     },
   ): Promise<AgentRole> {
     if (!dto.name || !dto.name.trim()) {
@@ -359,7 +359,7 @@ export class ChannelManagerService implements OnModuleInit {
       enabledTools?: string[] | null;
       isDefault?: boolean;
       isTeam?: boolean;
-      teamConfig?: Record<string, any> | null;
+      teamConfig?: AgentTeamConfig | null;
     },
   ): Promise<AgentRole> {
     const role = await this.roleRepo.findOne({ where: { id: roleId, userId } });
