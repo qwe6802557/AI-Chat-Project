@@ -1,3 +1,16 @@
+export interface SwarmTimelineEvent {
+  id: string
+  type: 'handoff' | 'subagent_execution' | 'conclude'
+  timestamp: number
+  fromAgent: string
+  toAgent: string
+  modelId?: string
+  task?: string
+  outputSnippet?: string
+  durationMs?: number
+  status: 'running' | 'completed' | 'failed'
+}
+
 import type { UserCredits } from '@/types/user'
 
 /**

@@ -1,5 +1,11 @@
 import request, { type ResponseData } from '@/utils/request'
 
+export interface AgentTeamConfig {
+  subAgentRoleIds: string[]
+  routerStrategy?: 'supervisor' | 'sequential'
+  maxHandoffs?: number
+}
+
 export interface AgentRole {
   id: string
   userId?: string
@@ -11,6 +17,8 @@ export interface AgentRole {
   knowledgeBaseIds?: string[] | null
   enabledTools?: string[] | null
   isDefault?: boolean
+  isTeam?: boolean
+  teamConfig?: AgentTeamConfig | null
   createdAt?: string
   updatedAt?: string
 }
@@ -24,6 +32,8 @@ export interface CreateRoleDto {
   knowledgeBaseIds?: string[] | null
   enabledTools?: string[] | null
   isDefault?: boolean
+  isTeam?: boolean
+  teamConfig?: AgentTeamConfig | null
 }
 
 export interface ChannelInfo {

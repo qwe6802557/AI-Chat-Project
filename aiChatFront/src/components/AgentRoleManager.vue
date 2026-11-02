@@ -185,6 +185,48 @@
         </div>
 
         <div class="form-item-inline">
+          <label class="form-label">启用多智能体协同团队 (Swarm)</label>
+          <a-switch v-model:checked="formData.isTeam" />
+        </div>
+
+        <template v-if="formData.isTeam">
+          <div class="form-item">
+            <div class="form-label-row">
+              <label class="form-label required">团队成员子角色 (Sub-Agents)</label>
+              <span class="form-tip">主控智能体可将任务自主分发交接给选中的子角色</span>
+            </div>
+            <a-select
+              v-model:value="formData.teamSubAgentRoleIds"
+              mode="multiple"
+              placeholder="选择此团队包含的专家角色（支持多选）"
+              allow-clear
+              style="width: 100%"
+            >
+              <a-select-option
+                v-for="r in roles.filter(item => !item.isTeam && item.id !== editingId)"
+                :key="r.id"
+                :value="r.id"
+              >
+                {{ r.name }} ({{ r.boundModelId || '默认模型' }})
+              </a-select-option>
+            </a-select>
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">协作路由策略</label>
+            <a-select v-model:value="formData.teamRouterStrategy" style="width: 100%">
+              <a-select-option value="supervisor">主控自主动态分发与交接 (Supervisor Swarm)</a-select-option>
+              <a-select-option value="sequential">依序流水线执行 (Sequential Pipeline)</a-select-option>
+            </a-select>
+          </div>
+
+          <div class="form-item">
+            <label class="form-label">最大交接跳数 (防止循环死锁)</label>
+            <a-input-number v-model:value="formData.teamMaxHandoffs" :min="1" :max="5" style="width: 100%" />
+          </div>
+        </template>
+
+        <div class="form-item-inline">
           <label class="form-label">设为默认助理</label>
           <a-switch v-model:checked="formData.isDefault" />
         </div>
@@ -203,6 +245,7 @@ import {
   RobotOutlined,
   BookOutlined,
   ToolOutlined,
+  BranchesOutlined,
 } from '@ant-design/icons-vue'
 import {
   getRoleList,
@@ -248,6 +291,10 @@ const formData = ref({
   knowledgeBaseIds: [] as string[],
   enabledTools: [] as string[],
   isDefault: false,
+  isTeam: false,
+  teamSubAgentRoleIds: [] as string[],
+  teamRouterStrategy: 'supervisor' as 'supervisor' | 'sequential',
+  teamMaxHandoffs: 3,
 })
 
 const getToolTitles = (toolIds?: string[] | null): string => {
@@ -302,6 +349,10 @@ const openCreateModal = () => {
     knowledgeBaseIds: [],
     enabledTools: [],
     isDefault: roles.value.length === 0,
+    isTeam: false,
+    teamSubAgentRoleIds: [],
+    teamRouterStrategy: 'supervisor',
+    teamMaxHandoffs: 3,
   }
   editModalVisible.value = true
 }
@@ -318,6 +369,10 @@ const openEditModal = (role: AgentRole) => {
     knowledgeBaseIds: Array.isArray(role.knowledgeBaseIds) ? [...role.knowledgeBaseIds] : [],
     enabledTools: Array.isArray(role.enabledTools) ? [...role.enabledTools] : [],
     isDefault: !!role.isDefault,
+    isTeam: !!role.isTeam,
+    teamSubAgentRoleIds: Array.isArray(role.teamConfig?.subAgentRoleIds) ? [...role.teamConfig.subAgentRoleIds] : [],
+    teamRouterStrategy: role.teamConfig?.routerStrategy || 'supervisor',
+    teamMaxHandoffs: role.teamConfig?.maxHandoffs || 3,
   }
   editModalVisible.value = true
 }
@@ -338,6 +393,14 @@ const handleSaveRole = async () => {
       knowledgeBaseIds: formData.value.knowledgeBaseIds || [],
       enabledTools: formData.value.enabledTools || [],
       isDefault: formData.value.isDefault,
+      isTeam: formData.value.isTeam,
+      teamConfig: formData.value.isTeam
+        ? {
+            subAgentRoleIds: formData.value.teamSubAgentRoleIds,
+            routerStrategy: formData.value.teamRouterStrategy,
+            maxHandoffs: formData.value.teamMaxHandoffs,
+          }
+        : null,
     }
 
     if (isEditing.value && editingId.value) {

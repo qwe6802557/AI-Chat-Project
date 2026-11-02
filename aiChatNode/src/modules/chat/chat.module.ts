@@ -7,6 +7,7 @@ import { ChatSessionService } from './chat-session.service';
 import { AIClientService } from './services/ai-client.service';
 import { AgentExecutorService } from './services/agent-executor.service';
 import { ApprovalManagerService } from './services/approval-manager.service';
+import { SwarmOrchestratorService } from './services/swarm-orchestrator.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from './adapters/grok2api.adapter';
@@ -52,6 +53,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     XfyunMaaSAdapter,
     AgentExecutorService,
     ApprovalManagerService,
+    SwarmOrchestratorService,
   ],
   exports: [
     ChatService,
@@ -59,6 +61,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     AIClientService,
     AgentExecutorService,
     ApprovalManagerService,
+    SwarmOrchestratorService,
   ],
 })
 export class ChatModule {}

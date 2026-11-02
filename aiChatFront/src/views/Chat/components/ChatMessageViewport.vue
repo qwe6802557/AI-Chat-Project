@@ -82,6 +82,10 @@
               :search-query="message.searchQuery"
               @open-source="handleOpenKnowledgeSource"
             />
+            <AgentCollaborationTimeline
+              v-if="message.role === 'assistant' && message.agentTimeline && message.agentTimeline.length > 0"
+              :timeline="message.agentTimeline"
+            />
             <ToolExecutionCard
               v-if="message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0"
               :tool-calls="message.toolCalls"
@@ -316,6 +320,7 @@ import MarkdownMessage from './MarkdownMessage.vue'
 import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
+import AgentCollaborationTimeline from './AgentCollaborationTimeline.vue'
 import ChatSkeletonLoader from './ChatSkeletonLoader.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
