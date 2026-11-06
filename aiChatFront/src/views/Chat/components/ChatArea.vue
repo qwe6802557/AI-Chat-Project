@@ -106,19 +106,14 @@
 
         <div class="params-row">
           <div class="params-left">
-            <div class="model-select-wrapper">
-              <ThunderboltOutlined class="model-select-icon" />
-              <a-select
-                :value="selectedModel"
-                :options="modelOptions"
-                :loading="modelsLoading"
-                size="small"
-                class="param-select model-select"
-                :bordered="false"
-                :dropdown-match-select-width="260"
-                @change="handleModelChange"
-              />
-            </div>
+            <ModelSelectorPopover
+              :selected-model="selectedModel"
+              :model-options="modelOptions"
+              :loading="modelsLoading"
+              :disabled="loading"
+              :credits-remaining="currentCreditsRemaining"
+              @update:selected-model="handleModelChange"
+            />
 
             <div
               class="upload-trigger-btn"
@@ -185,7 +180,6 @@ import {
   CloudUploadOutlined,
   PaperClipOutlined,
   ArrowUpOutlined,
-  ThunderboltOutlined,
   ThunderboltFilled,
 } from '@ant-design/icons-vue'
 import { IMAGE_UPLOAD_ACCEPT, useFileUpload } from '@/hooks/useFileUpload'
@@ -194,6 +188,7 @@ import { useArtifactStore } from '../stores/useArtifactStore'
 import FilePreview from './FilePreview.vue'
 import ChatMessageViewport from './ChatMessageViewport.vue'
 import QueuedMessageCard from './QueuedMessageCard.vue'
+import ModelSelectorPopover from './ModelSelectorPopover.vue'
 import type { QueuedMessage } from '@/interface/conversation'
 import WebSearchToggle from './WebSearchToggle.vue'
 import ToolQuickCapsules from './ToolQuickCapsules.vue'

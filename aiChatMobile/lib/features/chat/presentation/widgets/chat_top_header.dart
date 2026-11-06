@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../../auth/providers/auth_provider.dart';
+import 'model_switcher_bottom_sheet.dart';
 
 /// Stitch AI 顶部导航状态栏
 class ChatTopHeader extends ConsumerWidget {
@@ -112,7 +113,7 @@ class ChatTopHeader extends ConsumerWidget {
                       ),
                       const SizedBox(width: 6.0),
                       Text(
-                        selectedModel,
+                        ModelSwitcherBottomSheet.formatModelLabel(selectedModel),
                         style: const TextStyle(
                           fontSize: 11.0,
                           fontWeight: FontWeight.w600,

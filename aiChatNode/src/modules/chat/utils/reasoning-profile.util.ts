@@ -211,6 +211,36 @@ export const resolveModelReasoningProfile = (params: {
     };
   }
 
+  if (
+    normalizedProviderName.includes('gemini') ||
+    normalizedProviderName.includes('google')
+  ) {
+    const isReasoning =
+      modelId.includes('high') ||
+      modelId.includes('medium') ||
+      modelId.includes('low') ||
+      matchesAnyPattern(modelId, RAW_REASONING_MODEL_PATTERNS);
+
+    if (isReasoning) {
+      return {
+        capability: 'raw',
+        strategy: 'provider_preferred',
+        integration: 'inline_tag',
+        modelId,
+        providerName,
+        badgeLabel: '支持思考过程',
+      };
+    }
+
+    return {
+      capability: 'none',
+      strategy: 'summary_preferred',
+      integration: 'none',
+      modelId,
+      providerName,
+    };
+  }
+
   return {
     capability: 'none',
     strategy: 'summary_preferred',

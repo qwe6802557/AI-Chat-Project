@@ -7,6 +7,7 @@ import { ZhipuAdapter } from '../adapters/zhipu.adapter';
 import { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
 import { OFMAdapter } from '../adapters/ofm.adapter';
 import { XfyunMaaSAdapter } from '../adapters/xfyun-maas.adapter';
+import { GeminiAdapter } from '../adapters/gemini.adapter';
 import { IProviderAdapter } from '../adapters/provider-adapter.interface';
 import { AiModel } from '../../ai-provider/entities/ai-model.entity';
 import { AiModelService } from '../../ai-provider/ai-model.service';
@@ -71,6 +72,7 @@ export class AIClientService {
     private readonly siliconFlowAdapter: SiliconFlowAdapter,
     private readonly ofmAdapter: OFMAdapter,
     private readonly xfyunMaaSAdapter: XfyunMaaSAdapter,
+    private readonly geminiAdapter: GeminiAdapter,
     private readonly aiModelService: AiModelService,
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
@@ -487,6 +489,13 @@ export class AIClientService {
       normalizedProviderName.includes('spark')
     ) {
       return this.xfyunMaaSAdapter;
+    }
+
+    if (
+      normalizedProviderName.includes('gemini') ||
+      normalizedProviderName.includes('google')
+    ) {
+      return this.geminiAdapter;
     }
 
     if (

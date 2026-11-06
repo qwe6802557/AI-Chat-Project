@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../../../shared/widgets/glass_card.dart';
+import 'model_switcher_bottom_sheet.dart';
 
 /// Stitch AI 顶部吸顶模型指示条
 class ChatStickyModelBar extends StatelessWidget {
@@ -38,7 +39,7 @@ class ChatStickyModelBar extends StatelessWidget {
             ),
             const SizedBox(width: 6.0),
             Text(
-              model,
+              ModelSwitcherBottomSheet.formatModelLabel(model),
               style: const TextStyle(
                 fontSize: 12.0,
                 fontWeight: FontWeight.w600,
