@@ -110,11 +110,6 @@
               <span class="btn-text">高 High</span>
             </button>
           </div>
-
-          <!-- 强度动态提示说明 -->
-          <div class="intensity-footnote">
-            {{ intensityFootnote }}
-          </div>
         </div>
 
         <!-- 2. 其它模型分组面板 -->
@@ -238,19 +233,6 @@ const currentDisplayLabel = computed(() => {
   }
   const matched = props.modelOptions.find((m) => m.value === props.selectedModel)
   return matched?.label || props.selectedModel
-})
-
-// 思考强度副文本说明
-const intensityFootnote = computed(() => {
-  switch (currentGeminiIntensity.value) {
-    case 'low':
-      return 'Low：轻量快速思考，极速即时首字输出，适合日常高频问答'
-    case 'high':
-      return 'High：极限深度思维链，适用于复杂算法设计与长逻辑推导'
-    case 'medium':
-    default:
-      return 'Medium：推荐基准，兼顾流式首字响应与高质量深度逻辑推导'
-  }
 })
 
 // 切换类别
@@ -493,16 +475,6 @@ const selectOtherModel = (modelId: string) => {
         color: #ffffff;
       }
     }
-  }
-
-  .intensity-footnote {
-    font-size: 11px;
-    color: #64748b;
-    line-height: 1.4;
-    padding: 4px 6px;
-    background-color: #f8fafc;
-    border-radius: 6px;
-    border-left: 2px solid #3b82f6;
   }
 
   .other-models-list {
