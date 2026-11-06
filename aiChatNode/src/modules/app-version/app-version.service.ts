@@ -41,20 +41,21 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.2.0',
-      latestVersionCode: 12,
+      latestVersion: '1.2.1',
+      latestVersionCode: 13,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '21.5 MB',
+      packageSize: '21.8 MB',
       releaseNotes: [
-        '下架不可用模型：全面移除 grok-4.3 与 grok-build-0.1，对话模型精简为 4 款高效稳定模型',
-        '原生 Slim Release 架构构建，遵循最小体积原则，性能与下载更轻快',
-        '移动端与 Web 端全面同步，优化网络流式与会话稳定性',
+        '接入 Google Gemini 3.8 Flash 与 Gemini 4 Argon 旗舰系列大模型',
+        '支持 Low / Medium / High 三档动态思考强度无缝切换',
+        '移动端重构触觉分层模型切换抽屉与顶栏友好回显',
+        '全面优化流式传输与会话性能，界面去 AI 味更加高级克制',
       ],
       forceUpdate: false,
-      publishedAt: '2026-10-18T04:00:00.000Z',
+      publishedAt: '2026-11-06T15:30:00.000Z',
     };
   }
 
