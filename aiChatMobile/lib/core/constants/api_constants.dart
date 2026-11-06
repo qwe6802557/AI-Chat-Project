@@ -46,7 +46,7 @@ class ApiConstants {
   static const int videoGenerationCost = 200;
 
   // 业务默认值与阈值
-  static const String appVersion = '1.2.0';
+  static const String appVersion = '1.2.1';
   static const String defaultChatModel = 'gemini-3.8-flash-medium';
   static const int chatMessageCost = 10;
   static const int imageGenerationCost = 100;
