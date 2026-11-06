@@ -166,9 +166,9 @@ const isChatModel = (model: { modelId?: string; category?: string } | null | und
 }
 
 // 模型选择
-const DEFAULT_CHAT_MODEL = 'grok-chat-fast'
+const DEFAULT_CHAT_MODEL = 'gemini-3.8-flash-medium'
 const MODEL_VERSION_KEY = 'chat_model_default_version'
-const CURRENT_MODEL_VERSION = '2026-10-18-grok-fast'
+const CURRENT_MODEL_VERSION = '2026-11-06-gemini-flash-medium'
 const DEPRECATED_CHAT_MODELS = [
   'grok-4.3',
   'grok-build-0.1',
@@ -350,8 +350,10 @@ const loadModelOptions = async () => {
       // 用户进来：若当前未主动手动换过模型，或已有选定模型失效，默认第一个模型且被默认选中
       const hasManuallySelected = sessionStorage.getItem('hasManuallySelectedChatModel') === 'true'
       if (!hasManuallySelected || !modelOptions.value.some((model) => model.value === selectedModel.value)) {
-        selectedModel.value = defaultModel.value
-        saveSelectedModel()
+        if (defaultModel) {
+          selectedModel.value = defaultModel.value
+          saveSelectedModel()
+        }
       }
     }
   } catch (error) {

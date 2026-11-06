@@ -15,6 +15,7 @@ import { ZhipuAdapter } from './adapters/zhipu.adapter';
 import { SiliconFlowAdapter } from './adapters/siliconflow.adapter';
 import { OFMAdapter } from './adapters/ofm.adapter';
 import { XfyunMaaSAdapter } from './adapters/xfyun-maas.adapter';
+import { GeminiAdapter } from './adapters/gemini.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
@@ -51,6 +52,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     SiliconFlowAdapter,
     OFMAdapter,
     XfyunMaaSAdapter,
+    GeminiAdapter,
     AgentExecutorService,
     ApprovalManagerService,
     SwarmOrchestratorService,
@@ -59,6 +61,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     ChatService,
     ChatSessionService,
     AIClientService,
+    GeminiAdapter,
     AgentExecutorService,
     ApprovalManagerService,
     SwarmOrchestratorService,
