@@ -173,7 +173,7 @@ const getIconComponent = (iconName: string) => {
   align-items: center;
   gap: 5px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
@@ -183,6 +183,7 @@ const getIconComponent = (iconName: string) => {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 
   &:hover:not(.disabled) {

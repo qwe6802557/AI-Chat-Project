@@ -230,11 +230,11 @@ const otherModelOptions = computed(() => {
 const currentDisplayLabel = computed(() => {
   if (props.selectedModel.startsWith('gemini-3.8-flash')) {
     const intensityMap = { low: 'Low', medium: 'Med', high: 'High' }
-    return `Gemini 3.8 Flash · ${intensityMap[currentGeminiIntensity.value]} 思考`
+    return `Gemini 3.8 Flash · ${intensityMap[currentGeminiIntensity.value]}`
   }
   if (props.selectedModel.startsWith('gemini-4-argon')) {
     const intensityMap = { low: 'Low', medium: 'Med', high: 'High' }
-    return `Gemini 4 Argon · ${intensityMap[currentGeminiIntensity.value]} 思考`
+    return `Gemini 4 Argon · ${intensityMap[currentGeminiIntensity.value]}`
   }
   const matched = props.modelOptions.find((m) => m.value === props.selectedModel)
   return matched?.label || props.selectedModel

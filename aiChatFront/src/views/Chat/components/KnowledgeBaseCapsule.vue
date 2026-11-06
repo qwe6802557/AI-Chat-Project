@@ -125,7 +125,7 @@ onMounted(() => {
   align-items: center;
   gap: 5px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
@@ -134,6 +134,8 @@ onMounted(() => {
   border: 1px solid #e2e8f0;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover:not(.disabled) {

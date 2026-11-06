@@ -141,7 +141,10 @@
               @update:selected-ids="handleKnowledgeBaseUpdate"
             />
 
-            <span v-if="selectedModelReasoningBadgeLabel" class="reasoning-badge">
+            <span
+              v-if="selectedModelReasoningBadgeLabel && !selectedModel.startsWith('gemini-')"
+              class="reasoning-badge"
+            >
               {{ selectedModelReasoningBadgeLabel }}
             </span>
           </div>
@@ -856,7 +859,7 @@ $font-size-lg: 16px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border-radius: 8px;
   font-size: 12px;
   color: #475467;
@@ -864,6 +867,8 @@ $font-size-lg: 16px;
   border: 1px solid #e2e8f0;
   cursor: pointer;
   user-select: none;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
   transition: all 0.2s ease;
 
   &:hover:not(.disabled) {
@@ -890,6 +895,16 @@ $font-size-lg: 16px;
   color: #2563eb;
   border: 1px solid #dbeafe;
   font-weight: 500;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+:deep(.web-search-toggle),
+:deep(.kb-capsule-btn),
+:deep(.tool-capsule-btn),
+:deep(.model-capsule-trigger) {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
 }
 
 .params-right {
