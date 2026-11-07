@@ -68,26 +68,37 @@
           />
 
           <div class="action-btn-cluster">
-            <!-- 仅在流式生成且输入框没有待排队内容时，展示主停止按钮 -->
+            <!-- 流式生成且输入框有文本时：双模并存（停止小方块 + ⚡ 即时干预） -->
+            <template v-if="props.loading && inputMessage.trim()">
+              <button
+                type="button"
+                class="submit-btn stop-mini-mode"
+                title="停止生成"
+                @click="handleStopClick"
+              >
+                <span class="stop-square-icon" aria-hidden="true"></span>
+              </button>
+              <button
+                type="button"
+                class="submit-btn active steer-mode"
+                title="即时干预 (Enter)"
+                @click="handleSteerClick"
+              >
+                <svg class="steer-btn-icon" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M9.5 1.5L3 9h4.5L6.5 14.5 13 7H8.5L9.5 1.5z" />
+                </svg>
+              </button>
+            </template>
+
+            <!-- 仅在流式生成且输入框没有文本时展示主停止按钮 -->
             <button
-              v-if="props.loading && !canQueue"
+              v-else-if="props.loading"
               type="button"
               class="submit-btn stop-mode"
               title="停止生成"
               @click="handleStopClick"
             >
               <span class="stop-square-icon" aria-hidden="true"></span>
-            </button>
-
-            <!-- 流式生成且输入框有待排队内容时，优雅转为加入排队按钮 -->
-            <button
-              v-else-if="props.loading && canQueue"
-              type="button"
-              class="submit-btn active queue-btn"
-              title="加入排队 (Enter)"
-              @click="handleSend"
-            >
-              <ArrowUpOutlined class="btn-icon" />
             </button>
 
             <!-- 常规非流式状态下的发送按钮 -->
@@ -258,6 +269,7 @@ const emit = defineEmits<{
     }
   ]
   'stop-generation': []
+  'steer-message': [content: string]
   'retry-message': [messageId: string]
   'send-queued-now': [item: QueuedMessage]
   'resume-queue': []
@@ -788,6 +800,55 @@ $font-size-lg: 16px;
       height: 10px;
       background: #ffffff;
       border-radius: 2px;
+    }
+  }
+
+  &.stop-mini-mode {
+    width: 32px;
+    height: 32px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    box-shadow: none;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+      border-color: #94a3b8;
+    }
+
+    .stop-square-icon {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      background: #475569;
+      border-radius: 2px;
+    }
+  }
+
+  &.steer-mode {
+    width: 36px;
+    height: 36px;
+    background: #0f172a;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    &:hover {
+      background: #1e293b;
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    .steer-btn-icon {
+      width: 15px;
+      height: 15px;
     }
   }
 

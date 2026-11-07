@@ -197,6 +197,7 @@ export interface StreamChunk {
     | 'reasoning_delta'
     | 'reasoning_done'
     | 'answer_delta'
+    | 'steer_applied'
     | 'failover_notice'
     | 'done'
     | 'error'
@@ -222,6 +223,12 @@ export interface StreamChunk {
   charge?: ChatChargeSummary
   creditsSnapshot?: UserCredits
   error?: string
+  steer?: {
+    id: string
+    message: string
+    loopIndex: number
+    timestamp: number
+  }
 }
 
 /**

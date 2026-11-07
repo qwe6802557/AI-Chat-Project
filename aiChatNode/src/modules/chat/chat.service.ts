@@ -44,6 +44,7 @@ import { WebSearchService } from '../web-search/web-search.service';
 import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
 import { ToolRegistryService } from '../tools/tools.registry.service';
 import { ApprovalManagerService } from './services/approval-manager.service';
+import { AgentStreamExecutorService } from './services/agent-stream-executor.service';
 import type { ToolExecutionRecord } from '../tools/types/tools.types';
 import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
 
@@ -134,6 +135,7 @@ export class ChatService {
     private readonly toolRegistryService: ToolRegistryService,
     private readonly ragService: HybridRagService,
     private readonly approvalManagerService: ApprovalManagerService,
+    private readonly agentStreamExecutorService: AgentStreamExecutorService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -1110,7 +1112,7 @@ export class ChatService {
       });
       hasReservedCharge = true;
 
-      const stream = this.executeReActStream({
+      const stream = this.agentStreamExecutorService.executeStream({
         modelId: chargeModel.modelId,
         initialMessages: messages,
         tools: openAiTools.length > 0 ? openAiTools : undefined,
@@ -1153,7 +1155,10 @@ export class ChatService {
   /**
    * 执行具备 ReAct 闭环调度的流式补全
    */
-  private async *executeReActStream(params: {
+  /**
+   * 执行具备 ReAct 闭环调度的流式补全 (向后兼容委托至 AgentStreamExecutorService)
+   */
+  private executeReActStream(params: {
     modelId: string;
     initialMessages: ChatMessage[];
     tools?: Array<{ type: 'function'; function: { name: string; description: string; parameters: any } }>;
@@ -1161,222 +1166,7 @@ export class ChatService {
     context: { userId: string; sessionId: string; userMessage: string };
     toolExecutionRecords: ToolExecutionRecord[];
   }): AsyncIterable<CompletionChunk> {
-    const MAX_REACT_LOOPS = 3;
-    let loopCount = 0;
-    const currentMessages: ChatMessage[] = [...params.initialMessages];
-    let accumulatedPromptTokens = 0;
-    let accumulatedCompletionTokens = 0;
-    let lastFinishReason: string | null = null;
-
-    while (loopCount <= MAX_REACT_LOOPS) {
-      const isMaxLoop = loopCount >= MAX_REACT_LOOPS;
-      const roundTools = isMaxLoop ? undefined : params.tools;
-
-      const stream = await this.aiClientService.createStreamChatCompletion(
-        params.modelId,
-        currentMessages,
-        {
-          ...params.options,
-          tools: roundTools,
-        },
-      );
-
-      let roundContent = '';
-      const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>();
-
-      for await (const chunk of stream) {
-        if (chunk.finish_reason) {
-          lastFinishReason = chunk.finish_reason;
-        }
-
-        if (chunk.usage) {
-          accumulatedPromptTokens += Number(chunk.usage.promptTokens || 0);
-          accumulatedCompletionTokens += Number(chunk.usage.completionTokens || 0);
-        }
-
-        if (chunk.type === 'answer_delta' || (!chunk.type && chunk.delta?.content)) {
-          const deltaContent = chunk.delta?.content || '';
-          roundContent += deltaContent;
-        }
-
-        if (chunk.delta?.tool_calls && Array.isArray(chunk.delta.tool_calls)) {
-          for (const tc of chunk.delta.tool_calls) {
-            const index = tc.index ?? 0;
-            if (!toolCallMap.has(index)) {
-              const callId = tc.id || `call_${Date.now()}_${index}`;
-              toolCallMap.set(index, {
-                id: callId,
-                name: tc.function?.name || '',
-                arguments: tc.function?.arguments || '',
-              });
-              const plugin = this.toolRegistryService.getPlugin(tc.function?.name || '');
-              yield {
-                type: 'tool_call_start',
-                toolCall: {
-                  id: callId,
-                  name: tc.function?.name || '',
-                  title: plugin?.metadata.title || tc.function?.name || '未知工具',
-                  icon: plugin?.metadata.icon || 'tool',
-                  status: 'calling',
-                  args: {},
-                },
-              };
-            } else {
-              const existing = toolCallMap.get(index)!;
-              if (tc.id && !existing.id) existing.id = tc.id;
-              if (tc.function?.name) existing.name = tc.function.name;
-              if (tc.function?.arguments) existing.arguments += tc.function.arguments;
-            }
-          }
-          continue;
-        }
-
-        yield chunk;
-      }
-
-      const toolCalls = Array.from(toolCallMap.values()).filter((c) => c.name);
-      if (toolCalls.length === 0) {
-        break;
-      }
-
-      currentMessages.push({
-        role: 'assistant',
-        content: roundContent || '',
-        tool_calls: toolCalls.map((c) => ({
-          id: c.id,
-          type: 'function',
-          function: {
-            name: c.name,
-            arguments: c.arguments,
-          },
-        })),
-      });
-
-      for (const call of toolCalls) {
-        let parsedArgs: Record<string, any> = {};
-        try {
-          parsedArgs = call.arguments ? JSON.parse(call.arguments) : {};
-        } catch {
-          parsedArgs = { raw: call.arguments };
-        }
-
-        const plugin = this.toolRegistryService.getPlugin(call.name);
-
-        // 评估工具执行风险并进行动态风控拦截
-        const riskEvaluation = this.toolRegistryService.evaluateToolRisk(
-          call.name,
-          parsedArgs,
-          params.context,
-        );
-
-        if (riskEvaluation.requiresApproval) {
-          const pendingApproval = await this.approvalManagerService.createPendingApproval({
-            sessionId: params.context.sessionId,
-            userId: params.context.userId,
-            toolCallId: call.id,
-            toolName: call.name,
-            args: parsedArgs,
-            riskEvaluation,
-          });
-
-          yield {
-            type: 'tool_approval_required',
-            toolCall: {
-              id: call.id,
-              name: call.name,
-              title: plugin?.metadata.title || call.name,
-              icon: plugin?.metadata.icon || 'tool',
-              status: 'pending_approval',
-              args: parsedArgs,
-              approvalId: pendingApproval.approvalId,
-              riskLevel: riskEvaluation.level,
-              riskReason: riskEvaluation.reason,
-            },
-          };
-
-          const decisionResult = await this.approvalManagerService.waitForDecision(
-            pendingApproval.approvalId,
-          );
-
-          if (decisionResult.decision !== 'approved') {
-            const rejectionReason =
-              decisionResult.decision === 'timeout'
-                ? '审批超时（超过 10 分钟未确认），系统自动终止该高危工具执行'
-                : decisionResult.reason || '操作者已拒绝执行此高危工具';
-
-            yield {
-              type: 'tool_call_result',
-              toolCall: {
-                id: call.id,
-                name: call.name,
-                title: plugin?.metadata.title || call.name,
-                icon: plugin?.metadata.icon || 'tool',
-                status: 'rejected',
-                args: parsedArgs,
-                error: rejectionReason,
-              },
-            };
-
-            currentMessages.push({
-              role: 'tool',
-              tool_call_id: call.id,
-              name: call.name,
-              content: `工具调用已被操作者拒绝: ${rejectionReason}`,
-            });
-            continue;
-          }
-        }
-
-        const execRecord = await this.toolRegistryService.executeTool(
-          call.name,
-          parsedArgs,
-          params.context,
-        );
-        execRecord.id = call.id || execRecord.id;
-        execRecord.callType = 'model_function_call';
-        params.toolExecutionRecords.push(execRecord);
-
-        yield {
-          type: 'tool_call_result',
-          toolCall: {
-            id: call.id,
-            name: call.name,
-            title: plugin?.metadata.title || call.name,
-            icon: plugin?.metadata.icon || 'tool',
-            status: execRecord.result.status === 'success' ? 'success' : 'error',
-            durationMs: execRecord.result.durationMs,
-            args: parsedArgs,
-            output: execRecord.result.output,
-            error: execRecord.result.error,
-          },
-        };
-
-        currentMessages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          name: call.name,
-          content:
-            execRecord.result.status === 'success'
-              ? typeof execRecord.result.output === 'string'
-                ? execRecord.result.output
-                : JSON.stringify(execRecord.result.output)
-              : `工具执行失败: ${execRecord.result.error}`,
-        });
-      }
-
-      loopCount++;
-    }
-
-    if (accumulatedPromptTokens > 0 || accumulatedCompletionTokens > 0) {
-      yield {
-        finish_reason: lastFinishReason || 'stop',
-        usage: {
-          promptTokens: accumulatedPromptTokens,
-          completionTokens: accumulatedCompletionTokens,
-          totalTokens: accumulatedPromptTokens + accumulatedCompletionTokens,
-        },
-      };
-    }
+    return this.agentStreamExecutorService.executeStream(params);
   }
 
   /**

@@ -1,6 +1,6 @@
 import { ref, onBeforeUnmount, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { sendStreamMessage } from '@/api/chat'
+import { sendStreamMessage, steerSessionMessage } from '@/api/chat'
 import type { SearchSource, StreamChunk, StreamRequestController } from '@/interface/chat'
 import { useConversationStore } from '@/stores/conversation'
 import { useAuthStore } from '@/stores/auth'
@@ -407,6 +407,19 @@ export function useStreamChat() {
                   latestReasoning,
                 )
                 return
+                            case 'steer_applied': {
+                const messageId = ensureAssistantMessage()
+                const steer = chunk.steer
+                if (steer) {
+                  const currentMsg = conversationStore.currentConversation?.messages.find((m) => m.id === messageId)
+                  const existingSteers = [...(currentMsg?.steers || [])]
+                  existingSteers.push(steer)
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    steers: existingSteers,
+                  })
+                }
+                return
+              }
               case 'failover_notice': {
                 const messageId = ensureAssistantMessage()
                 if (chunk.failover) {
@@ -636,8 +649,26 @@ export function useStreamChat() {
     }
   }
 
+  const sendSteer = async (steerText: string): Promise<boolean> => {
+    const currentConvId = activeStreamContext.value?.conversationId || conversationStore.currentConversationId
+    if (!currentConvId || !loading.value) {
+      message.warning('当前无正在进行的流式生成，无法进行即时干预')
+      return false
+    }
+    try {
+      await steerSessionMessage(currentConvId, { message: steerText })
+      message.success('已下发即时干预，将在下一个执行步骤生效')
+      return true
+    } catch (err: any) {
+      const errMsg = err?.response?.data?.message || err?.message || '即时干预下发失败'
+      message.error(errMsg)
+      return false
+    }
+  }
+
   return {
     loading,
+    sendSteer,
     isQueuePaused,
     resumeQueue,
     sendMessage,
