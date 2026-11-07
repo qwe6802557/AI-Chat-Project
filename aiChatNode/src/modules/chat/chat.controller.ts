@@ -291,6 +291,20 @@ export class ChatController {
               timelineEvent: chunk.timelineEvent,
             };
             break;
+          case 'steer_applied':
+            sseData = {
+              type: 'steer_applied',
+              sessionId,
+              steer: chunk.steer,
+            };
+            break;
+          case 'memory_recalled':
+            sseData = {
+              type: 'memory_recalled',
+              sessionId,
+              memoryRecall: chunk.memoryRecall,
+            };
+            break;
           case 'reasoning_start':
             finalReasoning = {
               mode: chunk.reasoning?.mode || 'raw',

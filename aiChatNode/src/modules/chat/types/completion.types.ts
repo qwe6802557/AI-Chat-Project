@@ -134,6 +134,7 @@ export interface CompletionChunk {
     | 'tool_approval_required'
     | 'agent_timeline_event'
     | 'steer_applied'
+    | 'memory_recalled'
     | 'failover_notice'
     | 'done'
     | 'error';
@@ -159,6 +160,16 @@ export interface CompletionChunk {
     message: string;
     loopIndex: number;
     timestamp: number;
+  };
+  memoryRecall?: {
+    recalledCount: number;
+    hasCoreProfile: boolean;
+    items: Array<{
+      id: string;
+      category: string;
+      content: string;
+      dateKey: string;
+    }>;
   };
 }
 

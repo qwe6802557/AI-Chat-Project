@@ -420,6 +420,15 @@ export function useStreamChat() {
                 }
                 return
               }
+              case 'memory_recalled': {
+                const messageId = ensureAssistantMessage()
+                if (chunk.memoryRecall) {
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    memoryRecall: chunk.memoryRecall,
+                  })
+                }
+                return
+              }
               case 'failover_notice': {
                 const messageId = ensureAssistantMessage()
                 if (chunk.failover) {
