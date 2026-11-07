@@ -8,6 +8,8 @@ import { AIClientService } from './services/ai-client.service';
 import { AgentExecutorService } from './services/agent-executor.service';
 import { ApprovalManagerService } from './services/approval-manager.service';
 import { SwarmOrchestratorService } from './services/swarm-orchestrator.service';
+import { ActiveStreamRegistry } from './services/active-stream.registry';
+import { AgentStreamExecutorService } from './services/agent-stream-executor.service';
 import { ClaudeAdapter } from './adapters/claude.adapter';
 import { ZaiwenAdapter } from './adapters/zaiwen.adapter';
 import { Grok2APIAdapter } from './adapters/grok2api.adapter';
@@ -56,6 +58,8 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     AgentExecutorService,
     ApprovalManagerService,
     SwarmOrchestratorService,
+    ActiveStreamRegistry,
+    AgentStreamExecutorService,
   ],
   exports: [
     ChatService,
@@ -65,6 +69,8 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     AgentExecutorService,
     ApprovalManagerService,
     SwarmOrchestratorService,
+    ActiveStreamRegistry,
+    AgentStreamExecutorService,
   ],
 })
 export class ChatModule {}

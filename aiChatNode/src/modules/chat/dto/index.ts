@@ -5,3 +5,4 @@ export * from './update-session.dto';
 export * from './session-response.dto';
 export * from './get-session-messages.dto';
 export * from './decide-approval.dto';
+export * from './steer-chat.dto';

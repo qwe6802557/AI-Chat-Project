@@ -90,6 +90,10 @@
               v-if="message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0"
               :tool-calls="message.toolCalls"
             />
+            <SteerInterventionCard
+              v-if="message.role === 'assistant' && message.steers && message.steers.length > 0"
+              :steers="message.steers"
+            />
             <ChatReasoningPanel
               v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
               :message-id="message.id"
@@ -321,6 +325,7 @@ import ChatReasoningPanel from './ChatReasoningPanel.vue'
 import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 import AgentCollaborationTimeline from './AgentCollaborationTimeline.vue'
+import SteerInterventionCard from './SteerInterventionCard.vue'
 import ChatSkeletonLoader from './ChatSkeletonLoader.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'

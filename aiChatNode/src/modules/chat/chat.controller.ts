@@ -22,7 +22,8 @@ import {
 import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
-import { CreateChatDto, DecideApprovalDto } from './dto';
+import { CreateChatDto, DecideApprovalDto, SteerChatDto } from './dto';
+import { ActiveStreamRegistry } from './services/active-stream.registry';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type {
   CompletionChunk,
@@ -34,7 +35,10 @@ import type {
 @ApiBearerAuth()
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly activeStreamRegistry: ActiveStreamRegistry,
+  ) {}
 
   /**
    * 创建聊天对话
@@ -541,4 +545,53 @@ export class ChatController {
       message: '审批裁决已生效',
     };
   }
+
+  /**
+   * 对正在运行的流式会话进行即时干预 (Steering)
+   */
+  @Post('sessions/:sessionId/steer')
+  @ApiOperation({
+    summary: '对正在运行的流式会话进行即时干预',
+    description: '在 Agent 多步执行或流式吐字期间，注入高优先级的用户即时干预指导，无需打断流式连接。',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '干预指令接收成功',
+  })
+  async steerSession(
+    @Param('sessionId') sessionId: string,
+    @Body() steerDto: SteerChatDto,
+    @CurrentUser('id') currentUserId?: string,
+  ) {
+    if (!currentUserId) {
+      throw new HttpException(
+        { code: 1, message: '用户未登录', data: null },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const activeStream = this.activeStreamRegistry.get(sessionId);
+    if (!activeStream) {
+      throw new HttpException(
+        { code: 1, message: '该会话当前未在进行流式生成或已结束', data: null },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (activeStream.userId !== currentUserId) {
+      throw new ForbiddenException('无权对此会话进行即时干预');
+    }
+
+    const success = this.activeStreamRegistry.steer(sessionId, steerDto.message, steerDto.type);
+    return {
+      code: 0,
+      message: success ? '即时干预指令已发送，将在下一检查点生效' : '即时干预指令发送失败',
+      data: {
+        sessionId,
+        steerMessage: steerDto.message,
+        timestamp: Date.now(),
+      },
+    };
+  }
+
 }

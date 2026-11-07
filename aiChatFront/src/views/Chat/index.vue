@@ -36,6 +36,7 @@
           :is-queue-paused="isQueuePaused"
           @update:selected-model="handleModelChange"
           @send-message="handleSendMessage"
+          @steer-message="handleSteerMessage"
           @stop-generation="handleStopGeneration"
           @retry-message="handleRetryMessage"
           @send-queued-now="handleSendQueuedNow"
@@ -143,7 +144,7 @@ const workspaceStyle = computed(() => {
 })
 
 // 流式聊天
-const { loading, isQueuePaused, resumeQueue, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
+const { loading, sendSteer, isQueuePaused, resumeQueue, sendMessage, cancelCurrentStream, retryMessage } = useStreamChat()
 
 const isChatModel = (model: { modelId?: string; category?: string } | null | undefined): boolean => {
   if (!model?.modelId) {
@@ -269,6 +270,10 @@ const handleSendMessage = async (
 /**
  * 停止生成 (保护性暂停排队消息自动发出)
  */
+const handleSteerMessage = (steerText: string) => {
+  sendSteer(steerText)
+}
+
 const handleStopGeneration = () => {
   cancelCurrentStream(true)
   message.info('已停止生成')

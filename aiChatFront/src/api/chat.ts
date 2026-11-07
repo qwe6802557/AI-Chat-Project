@@ -333,3 +333,16 @@ export function decideApproval(
     data,
   )
 }
+
+/**
+ * 对正在运行的流式会话进行即时干预 (Steering)
+ */
+export function steerSessionMessage(
+  sessionId: string,
+  data: { message: string; type?: string },
+) {
+  return request.post<never, ResponseData<{ sessionId: string; steerMessage: string; timestamp: number }>>(
+    `/chat/sessions/${sessionId}/steer`,
+    data,
+  )
+}

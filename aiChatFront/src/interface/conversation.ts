@@ -91,6 +91,7 @@ export interface Message {
   searchQuery?: string
   toolCalls?: ToolCallItem[]
   agentTimeline?: import('@/interface/chat').SwarmTimelineEvent[]
+  steers?: Array<{ id: string; message: string; loopIndex: number; timestamp: number }>
   attachments?: MessageAttachment[]
   artifacts?: import('@/views/Chat/utils/assistantContent').ExtractedArtifactTag[]
   error?: string
