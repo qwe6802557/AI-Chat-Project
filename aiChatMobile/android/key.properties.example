@@ -1,0 +1,6 @@
+# Android 签名证书配置示例
+# 如需自定义签名，复制本文件为 key.properties 并填写相应字段
+storePassword=android
+keyPassword=android
+keyAlias=androiddebugkey
+storeFile=keystore/release.keystore
