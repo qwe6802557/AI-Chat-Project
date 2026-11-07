@@ -26,6 +26,6 @@ import { KnowledgeBaseController } from './knowledge-base.controller';
     HybridRagService,
     KnowledgeBaseService,
   ],
-  exports: [HybridRagService, KnowledgeBaseService],
+  exports: [HybridRagService, KnowledgeBaseService, EmbeddingService],
 })
 export class KnowledgeBaseModule {}

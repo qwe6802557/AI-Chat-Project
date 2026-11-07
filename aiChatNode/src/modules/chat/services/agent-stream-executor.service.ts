@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AIClientService } from './ai-client.service';
 import { ToolRegistryService } from '../../tools/tools.registry.service';
 import { ApprovalManagerService } from './approval-manager.service';
 import { ActiveStreamRegistry } from './active-stream.registry';
+import { MemoryContextService } from '../../memory/services/memory-context.service';
 import type {
   ChatMessage,
   CompletionChunk,
@@ -34,6 +35,8 @@ export class AgentStreamExecutorService {
     private readonly toolRegistryService: ToolRegistryService,
     private readonly approvalManagerService: ApprovalManagerService,
     private readonly activeStreamRegistry: ActiveStreamRegistry,
+    @Optional()
+    private readonly memoryContextService?: MemoryContextService,
   ) {}
 
   /**
@@ -64,6 +67,48 @@ export class AgentStreamExecutorService {
     let accumulatedPromptTokens = 0;
     let accumulatedCompletionTokens = 0;
     let lastFinishReason: string | null = null;
+
+    // 分层记忆检索与注入（Layer 3 核心画像常驻 + Layer 2 语义 Top-3 动态召回）
+    if (this.memoryContextService) {
+      try {
+        const memResult = await this.memoryContextService.buildMemoryInjection(
+          userId,
+          params.context.userMessage,
+        );
+        if (memResult.promptAddition) {
+          const sysIdx = currentMessages.findIndex((m) => m.role === 'system');
+          if (sysIdx >= 0) {
+            currentMessages[sysIdx] = {
+              ...currentMessages[sysIdx],
+              content: `${currentMessages[sysIdx].content}\n\n${memResult.promptAddition}`,
+            };
+          } else {
+            currentMessages.unshift({
+              role: 'system',
+              content: memResult.promptAddition,
+            });
+          }
+        }
+
+        if (memResult.recalledMemories.length > 0 || memResult.hasCoreProfile) {
+          yield {
+            type: 'memory_recalled',
+            memoryRecall: {
+              recalledCount: memResult.recalledMemories.length,
+              hasCoreProfile: memResult.hasCoreProfile,
+              items: memResult.recalledMemories.map((m) => ({
+                id: m.id,
+                category: m.category,
+                content: m.content,
+                dateKey: m.dateKey,
+              })),
+            },
+          };
+        }
+      } catch (memErr: any) {
+        this.logger.warn(`记忆分层召回与注入降级: ${memErr.message}`);
+      }
+    }
 
     try {
       while (loopCount <= maxLoops) {
@@ -325,6 +370,17 @@ export class AgentStreamExecutorService {
         };
       }
     } finally {
+      // 记录会话活动用于 3 分钟空闲后静默提取与蒸馏
+      if (this.memoryContextService) {
+        this.memoryContextService.recordSessionActivity(
+          userId,
+          sessionId,
+          currentMessages.map((m) => ({
+            role: m.role,
+            content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+          })),
+        );
+      }
       // 无论何种退出路径，必定注销活跃流句柄，严防内存泄漏
       this.activeStreamRegistry.unregister(sessionId);
     }

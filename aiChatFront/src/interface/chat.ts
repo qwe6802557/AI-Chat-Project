@@ -198,6 +198,7 @@ export interface StreamChunk {
     | 'reasoning_done'
     | 'answer_delta'
     | 'steer_applied'
+    | 'memory_recalled'
     | 'failover_notice'
     | 'done'
     | 'error'
@@ -228,6 +229,17 @@ export interface StreamChunk {
     message: string
     loopIndex: number
     timestamp: number
+  }
+  memoryRecall?: {
+    profileRecalled: boolean
+    recalledCount: number
+    coreSummary?: string
+    items: Array<{
+      id: string
+      category: string
+      summary: string
+      similarity?: number
+    }>
   }
 }
 

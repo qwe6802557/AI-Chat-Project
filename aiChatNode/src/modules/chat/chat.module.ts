@@ -29,6 +29,7 @@ import { FilesModule } from '../files/files.module';
 import { WebSearchModule } from '../web-search/web-search.module';
 import { ToolsModule } from '../tools/tools.module';
 import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
+import { MemoryModule } from '../memory/memory.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
     WebSearchModule,
     ToolsModule,
     KnowledgeBaseModule,
+    MemoryModule,
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [

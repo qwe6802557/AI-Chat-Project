@@ -152,6 +152,11 @@
               @update:selected-ids="handleKnowledgeBaseUpdate"
             />
 
+            <MemoryVaultTrigger
+              :disabled="loading"
+              @open="isMemoryVaultOpen = true"
+            />
+
             <span
               v-if="selectedModelReasoningBadgeLabel && !selectedModel.startsWith('gemini-')"
               class="reasoning-badge"
@@ -183,6 +188,7 @@
     </div>
 
     <PluginCenterModal />
+    <MemoryVaultDrawer v-model:open="isMemoryVaultOpen" />
   </div>
 </template>
 
@@ -208,6 +214,8 @@ import WebSearchToggle from './WebSearchToggle.vue'
 import ToolQuickCapsules from './ToolQuickCapsules.vue'
 import KnowledgeBaseCapsule from './KnowledgeBaseCapsule.vue'
 import PluginCenterModal from './PluginCenterModal.vue'
+import MemoryVaultTrigger from './MemoryVaultTrigger.vue'
+import MemoryVaultDrawer from './MemoryVaultDrawer.vue'
 import type { Message } from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
 
@@ -281,6 +289,7 @@ const selectedKnowledgeBaseIds = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const messageTextareaRef = ref<any>(null)
 const scrollSignal = ref(0)
+const isMemoryVaultOpen = ref(false)
 
 const conversationStore = useConversationStore()
 const artifactStore = useArtifactStore()

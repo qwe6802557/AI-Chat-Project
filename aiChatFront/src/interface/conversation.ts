@@ -92,6 +92,17 @@ export interface Message {
   toolCalls?: ToolCallItem[]
   agentTimeline?: import('@/interface/chat').SwarmTimelineEvent[]
   steers?: Array<{ id: string; message: string; loopIndex: number; timestamp: number }>
+  memoryRecall?: {
+    profileRecalled: boolean
+    recalledCount: number
+    coreSummary?: string
+    items: Array<{
+      id: string
+      category: string
+      summary: string
+      similarity?: number
+    }>
+  }
   attachments?: MessageAttachment[]
   artifacts?: import('@/views/Chat/utils/assistantContent').ExtractedArtifactTag[]
   error?: string

@@ -94,6 +94,10 @@
               v-if="message.role === 'assistant' && message.steers && message.steers.length > 0"
               :steers="message.steers"
             />
+            <MemoryRecallBadge
+              v-if="message.role === 'assistant' && message.memoryRecall && (message.memoryRecall.profileRecalled || (message.memoryRecall.items && message.memoryRecall.items.length > 0))"
+              :memory-recall="message.memoryRecall"
+            />
             <ChatReasoningPanel
               v-if="message.role === 'assistant' && message.reasoning && message.reasoning.mode !== 'omitted'"
               :message-id="message.id"
@@ -326,6 +330,7 @@ import SearchSourceGallery from './SearchSourceGallery.vue'
 import ToolExecutionCard from './ToolExecutionCard.vue'
 import AgentCollaborationTimeline from './AgentCollaborationTimeline.vue'
 import SteerInterventionCard from './SteerInterventionCard.vue'
+import MemoryRecallBadge from './MemoryRecallBadge.vue'
 import ChatSkeletonLoader from './ChatSkeletonLoader.vue'
 import DocumentPreviewModal, { type PreviewableDocument } from './DocumentPreviewModal.vue'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
