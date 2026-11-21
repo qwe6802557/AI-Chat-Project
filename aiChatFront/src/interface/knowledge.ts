@@ -2,6 +2,16 @@
  * 知识库模块类型定义
  */
 
+export interface HighlightSpan {
+  start: number
+  end: number
+  term: string
+}
+
+export type RetrievalMode = 'hybrid' | 'dense' | 'sparse'
+
+export type RagHitSource = 'hybrid' | 'dense' | 'sparse'
+
 export interface KnowledgeBaseItem {
   id: string
   userId: string
@@ -21,6 +31,7 @@ export interface KnowledgeDocumentItem {
   knowledgeBaseId: string
   userId: string
   title: string
+  fileName?: string
   fileType: 'pdf' | 'docx' | 'md' | 'txt'
   fileSize: number
   charCount: number
@@ -38,7 +49,10 @@ export interface KnowledgeChunkItem {
   chunkIndex: number
   content: string
   charCount: number
+  isEnabled?: boolean
+  metadata?: Record<string, any> | null
   createdAt: string
+  updatedAt?: string
 }
 
 export interface RagSearchResultItem {
@@ -50,6 +64,41 @@ export interface RagSearchResultItem {
   chunkIndex: number
   score: number
   charCount: number
+  hitSource?: RagHitSource
+  denseScore?: number
+  denseRank?: number
+  sparseRank?: number
+  rerankScore?: number
+  rerankApplied?: boolean
+  matchedTerms?: string[]
+  highlights?: HighlightSpan[]
+  metadata?: Record<string, any>
+}
+
+export interface SearchKnowledgeBaseParams {
+  query: string
+  knowledgeBaseIds?: string[]
+  documentIds?: string[]
+  limit?: number
+  mode?: RetrievalMode
+  minScore?: number
+  enableRerank?: boolean
+}
+
+export interface ChunkContextResponse {
+  document: {
+    id: string
+    knowledgeBaseId: string
+    title: string
+    fileName: string
+    fileType: string
+    chunkCount: number
+    charCount: number
+  }
+  targetChunk: KnowledgeChunkItem
+  prevChunks: KnowledgeChunkItem[]
+  nextChunks: KnowledgeChunkItem[]
+  window: number
 }
 
 export interface CreateKnowledgeBaseDto {

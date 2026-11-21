@@ -7,6 +7,8 @@ import type {
   KnowledgeDocumentItem,
   KnowledgeChunkItem,
   RagSearchResultItem,
+  SearchKnowledgeBaseParams,
+  ChunkContextResponse,
   CreateKnowledgeBaseDto,
   UpdateKnowledgeBaseDto,
 } from '@/interface/knowledge'
@@ -53,7 +55,12 @@ export function deleteKnowledgeDocument(docId: string) {
   return request.delete<never, ResponseData<void>>(`/knowledge-bases/documents/${docId}`)
 }
 
-export function getKnowledgeChunks(docId: string, page = 1, pageSize = 20) {
+export function getKnowledgeChunks(
+  docId: string,
+  page = 1,
+  pageSize = 20,
+  params?: { keyword?: string; enabledOnly?: boolean },
+) {
   return request.get<
     never,
     ResponseData<{
@@ -63,14 +70,34 @@ export function getKnowledgeChunks(docId: string, page = 1, pageSize = 20) {
       pageSize?: number
     }>
   >(`/knowledge-bases/documents/${docId}/chunks`, {
-    params: { page, pageSize },
+    params: {
+      page,
+      pageSize,
+      ...(params?.keyword ? { keyword: params.keyword } : {}),
+      ...(params?.enabledOnly ? { enabledOnly: 'true' } : {}),
+    },
   })
 }
 
-export function searchKnowledgeBase(data: {
-  query: string
-  knowledgeBaseIds?: string[]
-  limit?: number
-}) {
+export function getKnowledgeChunkContext(chunkId: string, window = 1) {
+  return request.get<never, ResponseData<ChunkContextResponse>>(
+    `/knowledge-bases/chunks/${chunkId}/context`,
+    {
+      params: { window },
+    },
+  )
+}
+
+export function updateKnowledgeChunk(
+  chunkId: string,
+  data: { content?: string; isEnabled?: boolean },
+) {
+  return request.patch<never, ResponseData<KnowledgeChunkItem>>(
+    `/knowledge-bases/chunks/${chunkId}`,
+    data,
+  )
+}
+
+export function searchKnowledgeBase(data: SearchKnowledgeBaseParams) {
   return request.post<never, ResponseData<RagSearchResultItem[]>>('/knowledge-bases/search', data)
 }

@@ -200,15 +200,41 @@ final kbUploadProgressProvider = StateProvider<UploadProgressState>((ref) {
 class SearchTestState {
   final bool isLoading;
   final String query;
+  final String mode;
+  final bool enableRerank;
+  final double minScore;
   final List<ChunkModel> results;
   final String? error;
 
   const SearchTestState({
     this.isLoading = false,
     this.query = '',
+    this.mode = 'hybrid',
+    this.enableRerank = true,
+    this.minScore = 0.0,
     this.results = const [],
     this.error,
   });
+
+  SearchTestState copyWith({
+    bool? isLoading,
+    String? query,
+    String? mode,
+    bool? enableRerank,
+    double? minScore,
+    List<ChunkModel>? results,
+    String? error,
+  }) {
+    return SearchTestState(
+      isLoading: isLoading ?? this.isLoading,
+      query: query ?? this.query,
+      mode: mode ?? this.mode,
+      enableRerank: enableRerank ?? this.enableRerank,
+      minScore: minScore ?? this.minScore,
+      results: results ?? this.results,
+      error: error,
+    );
+  }
 }
 
 class SearchTestNotifier extends StateNotifier<SearchTestState> {
@@ -216,21 +242,32 @@ class SearchTestNotifier extends StateNotifier<SearchTestState> {
 
   SearchTestNotifier(this._repo) : super(const SearchTestState());
 
+  void setMode(String mode) {
+    state = state.copyWith(mode: mode, error: state.error);
+  }
+
+  void setEnableRerank(bool enabled) {
+    state = state.copyWith(enableRerank: enabled, error: state.error);
+  }
+
   Future<void> runSearch({
     required String query,
     required List<String> knowledgeBaseIds,
   }) async {
     if (query.trim().isEmpty) return;
-    state = SearchTestState(isLoading: true, query: query, results: state.results);
+    state = state.copyWith(isLoading: true, query: query, error: null);
     try {
       final items = await _repo.searchKnowledgeBase(
         query: query,
         knowledgeBaseIds: knowledgeBaseIds,
-        limit: 5,
+        limit: 6,
+        mode: state.mode,
+        minScore: state.minScore > 0 ? state.minScore : null,
+        enableRerank: state.enableRerank,
       );
-      state = SearchTestState(isLoading: false, query: query, results: items);
+      state = state.copyWith(isLoading: false, query: query, results: items, error: null);
     } catch (e) {
-      state = SearchTestState(isLoading: false, query: query, results: [], error: e.toString());
+      state = state.copyWith(isLoading: false, query: query, results: [], error: e.toString());
     }
   }
 

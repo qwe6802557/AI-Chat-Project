@@ -40,7 +40,10 @@
 
           <!-- 切片内容摘要 -->
           <div class="popover-snippet font-mono">
-            {{ source?.snippet || '暂无切片预览内容' }}
+            <ChunkHighlightText
+              :content="source?.snippet || '暂无切片预览内容'"
+              :highlights="source?.highlights"
+            />
           </div>
 
           <!-- 底部操作栏 -->
@@ -82,6 +85,7 @@ import {
   LinkOutlined,
 } from '@ant-design/icons-vue'
 import type { SearchSource } from '@/interface/chat'
+import ChunkHighlightText from '@/views/KnowledgeBase/components/ChunkHighlightText.vue'
 
 defineOptions({
   name: 'CitationPopover',

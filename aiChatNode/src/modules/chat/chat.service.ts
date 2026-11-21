@@ -1281,7 +1281,13 @@ export class ChatService {
         isKnowledgeBase: true,
         knowledgeBaseId: r.knowledgeBaseId,
         documentId: r.documentId,
+        chunkId: r.chunkId,
         chunkIndex: r.chunkIndex,
+        hitSource: r.hitSource,
+        denseScore: r.denseScore,
+        rerankScore: r.rerankScore,
+        matchedTerms: r.matchedTerms,
+        highlights: r.highlights,
       }));
 
       return { promptText, sources };
