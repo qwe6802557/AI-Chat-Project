@@ -9,7 +9,7 @@
             <h1 class="page-title">RAG 知识库工作台</h1>
           </div>
           <p class="page-subtitle">
-            基于 PostgreSQL + pgvector 混合双路召回与倒数排名融合 (RRF)，为大模型注入专属私域知识。
+            基于混合双路召回、RRF 融合与 BGE-Reranker 精排，为大模型注入高可信私域知识。
           </p>
         </div>
         <div class="header-actions">
@@ -91,7 +91,6 @@
 
         <!-- 右侧：当前知识库详情工作区 -->
         <section v-if="currentKb" class="kb-detail-column">
-          <!-- 标签切换：文档管理 / 检索评测 -->
           <div class="detail-header-tabs">
             <div class="tab-buttons">
               <button
@@ -119,7 +118,6 @@
 
           <!-- Tab 1: 文档管理与解析入库 -->
           <div v-show="activeTab === 'documents'" class="tab-panel">
-            <!-- 拖拽上传区域 -->
             <div
               class="upload-dropzone"
               :class="{ dragging: isDragging, uploading: isUploading }"
@@ -146,7 +144,6 @@
               </div>
             </div>
 
-            <!-- 文档表格列表 -->
             <div class="documents-table-wrapper">
               <div class="table-header-row">
                 <span class="col-title col-name">文档名称</span>
@@ -202,7 +199,7 @@
                     <button
                       type="button"
                       class="text-btn"
-                      title="预览切片详情"
+                      title="预览与治理切片"
                       @click="handlePreviewChunks(doc)"
                     >
                       预览切片
@@ -222,76 +219,15 @@
           </div>
 
           <!-- Tab 2: 混合检索评测控制台 -->
-          <div v-show="activeTab === 'test'" class="tab-panel search-test-panel">
-            <div class="search-input-box">
-              <div class="search-input-row">
-                <SearchOutlined class="input-search-icon" />
-                <input
-                  v-model="testQuery"
-                  type="text"
-                  placeholder="输入测试问题，检验语义稠密向量与稀疏关键词的双路 RRF 融合召回..."
-                  class="stitch-query-input"
-                  @keydown.enter="handleTestSearch"
-                />
-                <button
-                  type="button"
-                  class="stitch-btn primary"
-                  :disabled="isSearching || !testQuery.trim()"
-                  @click="handleTestSearch"
-                >
-                  <SearchOutlined v-if="!isSearching" />
-                  <LoadingOutlined v-else spin />
-                  <span>执行检索评测</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- 评测结果列表 -->
-            <div class="search-results-viewport">
-              <div v-if="isSearching" class="search-skeleton-box">
-                <div v-for="i in 3" :key="i" class="result-skeleton-card" />
-              </div>
-
-              <div v-else-if="hasSearched && searchResults.length === 0" class="search-empty-box">
-                <InboxOutlined class="empty-icon" />
-                <p>未召回相关切片，请尝试调整查询词</p>
-              </div>
-
-              <div v-else-if="searchResults.length > 0" class="results-stack">
-                <div
-                  v-for="(res, idx) in searchResults"
-                  :key="res.chunkId || idx"
-                  class="result-item-card"
-                >
-                  <div class="res-card-top">
-                    <div class="res-meta-left">
-                      <span class="rank-badge">#{{ idx + 1 }}</span>
-                      <span class="doc-badge">{{ res.documentTitle }}</span>
-                      <span class="chunk-badge">切片 #{{ res.chunkIndex + 1 }}</span>
-                    </div>
-                    <div class="res-score-badge">
-                      <ThunderboltFilled class="score-icon" />
-                      <span>综合置信度: {{ (res.score * 100).toFixed(0) }}%</span>
-                    </div>
-                  </div>
-                  <div class="res-content-box">
-                    <p class="res-text">{{ res.content }}</p>
-                  </div>
-                  <div class="res-card-bottom">
-                    <span class="char-info font-mono">共 {{ res.charCount }} 字符</span>
-                  </div>
-                </div>
-              </div>
-
-              <div v-else class="search-initial-hint">
-                <ThunderboltOutlined class="hint-icon" />
-                <p>输入问题并点击检索，系统将演示完整的 RAG 双路召回与倒数排名融合过程</p>
-              </div>
-            </div>
+          <div v-show="activeTab === 'test'" class="tab-panel">
+            <RetrievalPlayground
+              :knowledge-base-id="currentKb.id"
+              :documents="currentDocuments"
+              @open-context="handleOpenHitContext"
+            />
           </div>
         </section>
 
-        <!-- 无选中知识库占位 -->
         <section v-else class="kb-detail-column empty-selection">
           <DatabaseOutlined class="watermark-icon" />
           <p>请在左侧选择知识库或新建知识库</p>
@@ -329,47 +265,15 @@
       </div>
     </a-modal>
 
-    <!-- 切片预览抽屉 -->
-    <a-drawer
+    <!-- 切片上下文预览与治理抽屉 -->
+    <ChunkContextDrawer
       v-model:open="showChunkDrawer"
-      title="文档语义切片预览"
-      placement="right"
-      width="640"
-      :destroy-on-close="true"
-    >
-      <div v-if="previewDoc" class="chunk-drawer-header">
-        <h3 class="preview-doc-title">{{ previewDoc.title }}</h3>
-        <div class="preview-doc-meta">
-          <span>总切片数: {{ previewDoc.chunkCount }}</span>
-          <span>总字符数: {{ previewDoc.charCount }}</span>
-        </div>
-      </div>
-
-      <div v-if="loadingChunks" class="drawer-loading-skeleton">
-        <div v-for="i in 5" :key="i" class="chunk-skeleton-item" />
-      </div>
-
-      <div v-else-if="chunksList.length === 0" class="drawer-empty">
-        <InboxOutlined class="empty-icon" />
-        <p>暂无切片数据</p>
-      </div>
-
-      <div v-else class="chunk-list-stack">
-        <div
-          v-for="chunk in chunksList"
-          :key="chunk.id"
-          class="chunk-card-item"
-        >
-          <div class="chunk-top-row">
-            <span class="chunk-idx font-mono">切片 #{{ chunk.chunkIndex + 1 }}</span>
-            <span class="chunk-chars font-mono">{{ chunk.charCount }} 字符</span>
-          </div>
-          <div class="chunk-content-body font-mono">
-            {{ chunk.content }}
-          </div>
-        </div>
-      </div>
-    </a-drawer>
+      :mode="drawerMode"
+      :chunk-id="drawerChunkId"
+      :document="previewDoc"
+      :highlights="drawerHighlights"
+      @chunk-updated="handleChunkUpdated"
+    />
   </div>
 </template>
 
@@ -391,9 +295,6 @@ import {
   CloseCircleOutlined,
   ClockCircleOutlined,
   InboxOutlined,
-  ThunderboltFilled,
-  ThunderboltOutlined,
-  LoadingOutlined,
 } from '@ant-design/icons-vue'
 import {
   createKnowledgeBase,
@@ -401,16 +302,16 @@ import {
   getKnowledgeDocuments,
   uploadKnowledgeDocument,
   deleteKnowledgeDocument,
-  getKnowledgeChunks,
-  searchKnowledgeBase,
 } from '@/api/knowledge'
 import { useKnowledgeStore } from '@/stores'
 import type {
+  HighlightSpan,
   KnowledgeBaseItem,
   KnowledgeDocumentItem,
-  KnowledgeChunkItem,
   RagSearchResultItem,
 } from '@/interface/knowledge'
+import RetrievalPlayground from './components/RetrievalPlayground.vue'
+import ChunkContextDrawer from './components/ChunkContextDrawer.vue'
 
 defineOptions({
   name: 'KnowledgeBaseWorkbench',
@@ -435,17 +336,12 @@ const createForm = reactive({
   description: '',
 })
 
-// 抽屉切片预览
+// 切片预览 / 上下文抽屉状态
 const showChunkDrawer = ref(false)
+const drawerMode = ref<'context' | 'document'>('document')
+const drawerChunkId = ref<string | null>(null)
+const drawerHighlights = ref<HighlightSpan[] | undefined>(undefined)
 const previewDoc = ref<KnowledgeDocumentItem | null>(null)
-const loadingChunks = ref(false)
-const chunksList = ref<KnowledgeChunkItem[]>([])
-
-// 检索评测
-const testQuery = ref('')
-const isSearching = ref(false)
-const hasSearched = ref(false)
-const searchResults = ref<RagSearchResultItem[]>([])
 
 const selectKnowledgeBase = (kb: KnowledgeBaseItem) => {
   if (currentKb.value?.id !== kb.id) {
@@ -453,8 +349,6 @@ const selectKnowledgeBase = (kb: KnowledgeBaseItem) => {
   }
   currentKb.value = kb
   fetchDocuments(kb.id)
-  searchResults.value = []
-  hasSearched.value = false
 }
 
 const fetchKnowledgeBases = async (force = false, silent = true) => {
@@ -471,6 +365,9 @@ const fetchKnowledgeBases = async (force = false, silent = true) => {
       if (firstKb) {
         selectKnowledgeBase(firstKb)
       }
+    } else {
+      const updated = list.find((b) => b.id === currentKb.value?.id)
+      if (updated) currentKb.value = updated
     }
   } else if (!list || list.length === 0) {
     currentKb.value = null
@@ -607,35 +504,25 @@ const handleDeleteDocument = (doc: KnowledgeDocumentItem) => {
   })
 }
 
-const handlePreviewChunks = async (doc: KnowledgeDocumentItem) => {
+const handlePreviewChunks = (doc: KnowledgeDocumentItem) => {
+  drawerMode.value = 'document'
+  drawerChunkId.value = null
+  drawerHighlights.value = undefined
   previewDoc.value = doc
   showChunkDrawer.value = true
-  loadingChunks.value = true
-  try {
-    const res = await getKnowledgeChunks(doc.id, 1, 100)
-    chunksList.value = res.data?.items || (res.data as any)?.list || []
-  } catch (err: any) {
-    message.error(err.message || '获取切片失败')
-  } finally {
-    loadingChunks.value = false
-  }
 }
 
-const handleTestSearch = async () => {
-  if (!testQuery.value.trim() || !currentKb.value) return
-  isSearching.value = true
-  hasSearched.value = true
-  try {
-    const res = await searchKnowledgeBase({
-      query: testQuery.value.trim(),
-      knowledgeBaseIds: [currentKb.value.id],
-      limit: 6,
-    })
-    searchResults.value = res.data || []
-  } catch (err: any) {
-    message.error(err.message || '检索评测失败')
-  } finally {
-    isSearching.value = false
+const handleOpenHitContext = (item: RagSearchResultItem) => {
+  drawerMode.value = 'context'
+  drawerChunkId.value = item.chunkId
+  drawerHighlights.value = item.highlights
+  previewDoc.value = null
+  showChunkDrawer.value = true
+}
+
+const handleChunkUpdated = async () => {
+  if (currentKb.value) {
+    await fetchDocuments(currentKb.value.id)
   }
 }
 
@@ -1255,178 +1142,6 @@ onActivated(() => {
   }
 }
 
-.search-test-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-
-  .search-input-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 6px 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-    transition: border-color 0.2s, box-shadow 0.2s;
-
-    &:focus-within {
-      border-color: #2563eb;
-      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
-    }
-
-    .input-search-icon {
-      font-size: 16px;
-      color: #94a3b8;
-    }
-
-    .stitch-query-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: #0f172a;
-      font-size: 14px;
-
-      &::placeholder {
-        color: #94a3b8;
-      }
-    }
-  }
-
-  .search-results-viewport {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-
-    .search-skeleton-box {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-
-      .result-skeleton-card {
-        height: 100px;
-        border-radius: 10px;
-        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-        background-size: 200% 100%;
-        animation: shimmer 1.5s infinite;
-      }
-    }
-
-    .results-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .result-item-card {
-      background: #ffffff;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-      transition: border-color 0.15s;
-
-      &:hover {
-        border-color: #cbd5e1;
-      }
-
-      .res-card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-
-        .res-meta-left {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-
-          .rank-badge {
-            background: #eff6ff;
-            color: #2563eb;
-            border: 1px solid #dbeafe;
-            font-size: 11px;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 4px;
-          }
-
-          .doc-badge {
-            font-size: 13px;
-            font-weight: 600;
-            color: #0f172a;
-          }
-
-          .chunk-badge {
-            font-size: 11px;
-            color: #64748b;
-          }
-        }
-
-        .res-score-badge {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 12px;
-          font-weight: 500;
-          color: #059669;
-          background: #ecfdf5;
-          border: 1px solid #d1fae5;
-          padding: 2px 8px;
-          border-radius: 6px;
-
-          .score-icon {
-            font-size: 12px;
-            color: #10b981;
-          }
-        }
-      }
-
-      .res-content-box {
-        background: #f8fafc;
-        border: 1px solid #f1f5f9;
-        border-left: 3px solid #2563eb;
-        padding: 10px 12px;
-        border-radius: 6px;
-
-        .res-text {
-          font-size: 13px;
-          line-height: 1.6;
-          color: #334155;
-          margin: 0;
-          white-space: pre-wrap;
-        }
-      }
-
-      .res-card-bottom {
-        font-size: 11px;
-        color: #94a3b8;
-      }
-    }
-
-    .search-initial-hint,
-    .search-empty-box {
-      padding: 48px;
-      text-align: center;
-      color: #64748b;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-
-      .hint-icon,
-      .empty-icon {
-        font-size: 36px;
-        color: #cbd5e1;
-      }
-    }
-  }
-}
-
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -1454,89 +1169,6 @@ onActivated(() => {
       .required {
         color: #ef4444;
       }
-    }
-  }
-}
-
-.chunk-drawer-header {
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f1f5f9;
-  margin-bottom: 16px;
-
-  .preview-doc-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #0f172a;
-    margin: 0 0 6px;
-  }
-
-  .preview-doc-meta {
-    display: flex;
-    gap: 16px;
-    font-size: 12px;
-    color: #64748b;
-  }
-}
-
-.drawer-loading-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-
-  .chunk-skeleton-item {
-    height: 80px;
-    border-radius: 8px;
-    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
-  }
-}
-
-.drawer-empty {
-  padding: 48px;
-  text-align: center;
-  color: #94a3b8;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-
-  .empty-icon {
-    font-size: 32px;
-    color: #cbd5e1;
-  }
-}
-
-.chunk-list-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-
-  .chunk-card-item {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 12px;
-    background: #f8fafc;
-
-    .chunk-top-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #64748b;
-      margin-bottom: 8px;
-
-      .chunk-idx {
-        font-weight: 600;
-        color: #2563eb;
-      }
-    }
-
-    .chunk-content-body {
-      font-size: 12px;
-      line-height: 1.6;
-      color: #1e293b;
-      white-space: pre-wrap;
-      word-break: break-all;
     }
   }
 }

@@ -1,19 +1,51 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Between, Repository } from 'typeorm';
 import { KnowledgeBase } from '../entities/knowledge-base.entity';
 import { KnowledgeDocument } from '../entities/knowledge-document.entity';
 import { KnowledgeChunk } from '../entities/knowledge-chunk.entity';
-import { CreateKnowledgeBaseDto, UpdateKnowledgeBaseDto } from '../dto';
+import {
+  CreateKnowledgeBaseDto,
+  UpdateKnowledgeBaseDto,
+  UpdateKnowledgeChunkDto,
+} from '../dto';
 import { DocumentParserService } from './document-parser.service';
 import { RecursiveChunkerService } from './recursive-chunker.service';
 import { EmbeddingService } from './embedding.service';
+
+export interface KnowledgeChunkSummary {
+  id: string;
+  knowledgeBaseId: string;
+  documentId: string;
+  chunkIndex: number;
+  content: string;
+  charCount: number;
+  isEnabled: boolean;
+  metadata: Record<string, any> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ChunkContextResponse {
+  document: {
+    id: string;
+    knowledgeBaseId: string;
+    title: string;
+    fileName: string;
+    fileType: string;
+    chunkCount: number;
+    charCount: number;
+  };
+  targetChunk: KnowledgeChunkSummary;
+  prevChunks: KnowledgeChunkSummary[];
+  nextChunks: KnowledgeChunkSummary[];
+  window: number;
+}
 
 /**
  * 知识库综合业务管理服务
@@ -33,6 +65,24 @@ export class KnowledgeBaseService {
     private readonly chunkerService: RecursiveChunkerService,
     private readonly embeddingService: EmbeddingService,
   ) {}
+
+  /**
+   * 剔除高维 embedding 向量字段，减少切片响应负载
+   */
+  private toChunkSummary(chunk: KnowledgeChunk): KnowledgeChunkSummary {
+    return {
+      id: chunk.id,
+      knowledgeBaseId: chunk.knowledgeBaseId,
+      documentId: chunk.documentId,
+      chunkIndex: chunk.chunkIndex,
+      content: chunk.content,
+      charCount: chunk.charCount,
+      isEnabled: chunk.isEnabled !== false,
+      metadata: chunk.metadata || null,
+      createdAt: chunk.createdAt,
+      updatedAt: chunk.updatedAt,
+    };
+  }
 
   /**
    * 创建新知识库
@@ -155,6 +205,7 @@ export class KnowledgeBaseService {
           chunkIndex: c.chunkIndex,
           content: c.content,
           charCount: c.charCount,
+          isEnabled: true,
           embedding: embeddings[idx] || null,
           metadata: {
             docTitle: savedDoc.title,
@@ -215,14 +266,20 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 获取文档的切片列表
+   * 获取文档的分页切片列表（支持关键词与启停状态筛选，剔除高维向量）
    */
   async getChunks(
     userId: string,
     documentId: string,
     page = 1,
     pageSize = 20,
-  ): Promise<{ items: KnowledgeChunk[]; total: number }> {
+    options?: { keyword?: string; enabledOnly?: boolean },
+  ): Promise<{
+    items: KnowledgeChunkSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }> {
     const doc = await this.docRepo.findOne({
       where: { id: documentId, userId },
     });
@@ -230,14 +287,137 @@ export class KnowledgeBaseService {
       throw new NotFoundException('文档不存在或无权访问');
     }
 
-    const [items, total] = await this.chunkRepo.findAndCount({
-      where: { documentId, userId },
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+
+    const qb = this.chunkRepo
+      .createQueryBuilder('chunk')
+      .where('chunk.documentId = :documentId', { documentId })
+      .andWhere('chunk.userId = :userId', { userId });
+
+    const keyword = options?.keyword?.trim();
+    if (keyword) {
+      qb.andWhere('chunk.content ILIKE :keyword', {
+        keyword: `%${keyword}%`,
+      });
+    }
+
+    if (options?.enabledOnly === true) {
+      qb.andWhere('chunk.isEnabled = :isEnabled', { isEnabled: true });
+    }
+
+    const [items, total] = await qb
+      .orderBy('chunk.chunkIndex', 'ASC')
+      .skip((safePage - 1) * safePageSize)
+      .take(safePageSize)
+      .getManyAndCount();
+
+    return {
+      items: items.map((c) => this.toChunkSummary(c)),
+      total,
+      page: safePage,
+      pageSize: safePageSize,
+    };
+  }
+
+  /**
+   * 获取命中切片及其前后邻接窗口上下文
+   */
+  async getChunkContext(
+    userId: string,
+    chunkId: string,
+    window = 1,
+  ): Promise<ChunkContextResponse> {
+    const target = await this.chunkRepo.findOne({
+      where: { id: chunkId, userId },
+      relations: ['document'],
+    });
+    if (!target || !target.document) {
+      throw new NotFoundException('切片不存在或无权访问');
+    }
+
+    const clampedWindow = Math.min(5, Math.max(1, Math.floor(window || 1)));
+    const minIndex = Math.max(0, target.chunkIndex - clampedWindow);
+    const maxIndex = target.chunkIndex + clampedWindow;
+
+    const neighbors = await this.chunkRepo.find({
+      where: {
+        documentId: target.documentId,
+        userId,
+        chunkIndex: Between(minIndex, maxIndex),
+      },
       order: { chunkIndex: 'ASC' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
     });
 
-    return { items, total };
+    const prevChunks = neighbors
+      .filter((c) => c.chunkIndex < target.chunkIndex)
+      .map((c) => this.toChunkSummary(c));
+    const nextChunks = neighbors
+      .filter((c) => c.chunkIndex > target.chunkIndex)
+      .map((c) => this.toChunkSummary(c));
+
+    return {
+      document: {
+        id: target.document.id,
+        knowledgeBaseId: target.document.knowledgeBaseId,
+        title: target.document.title,
+        fileName: target.document.fileName,
+        fileType: target.document.fileType,
+        chunkCount: target.document.chunkCount,
+        charCount: target.document.charCount,
+      },
+      targetChunk: this.toChunkSummary(target),
+      prevChunks,
+      nextChunks,
+      window: clampedWindow,
+    };
+  }
+
+  /**
+   * 更新单条切片正文（自动重算向量）或启停状态
+   */
+  async updateChunk(
+    userId: string,
+    chunkId: string,
+    dto: UpdateKnowledgeChunkDto,
+  ): Promise<KnowledgeChunkSummary> {
+    const chunk = await this.chunkRepo.findOne({
+      where: { id: chunkId, userId },
+    });
+    if (!chunk) {
+      throw new NotFoundException('切片不存在或无权访问');
+    }
+
+    let contentChanged = false;
+    if (dto.content !== undefined) {
+      const trimmed = dto.content.trim();
+      if (!trimmed) {
+        throw new BadRequestException('切片正文不能为空');
+      }
+      if (trimmed !== chunk.content) {
+        chunk.content = trimmed;
+        chunk.charCount = trimmed.length;
+        chunk.embedding = await this.embeddingService.embedQuery(trimmed);
+        contentChanged = true;
+      }
+    }
+
+    if (dto.isEnabled !== undefined) {
+      chunk.isEnabled = dto.isEnabled;
+    }
+
+    const saved = await this.chunkRepo.save(chunk);
+
+    if (contentChanged) {
+      const docChunks = await this.chunkRepo.find({
+        where: { documentId: chunk.documentId, userId },
+        select: ['id', 'charCount'],
+      });
+      const totalChars = docChunks.reduce((acc, item) => acc + item.charCount, 0);
+      await this.docRepo.update(chunk.documentId, { charCount: totalChars });
+    }
+
+    return this.toChunkSummary(saved);
   }
 
   /**

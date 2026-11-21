@@ -7,6 +7,7 @@ import 'package:ai_chat_mobile/features/knowledge_base/providers/knowledge_base_
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/knowledge_base_card.dart';
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/document_item_tile.dart';
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/document_upload_stream_card.dart';
+import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/highlighted_chunk_text.dart';
 
 void main() {
   group('KnowledgeBaseModel Serialization Tests', () {
@@ -241,6 +242,89 @@ void main() {
       expect(find.text('architecture.pdf'), findsOneWidget);
       expect(find.text('正在推流上传文件... 72%'), findsOneWidget);
       expect(find.text('72%'), findsOneWidget);
+    });
+
+    test('ChunkModel 支持搜索结果字段 (chunkId, highlights, hitSource) 与上下文模型解析', () {
+      final searchJson = {
+        'chunkId': 'chk-search-1',
+        'knowledgeBaseId': 'kb-1',
+        'documentId': 'doc-1',
+        'documentTitle': '架构指南',
+        'chunkIndex': 4,
+        'content': '支持 BGE-Reranker 精排能力',
+        'charCount': 19,
+        'score': 0.91,
+        'hitSource': 'hybrid',
+        'rerankScore': 0.91,
+        'rerankApplied': true,
+        'matchedTerms': ['BGE-Reranker'],
+        'highlights': [
+          {'start': 3, 'end': 15, 'term': 'BGE-Reranker'},
+        ],
+      };
+
+      final hit = ChunkModel.fromJson(searchJson);
+      expect(hit.id, 'chk-search-1');
+      expect(hit.documentTitle, '架构指南');
+      expect(hit.hitSource, 'hybrid');
+      expect(hit.rerankApplied, isTrue);
+      expect(hit.highlights.length, 1);
+      expect(hit.highlights.first.term, 'BGE-Reranker');
+
+      final ctx = ChunkContextModel.fromJson({
+        'document': {
+          'id': 'doc-1',
+          'knowledgeBaseId': 'kb-1',
+          'title': '架构指南',
+          'fileName': 'arch.md',
+          'fileType': 'md',
+          'chunkCount': 8,
+          'charCount': 400,
+        },
+        'targetChunk': searchJson,
+        'prevChunks': [
+          {
+            'id': 'chk-prev',
+            'knowledgeBaseId': 'kb-1',
+            'documentId': 'doc-1',
+            'chunkIndex': 3,
+            'content': '前文段落',
+          },
+        ],
+        'nextChunks': [],
+        'window': 1,
+      });
+
+      expect(ctx.document.chunkCount, 8);
+      expect(ctx.prevChunks.first.chunkIndex, 3);
+      expect(ctx.targetChunk.id, 'chk-search-1');
+    });
+
+    testWidgets('HighlightedChunkText 渲染高亮 TextSpan 片段', (tester) async {
+      const content = '使用 PostgreSQL 与 BGE-M3 执行混合检索';
+      final start = content.indexOf('BGE-M3');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: HighlightedChunkText(
+              content: content,
+              highlights: [
+                HighlightSpan(start: start, end: start + 6, term: 'BGE-M3'),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('BGE-M3'), findsOneWidget);
+      final richFinder = find.byType(SelectableText);
+      expect(richFinder, findsOneWidget);
+      final selectable = tester.widget<SelectableText>(richFinder);
+      final children = selectable.textSpan?.children ?? [];
+      expect(children.length, 3);
+      expect((children[1] as TextSpan).text, 'BGE-M3');
+      expect((children[1] as TextSpan).style?.fontWeight, FontWeight.w700);
     });
   });
 }

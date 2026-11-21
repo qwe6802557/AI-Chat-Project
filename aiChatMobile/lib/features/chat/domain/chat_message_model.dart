@@ -1,3 +1,4 @@
+import '../../knowledge_base/domain/chunk_model.dart';
 import 'file_attachment_model.dart';
 import 'tool_model.dart';
 
@@ -15,7 +16,13 @@ class SearchSourceModel {
   final double? score;
   final String? knowledgeBaseId;
   final String? documentId;
+  final String? chunkId;
   final int? chunkIndex;
+  final String? hitSource;
+  final double? denseScore;
+  final double? rerankScore;
+  final List<String> matchedTerms;
+  final List<HighlightSpan> highlights;
 
   const SearchSourceModel({
     required this.id,
@@ -28,10 +35,19 @@ class SearchSourceModel {
     this.score,
     this.knowledgeBaseId,
     this.documentId,
+    this.chunkId,
     this.chunkIndex,
+    this.hitSource,
+    this.denseScore,
+    this.rerankScore,
+    this.matchedTerms = const [],
+    this.highlights = const [],
   });
 
   factory SearchSourceModel.fromJson(Map<String, dynamic> json) {
+    final rawHighlights = json['highlights'] as List? ?? [];
+    final rawTerms = json['matchedTerms'] as List? ?? [];
+
     return SearchSourceModel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title'] as String? ?? '',
@@ -43,7 +59,16 @@ class SearchSourceModel {
       score: (json['score'] as num?)?.toDouble(),
       knowledgeBaseId: json['knowledgeBaseId'] as String?,
       documentId: json['documentId'] as String?,
+      chunkId: json['chunkId'] as String?,
       chunkIndex: (json['chunkIndex'] as num?)?.toInt(),
+      hitSource: json['hitSource'] as String?,
+      denseScore: (json['denseScore'] as num?)?.toDouble(),
+      rerankScore: (json['rerankScore'] as num?)?.toDouble(),
+      matchedTerms: rawTerms.whereType<String>().toList(),
+      highlights: rawHighlights
+          .whereType<Map<String, dynamic>>()
+          .map(HighlightSpan.fromJson)
+          .toList(),
     );
   }
 
@@ -58,7 +83,13 @@ class SearchSourceModel {
     if (score != null) 'score': score,
     if (knowledgeBaseId != null) 'knowledgeBaseId': knowledgeBaseId,
     if (documentId != null) 'documentId': documentId,
+    if (chunkId != null) 'chunkId': chunkId,
     if (chunkIndex != null) 'chunkIndex': chunkIndex,
+    if (hitSource != null) 'hitSource': hitSource,
+    if (denseScore != null) 'denseScore': denseScore,
+    if (rerankScore != null) 'rerankScore': rerankScore,
+    if (matchedTerms.isNotEmpty) 'matchedTerms': matchedTerms,
+    if (highlights.isNotEmpty) 'highlights': highlights.map((h) => h.toJson()).toList(),
   };
 }
 

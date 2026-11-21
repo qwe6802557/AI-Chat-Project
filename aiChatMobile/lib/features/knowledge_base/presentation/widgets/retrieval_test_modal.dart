@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/stitch_tokens.dart';
+import '../../domain/chunk_model.dart';
 import '../../providers/knowledge_base_providers.dart';
+import 'chunk_detail_drawer.dart';
+import 'highlighted_chunk_text.dart';
 
 /// 移动端知识库检索演练测试沙箱弹窗
 class RetrievalTestModal extends ConsumerStatefulWidget {
@@ -54,13 +57,41 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
     );
   }
 
+  String _hitSourceLabel(String? hitSource) {
+    switch (hitSource) {
+      case 'hybrid':
+        return '双路共振';
+      case 'dense':
+        return '语义召回';
+      case 'sparse':
+        return '字面匹配';
+      default:
+        return '';
+    }
+  }
+
+  String _formatMetrics(ChunkModel item) {
+    final parts = <String>[];
+    if (item.rerankApplied && item.rerankScore != null) {
+      parts.add('Rerank ${(item.rerankScore! * 100).toStringAsFixed(0)}%');
+    }
+    if (item.denseScore != null) {
+      parts.add('Dense ${(item.denseScore! * 100).toStringAsFixed(0)}%');
+    }
+    if (item.sparseRank != null) {
+      parts.add('Sparse #${item.sparseRank}');
+    }
+    return parts.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(kbSearchTestProvider);
+    final notifier = ref.read(kbSearchTestProvider.notifier);
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -78,7 +109,6 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 顶端拖拽手柄
           Center(
             child: Container(
               width: 36.0,
@@ -90,7 +120,6 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
             ),
           ),
           const SizedBox(height: 14.0),
-          // 标题与关闭
           Row(
             children: [
               Container(
@@ -138,15 +167,14 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
               ),
             ],
           ),
-          const SizedBox(height: 14.0),
-          // 测试输入框与执行按钮
+          const SizedBox(height: 12.0),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _queryController,
                   decoration: InputDecoration(
-                    hintText: '输入提问关键词测试召回切片...',
+                    hintText: '输入提问关键词测试召回与高亮...',
                     hintStyle: const TextStyle(fontSize: 13.0, color: StitchTokens.outline),
                     filled: true,
                     fillColor: StitchTokens.surfaceContainerLow,
@@ -192,10 +220,35 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
               ),
             ],
           ),
-          const SizedBox(height: 14.0),
+          const SizedBox(height: 10.0),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final entry in const [
+                  ('hybrid', '混合'),
+                  ('dense', '语义'),
+                  ('sparse', '关键词'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: ChoiceChip(
+                      label: Text(entry.$2, style: const TextStyle(fontSize: 11.5)),
+                      selected: searchState.mode == entry.$1,
+                      onSelected: (_) => notifier.setMode(entry.$1),
+                    ),
+                  ),
+                FilterChip(
+                  label: const Text('Rerank 精排', style: TextStyle(fontSize: 11.5)),
+                  selected: searchState.enableRerank,
+                  onSelected: notifier.setEnableRerank,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10.0),
           const Divider(height: 1.0, color: StitchTokens.surfaceVariant),
           const SizedBox(height: 10.0),
-          // 检索测试结果流
           Expanded(
             child: _buildResultsView(searchState),
           ),
@@ -238,56 +291,111 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
       itemBuilder: (context, index) {
         final item = state.results[index];
         final score = item.score ?? 0.0;
-        final scorePercent = (score * 100).toStringAsFixed(1);
+        final scorePercent = (score * 100).toStringAsFixed(0);
+        final hitLabel = _hitSourceLabel(item.hitSource);
+        final metrics = _formatMetrics(item);
 
-        return Container(
-          padding: const EdgeInsets.all(12.0),
-          decoration: BoxDecoration(
-            color: StitchTokens.surfaceContainerLow,
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
             borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-            border: Border.all(
-              color: StitchTokens.outlineVariant.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            onTap: item.id.isNotEmpty
+                ? () {
+                    ChunkDetailDrawer.showHitContext(
+                      context,
+                      chunkId: item.id,
+                      documentTitle: item.documentTitle,
+                      highlights: item.highlights,
+                      query: state.query,
+                    );
+                  }
+                : null,
+            child: Container(
+              padding: const EdgeInsets.all(12.0),
+              decoration: BoxDecoration(
+                color: StitchTokens.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+                border: Border.all(
+                  color: StitchTokens.outlineVariant.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-                    decoration: BoxDecoration(
-                      color: StitchTokens.playbackEmerald.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
-                    ),
-                    child: Text(
-                      '相似度: $scorePercent%',
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                        decoration: BoxDecoration(
+                          color: StitchTokens.playbackEmerald.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                        ),
+                        child: Text(
+                          '置信度 $scorePercent%',
+                          style: const TextStyle(
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w700,
+                            color: StitchTokens.playbackEmerald,
+                          ),
+                        ),
+                      ),
+                      if (hitLabel.isNotEmpty) ...[
+                        const SizedBox(width: 6.0),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                          decoration: BoxDecoration(
+                            color: StitchTokens.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
+                          ),
+                          child: Text(
+                            hitLabel,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: StitchTokens.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8.0),
+                      Expanded(
+                        child: Text(
+                          '${item.documentTitle ?? ''} · #${item.chunkIndex + 1}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11.0, color: StitchTokens.outline),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, size: 16.0, color: StitchTokens.outline),
+                    ],
+                  ),
+                  if (metrics.isNotEmpty) ...[
+                    const SizedBox(height: 5.0),
+                    Text(
+                      metrics,
                       style: const TextStyle(
-                        fontSize: 11.0,
-                        fontWeight: FontWeight.w700,
-                        color: StitchTokens.playbackEmerald,
+                        fontSize: 10.5,
+                        color: Color(0xFF64748B),
+                        fontFamily: 'monospace',
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8.0),
-                  Text(
-                    '切片 #${item.chunkIndex + 1}',
-                    style: const TextStyle(fontSize: 11.0, color: StitchTokens.outline),
+                  ],
+                  const SizedBox(height: 6.0),
+                  HighlightedChunkText(
+                    content: item.content,
+                    highlights: item.highlights,
+                    keyword: state.query,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: StitchTokens.onSurface,
+                      height: 1.5,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6.0),
-              Text(
-                item.content,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12.0,
-                  color: StitchTokens.onSurface,
-                  height: 1.45,
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },

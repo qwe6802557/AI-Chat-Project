@@ -8,6 +8,17 @@ import '../domain/knowledge_base_model.dart';
 import '../domain/document_model.dart';
 import '../domain/chunk_model.dart';
 
+/// 分页切片响应容器
+class PagedChunksResult {
+  final List<ChunkModel> items;
+  final int total;
+
+  const PagedChunksResult({
+    required this.items,
+    required this.total,
+  });
+}
+
 /// 知识库数据仓储层 (KnowledgeBaseRepository)
 class KnowledgeBaseRepository {
   final DioClient _client;
@@ -158,36 +169,91 @@ class KnowledgeBaseRepository {
     await _client.dio.delete('/knowledge-bases/documents/$docId');
   }
 
-  /// 获取文档切片详情列表
-  Future<List<ChunkModel>> getChunks(
+  /// 获取文档切片分页列表（含总数与关键词筛选）
+  Future<PagedChunksResult> getChunksPaged(
     String docId, {
     int page = 1,
     int pageSize = 20,
+    String? keyword,
+    bool enabledOnly = false,
   }) async {
     final response = await _client.dio.get(
       '/knowledge-bases/documents/$docId/chunks',
       queryParameters: {
         'page': page,
         'pageSize': pageSize,
+        if (keyword != null && keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
+        if (enabledOnly) 'enabledOnly': 'true',
       },
     );
     final res = response.data;
+    Map<String, dynamic>? payload;
     List? rawList;
     if (res is Map<String, dynamic> && res['items'] is List) {
+      payload = res;
       rawList = res['items'] as List;
     } else if (res is List) {
       rawList = res;
-    } else if (res is Map<String, dynamic> && res['data'] is Map<String, dynamic> && res['data']['items'] is List) {
-      rawList = res['data']['items'] as List;
+    } else if (res is Map<String, dynamic> && res['data'] is Map<String, dynamic>) {
+      final inner = res['data'] as Map<String, dynamic>;
+      if (inner['items'] is List) {
+        payload = inner;
+        rawList = inner['items'] as List;
+      }
     }
 
-    if (rawList != null) {
-      return rawList
-          .whereType<Map<String, dynamic>>()
-          .map((item) => ChunkModel.fromJson(item))
-          .toList();
-    }
-    return [];
+    final items = rawList != null
+        ? rawList.whereType<Map<String, dynamic>>().map(ChunkModel.fromJson).toList()
+        : <ChunkModel>[];
+    final total = (payload?['total'] as num?)?.toInt() ?? items.length;
+    return PagedChunksResult(items: items, total: total);
+  }
+
+  /// 获取文档切片详情列表（向后兼容接口）
+  Future<List<ChunkModel>> getChunks(
+    String docId, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final paged = await getChunksPaged(docId, page: page, pageSize: pageSize);
+    return paged.items;
+  }
+
+  /// 获取命中切片及其前后邻接上下文窗口
+  Future<ChunkContextModel> getChunkContext(
+    String chunkId, {
+    int window = 1,
+  }) async {
+    final response = await _client.dio.get(
+      '/knowledge-bases/chunks/$chunkId/context',
+      queryParameters: {'window': window},
+    );
+    final res = response.data;
+    final Map<String, dynamic> data = res is Map<String, dynamic> && res['data'] is Map<String, dynamic>
+        ? res['data'] as Map<String, dynamic>
+        : res as Map<String, dynamic>;
+    return ChunkContextModel.fromJson(data);
+  }
+
+  /// 更新单条切片正文（自动重算向量）或启停状态
+  Future<ChunkModel> updateChunk(
+    String chunkId, {
+    String? content,
+    bool? isEnabled,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (content != null) payload['content'] = content;
+    if (isEnabled != null) payload['isEnabled'] = isEnabled;
+
+    final response = await _client.dio.patch(
+      '/knowledge-bases/chunks/$chunkId',
+      data: payload,
+    );
+    final res = response.data;
+    final Map<String, dynamic> data = res is Map<String, dynamic> && res['data'] is Map<String, dynamic>
+        ? res['data'] as Map<String, dynamic>
+        : res as Map<String, dynamic>;
+    return ChunkModel.fromJson(data);
   }
 
   /// 知识库混合 RAG 检索测试
@@ -195,6 +261,9 @@ class KnowledgeBaseRepository {
     required String query,
     required List<String> knowledgeBaseIds,
     int limit = 5,
+    String mode = 'hybrid',
+    double? minScore,
+    bool enableRerank = true,
   }) async {
     final response = await _client.dio.post(
       '/knowledge-bases/search',
@@ -202,6 +271,9 @@ class KnowledgeBaseRepository {
         'query': query,
         'knowledgeBaseIds': knowledgeBaseIds,
         'limit': limit,
+        'mode': mode,
+        if (minScore != null && minScore > 0) 'minScore': minScore,
+        'enableRerank': enableRerank,
       },
     );
     final res = response.data;

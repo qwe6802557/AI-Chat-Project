@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -17,7 +18,6 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiConsumes,
-  ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -28,6 +28,7 @@ import {
   CreateKnowledgeBaseDto,
   UpdateKnowledgeBaseDto,
   SearchKnowledgeBaseDto,
+  UpdateKnowledgeChunkDto,
 } from './dto';
 
 @ApiTags('知识库管理与 RAG 检索')
@@ -129,17 +130,47 @@ export class KnowledgeBaseController {
     @Param('docId') docId: string,
     @Query('page') page?: number,
     @Query('pageSize') pageSize?: number,
+    @Query('keyword') keyword?: string,
+    @Query('enabledOnly') enabledOnly?: string,
   ) {
     return this.kbService.getChunks(
       userId,
       docId,
       page ? Number(page) : 1,
       pageSize ? Number(pageSize) : 20,
+      {
+        keyword,
+        enabledOnly: enabledOnly === 'true',
+      },
     );
   }
 
+  @Get('chunks/:chunkId/context')
+  @ApiOperation({ summary: '获取命中切片及其前后邻接上下文窗口' })
+  async getChunkContext(
+    @CurrentUser('id') userId: string,
+    @Param('chunkId') chunkId: string,
+    @Query('window') window?: number,
+  ) {
+    return this.kbService.getChunkContext(
+      userId,
+      chunkId,
+      window ? Number(window) : 1,
+    );
+  }
+
+  @Patch('chunks/:chunkId')
+  @ApiOperation({ summary: '编辑切片正文（自动重算向量）或启停状态' })
+  async updateChunk(
+    @CurrentUser('id') userId: string,
+    @Param('chunkId') chunkId: string,
+    @Body() dto: UpdateKnowledgeChunkDto,
+  ) {
+    return this.kbService.updateChunk(userId, chunkId, dto);
+  }
+
   @Post('search')
-  @ApiOperation({ summary: '混合双路 RAG 语义检索测试' })
+  @ApiOperation({ summary: '混合双路 RAG 语义检索与 Rerank 测试' })
   async search(
     @CurrentUser('id') userId: string,
     @Body() dto: SearchKnowledgeBaseDto,
@@ -148,7 +179,11 @@ export class KnowledgeBaseController {
       userId,
       query: dto.query,
       knowledgeBaseIds: dto.knowledgeBaseIds,
+      documentIds: dto.documentIds,
       limit: dto.limit,
+      mode: dto.mode,
+      minScore: dto.minScore,
+      enableRerank: dto.enableRerank,
     });
   }
 }

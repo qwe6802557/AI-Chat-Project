@@ -40,6 +40,9 @@ export class KnowledgeChunk {
   @Column({ type: 'int', default: 0 })
   charCount: number;
 
+  @Column({ type: 'boolean', default: true })
+  isEnabled: boolean;
+
   @Column({ type: 'real', array: true, nullable: true })
   embedding: number[] | null;
 

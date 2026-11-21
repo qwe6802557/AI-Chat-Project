@@ -6,6 +6,7 @@ import { KnowledgeChunk } from './entities/knowledge-chunk.entity';
 import { DocumentParserService } from './services/document-parser.service';
 import { RecursiveChunkerService } from './services/recursive-chunker.service';
 import { EmbeddingService } from './services/embedding.service';
+import { RerankService } from './services/rerank.service';
 import { HybridRagService } from './services/hybrid-rag.service';
 import { KnowledgeBaseService } from './services/knowledge-base.service';
 import { KnowledgeBaseController } from './knowledge-base.controller';
@@ -23,9 +24,10 @@ import { KnowledgeBaseController } from './knowledge-base.controller';
     DocumentParserService,
     RecursiveChunkerService,
     EmbeddingService,
+    RerankService,
     HybridRagService,
     KnowledgeBaseService,
   ],
-  exports: [HybridRagService, KnowledgeBaseService, EmbeddingService],
+  exports: [HybridRagService, KnowledgeBaseService, EmbeddingService, RerankService],
 })
 export class KnowledgeBaseModule {}

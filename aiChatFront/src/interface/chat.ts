@@ -71,7 +71,13 @@ export interface SearchSource {
   score?: number
   knowledgeBaseId?: string
   documentId?: string
+  chunkId?: string
   chunkIndex?: number
+  hitSource?: 'hybrid' | 'dense' | 'sparse'
+  denseScore?: number
+  rerankScore?: number
+  matchedTerms?: string[]
+  highlights?: Array<{ start: number; end: number; term: string }>
 }
 
 /**

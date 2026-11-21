@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/stitch_tokens.dart';
+import '../../../knowledge_base/presentation/widgets/highlighted_chunk_text.dart';
 import '../../domain/chat_message_model.dart';
 
 /// 移动端 Stitch 风格证据切片与来源抽屉
@@ -243,8 +244,9 @@ class CitationBottomSheet extends StatelessWidget {
               ),
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                child: SelectableText(
-                  source.snippet.isNotEmpty ? source.snippet : '（无预览内容）',
+                child: HighlightedChunkText(
+                  content: source.snippet.isNotEmpty ? source.snippet : '（无预览内容）',
+                  highlights: source.highlights,
                   style: const TextStyle(
                     fontSize: 13.5,
                     height: 1.65,
