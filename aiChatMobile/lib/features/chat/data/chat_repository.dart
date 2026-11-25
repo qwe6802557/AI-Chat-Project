@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/network/dio_client.dart';
 import '../../../core/network/sse_parser.dart';
@@ -8,6 +9,7 @@ import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
 import '../domain/tool_model.dart';
 import '../domain/knowledge_base_model.dart';
+import '../presentation/widgets/model_switcher_bottom_sheet.dart';
 
 import '../../../core/storage/hive_storage_service.dart';
 
@@ -228,5 +230,95 @@ class ChatRepository {
 
   Future<void> clearAllSessions() async {
     await _client.dio.post('/chat/session/clear-all');
+  }
+
+  /// 从后端实时拉取已启用的对话模型列表，与 PC 端保持同源筛选与排序
+  Future<List<ModelInfo>> getActiveChatModels() async {
+    final response = await _client.dio.get(
+      ApiConstants.aiModels,
+      queryParameters: {'includeProvider': 'true'},
+    );
+    final data = response.data;
+    if (data is! Map<String, dynamic> || data['code'] != 0 || data['data'] is! List) {
+      return [];
+    }
+
+    final rawList = (data['data'] as List).whereType<Map<String, dynamic>>().where((m) {
+      final isActive = m['isActive'] != false;
+      final provider = m['provider'];
+      final providerActive = provider is! Map<String, dynamic> || provider['isActive'] != false;
+      final category = m['category'] as String?;
+      final modelId = (m['modelId'] as String? ?? '').toLowerCase();
+      final isChatCategory = category == null || category == 'chat';
+      final isPureImageModel = modelId.contains('imagine-image') ||
+          modelId.contains('image-lite') ||
+          modelId.contains('image-2.0');
+      return isActive && providerActive && isChatCategory && modelId.isNotEmpty && !isPureImageModel;
+    }).toList();
+
+    rawList.sort((a, b) {
+      final defA = a['isDefault'] == true ? 0 : 1;
+      final defB = b['isDefault'] == true ? 0 : 1;
+      if (defA != defB) return defA.compareTo(defB);
+      final sortA = (a['sortOrder'] as num?)?.toInt() ?? 999;
+      final sortB = (b['sortOrder'] as num?)?.toInt() ?? 999;
+      if (sortA != sortB) return sortA.compareTo(sortB);
+      return (a['modelId'] as String? ?? '').compareTo(b['modelId'] as String? ?? '');
+    });
+
+    return rawList.map(_mapBackendModelToInfo).toList();
+  }
+
+  ModelInfo _mapBackendModelToInfo(Map<String, dynamic> raw) {
+    final modelId = raw['modelId'] as String? ?? '';
+    final modelName = (raw['modelName'] as String?)?.trim();
+    final description = (raw['description'] as String?)?.trim();
+    final creditCost = (raw['creditCost'] as num?)?.toInt() ?? ApiConstants.chatMessageCost;
+    final contextLen = (raw['contextLength'] as num?)?.toInt() ?? 0;
+    final isDefault = raw['isDefault'] == true;
+    final lower = modelId.toLowerCase();
+
+    final preset = kAvailableChatModels.where((item) => item.id == modelId);
+    final base = preset.isNotEmpty ? preset.first : null;
+
+    String category = base?.category ?? '通用全能';
+    String tag = base?.tag ?? '在线可用';
+    IconData icon = base?.icon ?? Icons.auto_awesome_rounded;
+
+    if (base == null) {
+      if (lower.contains('r1') || lower.contains('x2.6') || lower.contains('reason')) {
+        category = '深度推理 (Reasoning)';
+        tag = creditCost == 0 ? '免费推理' : '深度思考';
+        icon = Icons.psychology_alt_rounded;
+      } else if (lower.contains('coder') || lower.contains('code')) {
+        category = '代码极速';
+        tag = '代码专家';
+        icon = Icons.terminal_rounded;
+      } else if (lower.contains('flash') || lower.contains('fast') || lower.contains('4b')) {
+        category = '代码极速';
+        tag = creditCost == 0 ? '限时免费' : '高速响应';
+        icon = Icons.bolt_rounded;
+      }
+    }
+
+    final contextWindow = base?.contextWindow ??
+        (contextLen >= 1000000
+            ? '${(contextLen / 1000000).round()}M'
+            : (contextLen >= 1000 ? '${(contextLen / 1000).round()}k' : '128k'));
+
+    return ModelInfo(
+      id: modelId,
+      name: (modelName != null && modelName.isNotEmpty) ? modelName : (base?.name ?? modelId),
+      category: category,
+      tag: isDefault ? '默认推荐' : tag,
+      description: (description != null && description.isNotEmpty)
+          ? description
+          : (base?.description ?? '服务端已启用对话模型'),
+      latency: base?.latency ?? '50ms',
+      contextWindow: contextWindow,
+      cost: creditCost,
+      icon: icon,
+      isDefault: isDefault,
+    );
   }
 }

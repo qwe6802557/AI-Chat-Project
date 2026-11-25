@@ -79,13 +79,24 @@ class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClie
   }
 
   void _openModelSwitcher() {
-    final currentModel = ref.read(chatProvider).selectedModel;
-    ModelSwitcherBottomSheet.show(
-      context,
-      currentModel: currentModel,
-      onModelSelected: (model) {
-        ref.read(chatProvider.notifier).setModel(model);
-      },
+    ref.read(chatProvider.notifier).loadActiveModels();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Consumer(
+        builder: (context, ref, _) {
+          final chatState = ref.watch(chatProvider);
+          return ModelSwitcherBottomSheet(
+            currentModel: chatState.selectedModel,
+            availableModels: chatState.hasLoadedModels ? chatState.availableModels : null,
+            onModelSelected: (model) {
+              ref.read(chatProvider.notifier).setModel(model);
+            },
+          );
+        },
+      ),
     );
   }
 

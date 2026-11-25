@@ -29,7 +29,7 @@ class ApiConstants {
   // 积分账本与模型配置
   static const String creditsBalance = '/credits/balance';
   static const String creditsRecords = '/credits/records';
-  static const String aiModels = '/ai-provider/models';
+  static const String aiModels = '/ai-model/list-active';
 
   // 语音服务链路
   static const String voiceVoices = '/voice/voices';
