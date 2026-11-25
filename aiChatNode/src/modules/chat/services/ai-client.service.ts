@@ -121,7 +121,7 @@ export class AIClientService {
   }
 
   /**
-   * 判定错误是否属于上游基础设施暂时性异常（429限流、502/503/504网关故障、网络超时）
+   * 判定错误是否属于可降级切换的上游异常（429 限流、403 额度/订单授权异常、5xx 网关故障、网络超时）
    */
   isTransientProviderError(error: any): boolean {
     if (!error) return false;
@@ -132,6 +132,22 @@ export class AIClientService {
       return true;
     }
 
+    const quotaOrOrderKeywords = [
+      'no valid authorization',
+      'lacks an active order',
+      'insufficient quota',
+      'order is invalid',
+      'quota exceeded',
+      '缺少有效模型订单',
+      '免费额度已过期',
+      '未授权该模型',
+      '额度不足',
+    ];
+
+    if (status === 403 && quotaOrOrderKeywords.some((kw) => msg.includes(kw))) {
+      return true;
+    }
+
     const transientKeywords = [
       'rate limit',
       'too many requests',
@@ -139,19 +155,27 @@ export class AIClientService {
       '502 bad gateway',
       '503 service unavailable',
       '504 gateway timeout',
-      'quota exceeded',
       'overloaded',
       'econnrefused',
       'etimedout',
       'fetch failed',
       'network error',
+      ...quotaOrOrderKeywords,
     ];
 
     return transientKeywords.some((kw) => msg.includes(kw));
   }
 
+  private isProviderAdapterConfigured(providerName: string): boolean {
+    try {
+      return this.resolveAdapter(providerName).isConfigured;
+    } catch {
+      return false;
+    }
+  }
+
   /**
-   * 查找同级别且健康的备用模型
+   * 查找同级别且已配置、健康的备用模型
    */
   async findFallbackModel(
     primaryModelId: string,
@@ -165,6 +189,7 @@ export class AIClientService {
           m.provider &&
           m.provider.isActive &&
           m.provider.name.toLowerCase() !== primaryProviderName.toLowerCase() &&
+          this.isProviderAdapterConfigured(m.provider.name) &&
           !this.isProviderCircuitOpen(m.provider.name),
       );
 

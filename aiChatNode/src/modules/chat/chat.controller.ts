@@ -439,20 +439,61 @@ export class ChatController {
         });
       }
 
-      // 发送错误事件
+      // 需在首次写入响应体之前设置 HTTP 状态码，避免 ERR_HTTP_HEADERS_SENT
       const errorData = JSON.stringify({
-        error: error instanceof Error ? error.message : '流式请求失败',
+        error: this.formatStreamErrorMessage(error),
       });
 
       if (!res.writableEnded) {
+        if (!res.headersSent) {
+          const status =
+            error instanceof HttpException
+              ? error.getStatus()
+              : HttpStatus.INTERNAL_SERVER_ERROR;
+          res.status(status);
+        }
         res.write(`data: ${errorData}\n\n`);
-        const status =
-          error instanceof HttpException
-            ? error.getStatus()
-            : HttpStatus.INTERNAL_SERVER_ERROR;
-        res.status(status).end();
+        res.end();
       }
     }
+  }
+
+  /**
+   * 将上游流式异常收敛为面向用户的中文错误提示
+   */
+  private formatStreamErrorMessage(error: unknown): string {
+    const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+    const status =
+      (error as { status?: number; statusCode?: number; response?: { status?: number } })?.status ??
+      (error as { statusCode?: number })?.statusCode ??
+      (error as { response?: { status?: number } })?.response?.status;
+
+    if (/[\u4e00-\u9fa5]/.test(rawMessage)) {
+      return rawMessage;
+    }
+
+    if (
+      status === 403 ||
+      /no valid authorization|lacks an active order|insufficient quota|order is invalid/i.test(
+        rawMessage,
+      )
+    ) {
+      return '模型服务授权失败（403）：当前 API Key 缺少有效模型订单、额度不足或未授权该模型，请检查供应商控制台配置';
+    }
+
+    if (status === 401) {
+      return '模型服务鉴权失败（401）：请检查供应商 API Key 配置';
+    }
+
+    if (status === 429) {
+      return '模型服务请求频率超限（429），请稍后重试';
+    }
+
+    if (status === 502 || status === 503 || status === 504) {
+      return '上游模型服务暂时不可用，请稍后重试';
+    }
+
+    return rawMessage || '流式请求失败';
   }
 
   /**

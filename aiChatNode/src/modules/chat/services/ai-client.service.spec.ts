@@ -9,6 +9,8 @@ import type { Grok2APIAdapter } from '../adapters/grok2api.adapter';
 import type { ZhipuAdapter } from '../adapters/zhipu.adapter';
 import type { SiliconFlowAdapter } from '../adapters/siliconflow.adapter';
 import type { OFMAdapter } from '../adapters/ofm.adapter';
+import type { XfyunMaaSAdapter } from '../adapters/xfyun-maas.adapter';
+import type { GeminiAdapter } from '../adapters/gemini.adapter';
 import type { CompletionChunk } from '../types/completion.types';
 import { AIClientService } from './ai-client.service';
 
@@ -121,6 +123,38 @@ describe('AIClientService', () => {
     createStreamChatCompletion: jest.fn(),
     healthCheck: jest.fn(),
   };
+  const xfyunCreateChatCompletionMock =
+    jest.fn<XfyunMaaSAdapter['createChatCompletion']>();
+  const xfyunCreateStreamChatCompletionMock =
+    jest.fn<XfyunMaaSAdapter['createStreamChatCompletion']>();
+  const xfyunMaaSAdapter: Pick<
+    XfyunMaaSAdapter,
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
+  > = {
+    providerName: 'iFLYTEK',
+    isConfigured: true,
+    createChatCompletion: xfyunCreateChatCompletionMock,
+    createStreamChatCompletion: xfyunCreateStreamChatCompletionMock,
+    healthCheck: jest.fn(),
+  };
+  const geminiAdapter: Pick<
+    GeminiAdapter,
+    | 'providerName'
+    | 'isConfigured'
+    | 'createChatCompletion'
+    | 'createStreamChatCompletion'
+    | 'healthCheck'
+  > = {
+    providerName: 'Gemini',
+    isConfigured: false,
+    createChatCompletion: jest.fn(),
+    createStreamChatCompletion: jest.fn(),
+    healthCheck: jest.fn(),
+  };
   const findByModelIdMock = jest.fn<AiModelService['findByModelId']>();
   const findActiveModelsMock = jest.fn<AiModelService['findActiveModels']>();
   const aiModelService: Pick<AiModelService, 'findByModelId' | 'findActiveModels'> = {
@@ -160,6 +194,8 @@ describe('AIClientService', () => {
       zhipuAdapter as ZhipuAdapter,
       siliconFlowAdapter as SiliconFlowAdapter,
       ofmAdapter as OFMAdapter,
+      xfyunMaaSAdapter as XfyunMaaSAdapter,
+      geminiAdapter as GeminiAdapter,
       aiModelService as AiModelService,
       aiProviderService as AiProviderService,
       redisService as RedisService,
@@ -611,6 +647,74 @@ describe('AIClientService', () => {
 
       expect(response.content).toBe('Hello from OFM');
       expect(ofmAdapter.createChatCompletion).toHaveBeenCalled();
+    });
+
+    it('识别 403 授权/额度异常并在流式调用时自动跳过未配置通道降级至健康备用模型', async () => {
+      const error403En = Object.assign(
+        new Error(
+          '403 no valid authorization: the account lacks an active order, has insufficient quota, or the order is invalid',
+        ),
+        { status: 403 },
+      );
+      const error403Zh = Object.assign(
+        new Error(
+          '科大讯飞星辰 MaaS 授权失败（403）：当前 API Key 缺少有效模型订单、免费额度已过期或未授权该模型',
+        ),
+        { status: 403 },
+      );
+
+      expect(service.isTransientProviderError(error403En)).toBe(true);
+      expect(service.isTransientProviderError(error403Zh)).toBe(true);
+
+      findByModelIdMock.mockResolvedValue({
+        isActive: true,
+        inputPrice: 0,
+        outputPrice: 0,
+        provider: { id: 'provider-iflytek', name: 'iFLYTEK', isActive: true },
+        modelName: 'Spark-X2.6',
+        modelId: 'spark-x2.6',
+      });
+
+      xfyunCreateStreamChatCompletionMock.mockRejectedValueOnce(error403Zh);
+
+      findActiveModelsMock.mockResolvedValueOnce([
+        {
+          id: 'model-gemini-unconfigured',
+          modelId: 'gemini-3.8-flash-medium',
+          modelName: 'Gemini Flash',
+          isActive: true,
+          inputPrice: 0,
+          outputPrice: 0,
+          provider: { id: 'provider-gemini', name: 'Gemini', isActive: true },
+        } as any,
+        {
+          id: 'model-claude',
+          modelId: 'claude-3-5-sonnet',
+          modelName: 'Claude 3.5 Sonnet',
+          isActive: true,
+          inputPrice: 1,
+          outputPrice: 3,
+          provider: { id: 'provider-claude', name: 'Claude', isActive: true },
+        } as any,
+      ]);
+
+      claudeCreateStreamChatCompletionMock.mockResolvedValueOnce(
+        createAsyncChunks([
+          { type: 'answer_delta', delta: { content: 'Recovered' } },
+        ]),
+      );
+
+      const stream = await service.createStreamChatCompletion('spark-x2.6', [
+        { role: 'user', content: 'hi' },
+      ]);
+      const chunks: CompletionChunk[] = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+
+      expect(chunks[0]?.type).toBe('failover_notice');
+      expect(chunks[0]?.failover?.activeModelId).toBe('claude-3-5-sonnet');
+      expect(chunks[1]?.delta?.content).toBe('Recovered');
     });
   });
 });
