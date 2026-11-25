@@ -18,6 +18,7 @@ class ModelInfo {
   final String contextWindow;
   final int cost;
   final IconData icon;
+  final bool isDefault;
 
   const ModelInfo({
     required this.id,
@@ -29,6 +30,7 @@ class ModelInfo {
     required this.contextWindow,
     required this.cost,
     required this.icon,
+    this.isDefault = false,
   });
 }
 
@@ -83,11 +85,13 @@ const List<ModelInfo> kAvailableChatModels = [
 class ModelSwitcherBottomSheet extends StatefulWidget {
   final String currentModel;
   final ValueChanged<String> onModelSelected;
+  final List<ModelInfo>? availableModels;
 
   const ModelSwitcherBottomSheet({
     super.key,
     required this.currentModel,
     required this.onModelSelected,
+    this.availableModels,
   });
 
   /// 格式化模型名称显示（精炼且去 AI 味）
@@ -110,6 +114,7 @@ class ModelSwitcherBottomSheet extends StatefulWidget {
     BuildContext context, {
     required String currentModel,
     required ValueChanged<String> onModelSelected,
+    List<ModelInfo>? availableModels,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -119,6 +124,7 @@ class ModelSwitcherBottomSheet extends StatefulWidget {
       builder: (_) => ModelSwitcherBottomSheet(
         currentModel: currentModel,
         onModelSelected: onModelSelected,
+        availableModels: availableModels,
       ),
     );
   }
@@ -134,18 +140,47 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
   late String _selectedOtherModel;
   String _selectedCategory = '全部模型';
 
-  @override
-  void initState() {
-    super.initState();
-    final model = widget.currentModel;
-    if (model.startsWith('gemini-')) {
-      _activeTab = ModelTab.gemini;
-      if (model.contains('gemini-4-argon')) {
-        _geminiBaseModel = 'gemini-4-argon';
-      } else {
-        _geminiBaseModel = 'gemini-3.8-flash';
-      }
+  List<ModelInfo> get _effectiveModels => widget.availableModels ?? kAvailableChatModels;
 
+  List<ModelInfo> get _geminiModels =>
+      _effectiveModels.where((m) => m.id.startsWith('gemini-')).toList();
+
+  List<ModelInfo> get _otherModels =>
+      _effectiveModels.where((m) => !m.id.startsWith('gemini-')).toList();
+
+  bool get _hasGeminiModels => _geminiModels.isNotEmpty;
+
+  bool get _hasFlashFamily =>
+      _geminiModels.any((m) => m.id.startsWith('gemini-3.8-flash'));
+
+  bool get _hasArgonFamily =>
+      _geminiModels.any((m) => m.id.startsWith('gemini-4-argon'));
+
+  int get _flashCost {
+    final matched = _geminiModels.where((m) => m.id.startsWith('gemini-3.8-flash'));
+    return matched.isNotEmpty ? matched.first.cost : 10;
+  }
+
+  int get _argonCost {
+    final matched = _geminiModels.where((m) => m.id.startsWith('gemini-4-argon'));
+    return matched.isNotEmpty ? matched.first.cost : 20;
+  }
+
+  List<String> get _availableEfforts {
+    const allEfforts = ['low', 'medium', 'high'];
+    final available = allEfforts
+        .where((e) => _geminiModels.any((m) => m.id == '$_geminiBaseModel-$e'))
+        .toList();
+    return available.isNotEmpty ? available : allEfforts;
+  }
+
+  void _syncSelectionWithAvailableModels({bool initial = false}) {
+    final model = widget.currentModel;
+
+    if (initial) {
+      _geminiBaseModel = model.contains('gemini-4-argon')
+          ? 'gemini-4-argon'
+          : 'gemini-3.8-flash';
       if (model.endsWith('-low')) {
         _thinkingEffort = 'low';
       } else if (model.endsWith('-high')) {
@@ -153,18 +188,58 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
       } else {
         _thinkingEffort = 'medium';
       }
-      _selectedOtherModel = 'grok-chat-fast';
-    } else {
+      _selectedOtherModel = model.isNotEmpty && !model.startsWith('gemini-')
+          ? model
+          : (_otherModels.isNotEmpty ? _otherModels.first.id : 'grok-chat-fast');
+      _activeTab = (_hasGeminiModels && model.startsWith('gemini-'))
+          ? ModelTab.gemini
+          : ModelTab.others;
+    }
+
+    if (!_hasGeminiModels) {
       _activeTab = ModelTab.others;
-      _geminiBaseModel = 'gemini-3.8-flash';
-      _thinkingEffort = 'medium';
-      _selectedOtherModel = model.isNotEmpty ? model : 'grok-chat-fast';
+    } else {
+      if (_geminiBaseModel == 'gemini-4-argon' && !_hasArgonFamily && _hasFlashFamily) {
+        _geminiBaseModel = 'gemini-3.8-flash';
+      } else if (_geminiBaseModel == 'gemini-3.8-flash' && !_hasFlashFamily && _hasArgonFamily) {
+        _geminiBaseModel = 'gemini-4-argon';
+      }
+      if (!_availableEfforts.contains(_thinkingEffort)) {
+        _thinkingEffort = _availableEfforts.first;
+      }
+    }
+
+    if (_otherModels.isNotEmpty && !_otherModels.any((m) => m.id == _selectedOtherModel)) {
+      _selectedOtherModel = _otherModels.first.id;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _syncSelectionWithAvailableModels(initial: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant ModelSwitcherBottomSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.availableModels != oldWidget.availableModels ||
+        widget.currentModel != oldWidget.currentModel) {
+      _syncSelectionWithAvailableModels();
     }
   }
 
   String get _currentFinalModel {
-    if (_activeTab == ModelTab.gemini) {
-      return '$_geminiBaseModel-$_thinkingEffort';
+    if (_hasGeminiModels && _activeTab == ModelTab.gemini) {
+      final exactId = '$_geminiBaseModel-$_thinkingEffort';
+      if (_geminiModels.any((m) => m.id == exactId)) {
+        return exactId;
+      }
+      final fallback = _geminiModels.where((m) => m.id.startsWith('$_geminiBaseModel-'));
+      if (fallback.isNotEmpty) {
+        return fallback.first.id;
+      }
+      return _geminiModels.first.id;
     }
     return _selectedOtherModel;
   }
@@ -230,7 +305,9 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
                               borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
                             ),
                             child: Text(
-                              _activeTab == ModelTab.gemini ? 'Gemini 旗舰系列' : '已集成多供应商',
+                              (_hasGeminiModels && _activeTab == ModelTab.gemini)
+                                  ? 'Gemini 旗舰系列'
+                                  : '现有可用模型',
                               style: const TextStyle(
                                 fontSize: 11.0,
                                 fontWeight: FontWeight.w600,
@@ -242,9 +319,9 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
                       ),
                       const SizedBox(height: 2.0),
                       Text(
-                        _activeTab == ModelTab.gemini
+                        (_hasGeminiModels && _activeTab == ModelTab.gemini)
                             ? 'Google 原生前沿架构 · 毫秒级多档思考深度'
-                            : '已兼容 Grok, 智谱 GLM, 硅基流动 DeepSeek 与 Qwen',
+                            : '已同步服务端当前启用模型',
                         style: const TextStyle(
                           fontSize: 12.0,
                           color: StitchTokens.onSurfaceVariant,
@@ -259,40 +336,41 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
                 ],
               ),
             ),
-            // 顶层主分类切换分段器：Gemini 系列 vs 其它模型
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-              child: Container(
-                padding: const EdgeInsets.all(3.0),
-                decoration: BoxDecoration(
-                  color: StitchTokens.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildMainTabButton(
-                        tab: ModelTab.gemini,
-                        label: 'Gemini 系列',
-                        icon: Icons.auto_awesome_rounded,
-                        badge: '推荐',
+            // 仅当存在已启用的 Gemini 模型时展示主分类切换分段器
+            if (_hasGeminiModels)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                child: Container(
+                  padding: const EdgeInsets.all(3.0),
+                  decoration: BoxDecoration(
+                    color: StitchTokens.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildMainTabButton(
+                          tab: ModelTab.gemini,
+                          label: 'Gemini 系列',
+                          icon: Icons.auto_awesome_rounded,
+                          badge: '推荐',
+                        ),
                       ),
-                    ),
-                    Expanded(
-                      child: _buildMainTabButton(
-                        tab: ModelTab.others,
-                        label: '其它模型',
-                        icon: Icons.widgets_outlined,
+                      Expanded(
+                        child: _buildMainTabButton(
+                          tab: ModelTab.others,
+                          label: '其它模型',
+                          icon: Icons.widgets_outlined,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
             const Divider(height: 1.0, color: StitchTokens.surfaceContainerLow),
             // 主体内容区
             Flexible(
-              child: _activeTab == ModelTab.gemini
+              child: (_hasGeminiModels && _activeTab == ModelTab.gemini)
                   ? _buildGeminiContent()
                   : _buildOthersContent(),
             ),
@@ -443,22 +521,24 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
             style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.w700, color: StitchTokens.onSurface),
           ),
           const SizedBox(height: 8.0),
-          // 两个 Gemini 模型卡片
-          _buildGeminiModelCard(
-            baseId: 'gemini-3.8-flash',
-            title: 'Gemini 3.8 Flash',
-            badge: '推荐日常',
-            desc: '新一代高响应极速模型，毫秒级起流，多模态图文兼修，擅长日常问答、搜索与快速编码',
-            cost: 10,
-          ),
-          const SizedBox(height: 10.0),
-          _buildGeminiModelCard(
-            baseId: 'gemini-4-argon',
-            title: 'Gemini 4 Argon',
-            badge: '前沿旗舰',
-            desc: '最强前沿智力旗舰，擅长复杂工程架构、跨领域深度推导与长上下文严谨逻辑闭环',
-            cost: 20,
-          ),
+          // 仅渲染已启用的 Gemini 模型卡片
+          if (_hasFlashFamily)
+            _buildGeminiModelCard(
+              baseId: 'gemini-3.8-flash',
+              title: 'Gemini 3.8 Flash',
+              badge: '推荐日常',
+              desc: '新一代高响应极速模型，毫秒级起流，多模态图文兼修，擅长日常问答、搜索与快速编码',
+              cost: _flashCost,
+            ),
+          if (_hasFlashFamily && _hasArgonFamily) const SizedBox(height: 10.0),
+          if (_hasArgonFamily)
+            _buildGeminiModelCard(
+              baseId: 'gemini-4-argon',
+              title: 'Gemini 4 Argon',
+              badge: '前沿旗舰',
+              desc: '最强前沿智力旗舰，擅长复杂工程架构、跨领域深度推导与长上下文严谨逻辑闭环',
+              cost: _argonCost,
+            ),
           const SizedBox(height: 18.0),
           // 思考强度分段器
           Row(
@@ -483,11 +563,16 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
             ),
             child: Row(
               children: [
-                Expanded(child: _buildEffortOption('low', 'Low', '轻度推导 · 快速响应')),
-                const SizedBox(width: 4.0),
-                Expanded(child: _buildEffortOption('medium', 'Medium', '平衡思考 · 推荐日常')),
-                const SizedBox(width: 4.0),
-                Expanded(child: _buildEffortOption('high', 'High', '深度思维链 · 严谨推理')),
+                if (_availableEfforts.contains('low'))
+                  Expanded(child: _buildEffortOption('low', 'Low', '轻度推导 · 快速响应')),
+                if (_availableEfforts.contains('low') && _availableEfforts.contains('medium'))
+                  const SizedBox(width: 4.0),
+                if (_availableEfforts.contains('medium'))
+                  Expanded(child: _buildEffortOption('medium', 'Medium', '平衡思考 · 推荐日常')),
+                if (_availableEfforts.contains('medium') && _availableEfforts.contains('high'))
+                  const SizedBox(width: 4.0),
+                if (_availableEfforts.contains('high'))
+                  Expanded(child: _buildEffortOption('high', 'High', '深度思维链 · 严谨推理')),
               ],
             ),
           ),
@@ -680,9 +765,19 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
   }
 
   Widget _buildOthersContent() {
-    final filteredModels = _selectedCategory == '全部模型'
-        ? kAvailableChatModels
-        : kAvailableChatModels.where((m) => m.category == _selectedCategory).toList();
+    final models = _otherModels;
+    final dynamicCategories = <String>['全部模型'];
+    for (final m in models) {
+      if (!dynamicCategories.contains(m.category)) {
+        dynamicCategories.add(m.category);
+      }
+    }
+    final activeCategory = dynamicCategories.contains(_selectedCategory)
+        ? _selectedCategory
+        : '全部模型';
+    final filteredModels = activeCategory == '全部模型'
+        ? models
+        : models.where((m) => m.category == activeCategory).toList();
 
     return Column(
       children: [
@@ -691,13 +786,8 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
           child: Row(
-            children: [
-              '全部模型',
-              '深度推理 (Reasoning)',
-              '通用全能',
-              '代码极速',
-            ].map((category) {
-              final isSelected = _selectedCategory == category;
+            children: dynamicCategories.map((category) {
+              final isSelected = activeCategory == category;
               return Padding(
                 padding: const EdgeInsets.only(right: 8.0),
                 child: ChoiceChip(
@@ -724,19 +814,29 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
         ),
         // 列表项
         Flexible(
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-            itemCount: filteredModels.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8.0),
-            itemBuilder: (context, index) {
-              final model = filteredModels[index];
-              return ModelInfoCard(
-                model: model,
-                isSelected: _selectedOtherModel == model.id,
-                onTap: () => setState(() => _selectedOtherModel = model.id),
-              );
-            },
-          ),
+          child: filteredModels.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 28.0),
+                    child: Text(
+                      '暂无可用模型',
+                      style: TextStyle(fontSize: 13.0, color: StitchTokens.onSurfaceVariant),
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+                  itemCount: filteredModels.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8.0),
+                  itemBuilder: (context, index) {
+                    final model = filteredModels[index];
+                    return ModelInfoCard(
+                      model: model,
+                      isSelected: _selectedOtherModel == model.id,
+                      onTap: () => setState(() => _selectedOtherModel = model.id),
+                    );
+                  },
+                ),
         ),
       ],
     );

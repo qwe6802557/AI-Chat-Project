@@ -15,6 +15,7 @@ import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
 import '../domain/tool_model.dart';
 import '../domain/knowledge_base_model.dart';
+import '../presentation/widgets/model_switcher_bottom_sheet.dart';
 import '../../../core/storage/hive_storage_service.dart';
 import '../../../core/network/connectivity_provider.dart';
 
@@ -24,6 +25,8 @@ class ChatState {
   final List<ChatMessageModel> messages;
   final bool isGenerating;
   final String selectedModel;
+  final List<ModelInfo> availableModels;
+  final bool hasLoadedModels;
   final int creditsRemaining;
   final String? errorMessage;
   final List<AttachmentItem> pendingAttachments;
@@ -37,6 +40,8 @@ class ChatState {
     this.messages = const [],
     this.isGenerating = false,
     this.selectedModel = ApiConstants.defaultChatModel,
+    this.availableModels = const [],
+    this.hasLoadedModels = false,
     this.creditsRemaining = 1000,
     this.errorMessage,
     this.pendingAttachments = const [],
@@ -51,6 +56,8 @@ class ChatState {
     List<ChatMessageModel>? messages,
     bool? isGenerating,
     String? selectedModel,
+    List<ModelInfo>? availableModels,
+    bool? hasLoadedModels,
     int? creditsRemaining,
     String? errorMessage,
     List<AttachmentItem>? pendingAttachments,
@@ -64,6 +71,8 @@ class ChatState {
       messages: messages ?? this.messages,
       isGenerating: isGenerating ?? this.isGenerating,
       selectedModel: selectedModel ?? this.selectedModel,
+      availableModels: availableModels ?? this.availableModels,
+      hasLoadedModels: hasLoadedModels ?? this.hasLoadedModels,
       creditsRemaining: creditsRemaining ?? this.creditsRemaining,
       errorMessage: errorMessage,
       pendingAttachments: pendingAttachments ?? this.pendingAttachments,
@@ -90,11 +99,13 @@ final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
   if (authState.user != null) {
     notifier.updateCredits(authState.user!.credits.remaining);
     notifier.loadSessions();
+    notifier.loadActiveModels();
   }
   ref.listen<NetworkState>(connectivityProvider, (prev, next) {
     if (prev != null && !prev.isOnline && next.isOnline) {
       notifier.flushOfflineQueue();
       notifier.loadSessions();
+      notifier.loadActiveModels();
     }
   });
   return notifier;
@@ -124,6 +135,25 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   void setModel(String model) {
     state = state.copyWith(selectedModel: model);
+  }
+
+  /// 同步服务端已启用的对话模型列表，若当前选中模型已停用则自动切换至默认可用模型
+  Future<void> loadActiveModels() async {
+    try {
+      final models = await _repository.getActiveChatModels();
+      String nextModel = state.selectedModel;
+      if (models.isNotEmpty && !models.any((m) => m.id == nextModel)) {
+        final defaults = models.where((m) => m.isDefault);
+        nextModel = defaults.isNotEmpty ? defaults.first.id : models.first.id;
+      }
+      state = state.copyWith(
+        availableModels: models,
+        hasLoadedModels: true,
+        selectedModel: nextModel,
+      );
+    } catch (_) {
+      // 弱网或未鉴权阶段保留当前可用模型状态
+    }
   }
 
   void toggleWebSearch() {
