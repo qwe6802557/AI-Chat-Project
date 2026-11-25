@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onActivated } from 'vue'
+import { computed, ref, onMounted, onActivated, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -86,7 +86,6 @@ const PREFERRED_MODEL_ORDER: string[] = [
   'glm-4-flash',
   'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B',
   'Qwen/Qwen2.5-Coder-7B-Instruct',
-  'spark-x2.5',
   'spark-x2.6-4b',
 ]
 
@@ -196,9 +195,8 @@ if (localStorage.getItem(MODEL_VERSION_KEY) !== CURRENT_MODEL_VERSION) {
   saveSelectedModel()
 }
 
-const modelOptions = ref<ChatModelOption[]>([
-  { label: DEFAULT_CHAT_MODEL, value: DEFAULT_CHAT_MODEL, inputPrice: 0, outputPrice: 0, reserveCredits: 10 }
-])
+// 初始保持为空，待服务端返回启用模型后再填充，避免禁用 Gemini 时先闪现分组 Tab
+const modelOptions = ref<ChatModelOption[]>([])
 const modelsLoading = ref(false)
 const hasCreditSnapshot = computed(() => !!authStore.userProfile?.credits)
 const currentCreditsRemaining = computed(() => {
@@ -360,6 +358,8 @@ const loadModelOptions = async () => {
           saveSelectedModel()
         }
       }
+    } else {
+      modelOptions.value = []
     }
   } catch (error) {
     logger.error('加载模型列表失败:', error)
@@ -489,7 +489,12 @@ const handleLogout = async () => {
   await router.push('/login')
 }
 
+const handleModelsUpdated = () => {
+  void loadModelOptions()
+}
+
 onMounted(async () => {
+  window.addEventListener('aichat:models-updated', handleModelsUpdated)
   // 加载会话列表
   const userId = getUserId()
   if (userId) {
@@ -514,6 +519,10 @@ onMounted(async () => {
   } else {
     message.warning('未获取到用户信息，请重新登录')
   }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('aichat:models-updated', handleModelsUpdated)
 })
 
 onActivated(async () => {

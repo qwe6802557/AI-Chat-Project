@@ -311,6 +311,7 @@ const handleToggleActive = async (record: BackendAiModel, newActive: boolean) =>
     const res = await updateModel(record.id, { isActive: newActive })
     if (res && res.code === 0) {
       message.success(`已${newActive ? '启用' : '停用'}模型: ${record.modelName}`)
+      window.dispatchEvent(new CustomEvent('aichat:models-updated'))
     } else {
       record.isActive = previousStatus
       message.error(res?.message || '修改状态失败')
@@ -341,6 +342,7 @@ const handleSetDefault = async (record: BackendAiModel) => {
         }
       })
       sortModelList()
+      window.dispatchEvent(new CustomEvent('aichat:models-updated'))
     } else {
       message.error(res?.message || '设置默认模型失败')
     }

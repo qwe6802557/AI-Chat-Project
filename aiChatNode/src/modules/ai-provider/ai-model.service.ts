@@ -62,7 +62,11 @@ export class AiModelService {
     const query = this.modelRepository.createQueryBuilder('model');
 
     if (includeProvider) {
-      query.leftJoinAndSelect('model.provider', 'provider');
+      query
+        .leftJoinAndSelect('model.provider', 'provider')
+        .andWhere('(provider.id IS NULL OR provider.isActive = :providerActive)', {
+          providerActive: true,
+        });
     }
 
     query

@@ -279,6 +279,7 @@ export class DatabaseSeederService implements OnModuleInit {
       'grok-4.7',
       'grok-composer-2.5-fast',
       'moonshotai/Kimi-K3',
+      'spark-x2.5',
     ];
     for (const deprecatedId of DEPRECATED_MODEL_IDS) {
       try {
@@ -609,16 +610,6 @@ export class DatabaseSeederService implements OnModuleInit {
         isActive: true,
       },
       {
-        modelId: 'spark-x2.5',
-        modelName: 'Spark-X2.5 (256k)',
-        description:
-          '科大讯飞通用多语言大模型，支持 256k 上下文与多语言问答，单次 1 积分',
-        category: 'chat' as const,
-        creditCost: 1,
-        sortOrder: 11,
-        isActive: true,
-      },
-      {
         modelId: 'spark-x2.6-4b',
         modelName: 'Spark-X2.6-4B (轻量开源)',
         description:
@@ -688,16 +679,14 @@ export class DatabaseSeederService implements OnModuleInit {
         }
       }
 
-      // 检查是否已存在默认聊天模型，若无则初始化首个可用模型为默认
-      const geminiDefault = allModels.find((m) => m.modelId === 'gemini-3.8-flash-medium' && m.isActive);
-      if (geminiDefault && !geminiDefault.isDefault) {
-        await this.aiModelService.setDefaultModel(geminiDefault.id);
-        this.logger.log(`初始化系统默认聊天模型为: ${geminiDefault.modelName}`);
-      }
-      const hasDefaultChat = allModels.some((m) => m.category === 'chat' && m.isDefault);
-      if (!hasDefaultChat) {
+      // 检查是否已存在启用的默认聊天模型，若无则优先初始化可用模型为默认
+      const hasActiveDefaultChat = allModels.some(
+        (m) => m.category === 'chat' && m.isDefault && m.isActive,
+      );
+      if (!hasActiveDefaultChat) {
         const defaultCandidate =
-          allModels.find((m) => m.modelId === 'grok-chat-fast') ||
+          allModels.find((m) => m.modelId === 'gemini-3.8-flash-medium' && m.isActive) ||
+          allModels.find((m) => m.modelId === 'grok-chat-fast' && m.isActive) ||
           allModels.find((m) => m.category === 'chat' && m.isActive);
         if (defaultCandidate) {
           await this.aiModelService.setDefaultModel(defaultCandidate.id);
@@ -802,12 +791,10 @@ export class DatabaseSeederService implements OnModuleInit {
     );
 
     if (existingModel) {
+      // 保留管理员在模型管理控制台手动切换的 isActive 启停状态，启动时不强制回写覆盖
       const needsSortUpdate =
         payload.sortOrder !== undefined &&
         existingModel.sortOrder !== payload.sortOrder;
-      const needsActiveUpdate =
-        payload.isActive !== undefined &&
-        existingModel.isActive !== payload.isActive;
       const needsCategoryUpdate =
         payload.category !== undefined &&
         existingModel.category !== payload.category;
@@ -826,7 +813,6 @@ export class DatabaseSeederService implements OnModuleInit {
 
       if (
         needsSortUpdate ||
-        needsActiveUpdate ||
         needsCategoryUpdate ||
         needsBillingModeUpdate ||
         needsCreditCostUpdate ||
@@ -837,12 +823,11 @@ export class DatabaseSeederService implements OnModuleInit {
           modelName: payload.modelName ?? existingModel.modelName,
           description: payload.description ?? existingModel.description,
           sortOrder: payload.sortOrder ?? existingModel.sortOrder,
-          isActive: payload.isActive ?? existingModel.isActive,
           category: payload.category ?? existingModel.category,
           billingMode: payload.billingMode ?? existingModel.billingMode,
           creditCost: payload.creditCost ?? existingModel.creditCost,
         });
-        this.logger.log(`模型已更新配置(名称/描述/排序/状态/分类/计费): ${payload.modelId}`);
+        this.logger.log(`模型已更新配置(名称/描述/排序/分类/计费): ${payload.modelId}`);
       } else {
         this.logger.log(`模型已存在，跳过覆盖: ${payload.modelId}`);
       }

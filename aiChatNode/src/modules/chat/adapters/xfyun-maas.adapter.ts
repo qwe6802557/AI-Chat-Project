@@ -14,7 +14,7 @@ import {
 
 /**
  * 科大讯飞星辰 MaaS 大模型服务适配器 (OpenAI 兼容接口)
- * 支持 Spark-X2.6 (原生思考/推理链)、Spark-X2.5、Spark-X2.6-4B 等系列模型
+ * 支持 Spark-X2.6 (原生思考/推理链)、Spark-X2.6-4B 等系列模型
  */
 @Injectable()
 export class XfyunMaaSAdapter implements IProviderAdapter {
@@ -22,18 +22,20 @@ export class XfyunMaaSAdapter implements IProviderAdapter {
   private readonly logger = new Logger(XfyunMaaSAdapter.name);
   private client: OpenAI | null = null;
   private enabled = false;
+  private readonly healthCheckModel: string;
 
   get isConfigured(): boolean {
     return this.enabled;
   }
 
   constructor(private readonly configService: ConfigService) {
-    const apiKey =
-      this.configService.get<string>('XFYUN_MAAS_API_KEY') ||
-      'ak-c881c0df2473e9409d7f8e7f7c14ef7f';
+    const apiKey = this.configService.get<string>('XFYUN_MAAS_API_KEY')?.trim();
     const baseURL =
-      this.configService.get<string>('XFYUN_MAAS_BASE_URL') ||
+      this.configService.get<string>('XFYUN_MAAS_BASE_URL')?.trim() ||
       'https://maas-api.cn-huabei-1.xf-yun.com/v2';
+    this.healthCheckModel =
+      this.configService.get<string>('XFYUN_MAAS_HEALTHCHECK_MODEL')?.trim() ||
+      'spark-x2.6-4b';
 
     if (!apiKey) {
       this.logger.warn(
@@ -68,9 +70,6 @@ export class XfyunMaaSAdapter implements IProviderAdapter {
     }
     if (clean.includes('x2.5-1.7b') || clean === 'spark-x2.5-1.7b') {
       return 'spark-x2.5-1.7b';
-    }
-    if (clean.includes('x2.5') || clean === 'spark-x2.5') {
-      return 'spark-x2.5';
     }
     if (clean.includes('x2.6') || clean === 'spark-x2.6') {
       return 'spark-x2.6';
@@ -187,7 +186,7 @@ export class XfyunMaaSAdapter implements IProviderAdapter {
     try {
       const response = await this.getClient().chat.completions.create(
         {
-          model: 'spark-x2.6',
+          model: this.healthCheckModel,
           messages: [{ role: 'user', content: 'hi' }],
           max_tokens: 5,
         },
@@ -197,12 +196,11 @@ export class XfyunMaaSAdapter implements IProviderAdapter {
       return {
         status: 'up',
         responseTimeMs: Date.now() - startTime,
-        modelCount: 3,
-        sampleModelId: response.model || 'spark-x2.6',
+        modelCount: 2,
+        sampleModelId: response.model || this.healthCheckModel,
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw error instanceof Error ? error : new Error(msg);
+      this.handleError(error);
     } finally {
       clearTimeout(timeoutHandle);
     }
@@ -324,8 +322,45 @@ export class XfyunMaaSAdapter implements IProviderAdapter {
   }
 
   private handleError(error: unknown): never {
-    const msg = error instanceof Error ? error.message : String(error);
-    this.logger.error(`[XfyunMaaS] API 调用失败: ${msg}`);
-    throw error instanceof Error ? error : new Error(msg);
+    const rawMsg = error instanceof Error ? error.message : String(error);
+    const status =
+      (error as { status?: number; statusCode?: number; response?: { status?: number } })?.status ??
+      (error as { statusCode?: number })?.statusCode ??
+      (error as { response?: { status?: number } })?.response?.status;
+
+    this.logger.error(`[XfyunMaaS] API 调用失败: ${rawMsg}`);
+
+    // 保留 HTTP status 供上游熔断与降级器判定，同时将英文报错转为中文提示
+    if (
+      status === 403 ||
+      /no valid authorization|lacks an active order|insufficient quota|order is invalid|11200/i.test(
+        rawMsg,
+      )
+    ) {
+      throw Object.assign(
+        new Error(
+          '科大讯飞星辰 MaaS 授权失败（403）：当前 API Key 缺少有效模型订单、免费额度已过期或未授权该模型，请检查控制台服务开通与授权状态',
+        ),
+        { status: status || 403 },
+      );
+    }
+
+    if (status === 401) {
+      throw Object.assign(
+        new Error(
+          '科大讯飞星辰 MaaS 鉴权失败（401）：请检查 XFYUN_MAAS_API_KEY 配置是否有效',
+        ),
+        { status: 401 },
+      );
+    }
+
+    if (status === 429) {
+      throw Object.assign(
+        new Error('科大讯飞星辰 MaaS 请求触发限流（429），请稍后重试'),
+        { status: 429 },
+      );
+    }
+
+    throw error instanceof Error ? error : new Error(rawMsg);
   }
 }

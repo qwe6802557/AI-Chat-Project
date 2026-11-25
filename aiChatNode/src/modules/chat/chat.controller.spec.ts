@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import type { Response } from 'express';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
+import { ActiveStreamRegistry } from './services/active-stream.registry';
 import type { CreateChatDto } from './dto';
 
 async function* createStreamChunks() {
@@ -62,6 +63,11 @@ describe('ChatController', () => {
     releaseReservedChatChargeSafely: jest.fn(),
   };
 
+  const activeStreamRegistry = {
+    get: jest.fn(),
+    steer: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -71,6 +77,10 @@ describe('ChatController', () => {
         {
           provide: ChatService,
           useValue: chatService,
+        },
+        {
+          provide: ActiveStreamRegistry,
+          useValue: activeStreamRegistry,
         },
       ],
     }).compile();
@@ -180,5 +190,67 @@ describe('ChatController', () => {
       null,
       null,
     );
+  });
+
+  it('流式失败且 headersSent=false 时先设置状态码再写入中文错误事件', async () => {
+    const callOrder: string[] = [];
+    const res = {
+      on: jest.fn(),
+      setHeader: jest.fn(),
+      status: jest.fn().mockImplementation(() => {
+        callOrder.push('status');
+        return res;
+      }),
+      write: jest.fn().mockImplementation(() => {
+        callOrder.push('write');
+        return true;
+      }),
+      end: jest.fn().mockImplementation(() => {
+        callOrder.push('end');
+      }),
+      headersSent: false,
+      writableEnded: false,
+    } as unknown as Response;
+
+    chatService.createStream.mockRejectedValue(
+      Object.assign(
+        new Error(
+          '403 no valid authorization: the account lacks an active order, has insufficient quota',
+        ),
+        { status: 403 },
+      ),
+    );
+
+    await controller.createStream({ message: 'hello' }, res, 'current-user');
+
+    expect(callOrder).toEqual(['status', 'write', 'end']);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining('模型服务授权失败（403）'),
+    );
+  });
+
+  it('流式失败且 headersSent=true 时不重复设置 status 并正常写入中文错误帧', async () => {
+    const res = {
+      on: jest.fn(),
+      setHeader: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      write: jest.fn(),
+      end: jest.fn(),
+      headersSent: true,
+      writableEnded: false,
+    } as unknown as Response;
+
+    chatService.createStream.mockRejectedValue(
+      new Error('403 insufficient quota'),
+    );
+
+    await controller.createStream({ message: 'hello' }, res, 'current-user');
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining('模型服务授权失败（403）'),
+    );
+    expect(res.end).toHaveBeenCalled();
   });
 });

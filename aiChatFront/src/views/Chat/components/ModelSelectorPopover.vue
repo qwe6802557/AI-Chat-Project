@@ -22,8 +22,8 @@
     <!-- Popover 浮层面板内容 -->
     <template #content>
       <div class="model-popover-panel">
-        <!-- 顶部顶层分类分段切页 -->
-        <div class="category-segmented-container">
+        <!-- 仅当后端存在已启用的 Gemini 模型时展示顶部分类切换 Tab -->
+        <div v-if="hasGeminiModels" class="category-segmented-container">
           <div
             class="segmented-pill"
             :class="{ active: activeCategory === 'gemini' }"
@@ -40,19 +40,20 @@
           </div>
         </div>
 
-        <!-- 1. Gemini 分组面板 -->
-        <div v-if="activeCategory === 'gemini'" class="panel-section gemini-section">
+        <!-- Gemini 分组面板 -->
+        <div v-if="hasGeminiModels && activeCategory === 'gemini'" class="panel-section gemini-section">
           <div class="section-label">选择主力模型</div>
-          <div class="gemini-card-grid">
+          <div class="gemini-card-grid" :class="{ 'single-card': !hasFlashFamily || !hasArgonFamily }">
             <!-- Gemini 3.8 Flash -->
             <div
+              v-if="hasFlashFamily"
               class="gemini-model-card"
               :class="{ selected: currentGeminiFamily === 'gemini-3.8-flash' }"
               @click="selectGeminiFamily('gemini-3.8-flash')"
             >
               <div class="card-header">
                 <span class="model-name">3.8 Flash</span>
-                <span class="cost-tag">10 积分</span>
+                <span class="cost-tag">{{ flashCredits }} 积分</span>
               </div>
               <div class="card-desc">极速全能 · 日常高频首选</div>
               <CheckCircleFilled
@@ -63,13 +64,14 @@
 
             <!-- Gemini 4 Argon -->
             <div
+              v-if="hasArgonFamily"
               class="gemini-model-card"
               :class="{ selected: currentGeminiFamily === 'gemini-4-argon' }"
               @click="selectGeminiFamily('gemini-4-argon')"
             >
               <div class="card-header">
                 <span class="model-name">4 Argon</span>
-                <span class="cost-tag premium">20 积分</span>
+                <span class="cost-tag premium">{{ argonCredits }} 积分</span>
               </div>
               <div class="card-desc">推理旗舰 · 极限复杂逻辑</div>
               <CheckCircleFilled
@@ -86,34 +88,20 @@
 
           <div class="intensity-segmented-row">
             <button
+              v-for="item in intensityOptions"
+              :key="item.value"
               type="button"
               class="intensity-btn"
-              :class="{ active: currentGeminiIntensity === 'low' }"
-              @click="selectGeminiIntensity('low')"
+              :class="{ active: currentGeminiIntensity === item.value }"
+              @click="selectGeminiIntensity(item.value)"
             >
-              <span class="btn-text">低 Low</span>
-            </button>
-            <button
-              type="button"
-              class="intensity-btn"
-              :class="{ active: currentGeminiIntensity === 'medium' }"
-              @click="selectGeminiIntensity('medium')"
-            >
-              <span class="btn-text">中 Med</span>
-            </button>
-            <button
-              type="button"
-              class="intensity-btn"
-              :class="{ active: currentGeminiIntensity === 'high' }"
-              @click="selectGeminiIntensity('high')"
-            >
-              <span class="btn-text">高 High</span>
+              <span class="btn-text">{{ item.label }}</span>
             </button>
           </div>
         </div>
 
-        <!-- 2. 其它模型分组面板 -->
-        <div v-else class="panel-section other-section">
+        <!-- 其它模型分组面板 -->
+        <div v-else class="panel-section other-section" :class="{ 'standalone-section': !hasGeminiModels }">
           <div class="section-label">现有可用模型</div>
           <div class="other-models-list">
             <div
@@ -156,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   ThunderboltOutlined,
   DownOutlined,
@@ -194,26 +182,74 @@ const emit = defineEmits<{
 
 const popoverOpen = ref(false)
 
+// 从服务端返回的启用模型列表中动态提取 Gemini 系列模型
+const geminiModelOptions = computed(() => {
+  return props.modelOptions.filter((m) => m.value.startsWith('gemini-'))
+})
+
+const hasGeminiModels = computed(() => geminiModelOptions.value.length > 0)
+
+const hasFlashFamily = computed(() => {
+  return geminiModelOptions.value.some((m) => m.value.startsWith('gemini-3.8-flash'))
+})
+
+const hasArgonFamily = computed(() => {
+  return geminiModelOptions.value.some((m) => m.value.startsWith('gemini-4-argon'))
+})
+
+const flashCredits = computed(() => {
+  const matched = geminiModelOptions.value.find((m) => m.value.startsWith('gemini-3.8-flash'))
+  return matched?.reserveCredits ?? 10
+})
+
+const argonCredits = computed(() => {
+  const matched = geminiModelOptions.value.find((m) => m.value.startsWith('gemini-4-argon'))
+  return matched?.reserveCredits ?? 20
+})
+
 // 判定当前选中的是否为 Gemini 系列
 const isGeminiModel = computed(() => {
   return props.selectedModel.startsWith('gemini-')
 })
 
-// 分类切页状态
-const activeCategory = ref<'gemini' | 'other'>(isGeminiModel.value ? 'gemini' : 'gemini')
+// 分类切页状态：仅当存在可用 Gemini 模型且当前选中它时默认展示 Gemini Tab
+const activeCategory = ref<'gemini' | 'other'>(
+  hasGeminiModels.value && isGeminiModel.value ? 'gemini' : 'other',
+)
+
+watch([hasGeminiModels, isGeminiModel], ([hasGemini, isGemini]) => {
+  activeCategory.value = hasGemini && isGemini ? 'gemini' : 'other'
+})
 
 // 解析当前 Gemini 系列家族与思考强度
 const currentGeminiFamily = computed(() => {
-  if (props.selectedModel.startsWith('gemini-4-argon')) {
+  if (props.selectedModel.startsWith('gemini-4-argon') && hasArgonFamily.value) {
     return 'gemini-4-argon'
   }
-  return 'gemini-3.8-flash'
+  if (hasFlashFamily.value) {
+    return 'gemini-3.8-flash'
+  }
+  return 'gemini-4-argon'
 })
 
 const currentGeminiIntensity = computed(() => {
   if (props.selectedModel.endsWith('-low')) return 'low'
   if (props.selectedModel.endsWith('-high')) return 'high'
   return 'medium'
+})
+
+const ALL_INTENSITIES: Array<{ value: 'low' | 'medium' | 'high'; label: string }> = [
+  { value: 'low', label: '低 Low' },
+  { value: 'medium', label: '中 Med' },
+  { value: 'high', label: '高 High' },
+]
+
+const intensityOptions = computed(() => {
+  const familyPrefix = `${currentGeminiFamily.value}-`
+  const available = ALL_INTENSITIES.filter((item) =>
+    geminiModelOptions.value.some((m) => m.value === `${familyPrefix}${item.value}`),
+  )
+  return available.length > 0 ? available : ALL_INTENSITIES
 })
 
 // 其它模型列表
@@ -223,11 +259,11 @@ const otherModelOptions = computed(() => {
 
 // 触发按钮上呈现的文本
 const currentDisplayLabel = computed(() => {
-  if (props.selectedModel.startsWith('gemini-3.8-flash')) {
+  if (hasGeminiModels.value && props.selectedModel.startsWith('gemini-3.8-flash')) {
     const intensityMap = { low: 'Low', medium: 'Med', high: 'High' }
     return `Gemini 3.8 Flash · ${intensityMap[currentGeminiIntensity.value]}`
   }
-  if (props.selectedModel.startsWith('gemini-4-argon')) {
+  if (hasGeminiModels.value && props.selectedModel.startsWith('gemini-4-argon')) {
     const intensityMap = { low: 'Low', medium: 'Med', high: 'High' }
     return `Gemini 4 Argon · ${intensityMap[currentGeminiIntensity.value]}`
   }
@@ -235,12 +271,31 @@ const currentDisplayLabel = computed(() => {
   return matched?.label || props.selectedModel
 })
 
+const resolveGeminiTarget = (
+  family: 'gemini-3.8-flash' | 'gemini-4-argon',
+  intensity: 'low' | 'medium' | 'high',
+): string | undefined => {
+  const exactId = `${family}-${intensity}`
+  if (geminiModelOptions.value.some((m) => m.value === exactId)) {
+    return exactId
+  }
+  return geminiModelOptions.value.find((m) => m.value.startsWith(`${family}-`))?.value
+}
+
 // 切换类别
 const switchCategory = (category: 'gemini' | 'other') => {
+  if (category === 'gemini' && !hasGeminiModels.value) {
+    return
+  }
   activeCategory.value = category
   if (category === 'gemini') {
     if (!props.selectedModel.startsWith('gemini-')) {
-      emit('update:selectedModel', 'gemini-3.8-flash-medium')
+      const preferred =
+        geminiModelOptions.value.find((m) => m.value === 'gemini-3.8-flash-medium')?.value ||
+        geminiModelOptions.value[0]?.value
+      if (preferred) {
+        emit('update:selectedModel', preferred)
+      }
     }
   } else {
     if (props.selectedModel.startsWith('gemini-') && otherModelOptions.value.length > 0 && otherModelOptions.value[0]) {
@@ -251,14 +306,18 @@ const switchCategory = (category: 'gemini' | 'other') => {
 
 // 选择 Gemini 主力模型
 const selectGeminiFamily = (family: 'gemini-3.8-flash' | 'gemini-4-argon') => {
-  const targetId = `${family}-${currentGeminiIntensity.value}`
-  emit('update:selectedModel', targetId)
+  const targetId = resolveGeminiTarget(family, currentGeminiIntensity.value)
+  if (targetId) {
+    emit('update:selectedModel', targetId)
+  }
 }
 
 // 选择思考强度
 const selectGeminiIntensity = (intensity: 'low' | 'medium' | 'high') => {
-  const targetId = `${currentGeminiFamily.value}-${intensity}`
-  emit('update:selectedModel', targetId)
+  const targetId = resolveGeminiTarget(currentGeminiFamily.value, intensity)
+  if (targetId) {
+    emit('update:selectedModel', targetId)
+  }
 }
 
 // 选择其它模型
@@ -361,6 +420,10 @@ const selectOtherModel = (modelId: string) => {
   .panel-section {
     padding: 6px 12px 10px;
 
+    &.standalone-section {
+      padding-top: 12px;
+    }
+
     .section-label {
       font-size: 11px;
       font-weight: 600;
@@ -380,6 +443,10 @@ const selectOtherModel = (modelId: string) => {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+
+    &.single-card {
+      grid-template-columns: 1fr;
+    }
 
     .gemini-model-card {
       position: relative;
