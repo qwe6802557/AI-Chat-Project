@@ -92,6 +92,23 @@ marked.setOptions({
   gfm: true, // 启用GitHub风格Markdown
 })
 
+// 仅允许双波浪号 ~~...~~ 触发删除线，避免中文语气波浪号（哦~ / 呀~）或数值区间（10~20）被误判为删除线
+marked.use({
+  tokenizer: {
+    del(src: string) {
+      const match = /^~~(?!~)(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src)
+      if (!match) return undefined
+      const text = match[1] ?? ''
+      return {
+        type: 'del' as const,
+        raw: match[0],
+        text,
+        tokens: this.lexer.inlineTokens(text),
+      }
+    },
+  },
+})
+
 // --- 工具函数 ---
 
 /**
