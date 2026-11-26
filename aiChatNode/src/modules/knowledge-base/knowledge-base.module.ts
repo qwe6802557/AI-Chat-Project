@@ -14,9 +14,11 @@ import { KnowledgeProgressService } from './services/knowledge-progress.service'
 import { KnowledgeIngestProcessor } from './processors/knowledge-ingest.processor';
 import { KnowledgeBaseController } from './knowledge-base.controller';
 import { KNOWLEDGE_INGEST_QUEUE } from './constants/knowledge-queue.constants';
+import { RedisModule } from '../../common/redis/redis.module';
 
 @Module({
   imports: [
+    RedisModule,
     TypeOrmModule.forFeature([
       KnowledgeBase,
       KnowledgeDocument,
