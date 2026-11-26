@@ -41,30 +41,34 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.2.1',
-      latestVersionCode: 13,
+      latestVersion: '1.3.0',
+      latestVersionCode: 14,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '21.8 MB',
+      packageSize: '21.7 MB',
       releaseNotes: [
-        '接入 Google Gemini 3.8 Flash 与 Gemini 4 Argon 旗舰系列大模型',
-        '支持 Low / Medium / High 三档动态思考强度无缝切换',
-        '移动端重构触觉分层模型切换抽屉与顶栏友好回显',
-        '全面优化流式传输与会话性能，界面去 AI 味更加高级克制',
+        '全新上线移动端“记忆工坊”，支持长期核心画像审阅、语义关键词检索、相关度展示与手动记一条记忆',
+        '对话底部输入栏新增“记忆工坊”快捷胶囊入口，一键直达个人记忆中心',
+        '知识库全链路升级：支持检索高亮匹配、Rerank 精排上下文预览与异步解析实时进度',
+        '按服务端启用状态动态同步可用模型列表，自动隐藏停用分组并优化 arm64 原生包体性能',
       ],
       forceUpdate: false,
-      publishedAt: '2026-11-06T15:30:00.000Z',
+      publishedAt: '2026-11-26T10:15:00.000Z',
     };
   }
 
   /**
    * 对比客户端版本并下发升级策略
    */
-  checkVersion(currentVersion = '1.0.0', platform = 'android'): VersionCheckResult {
+  checkVersion(
+    currentVersion = '1.0.0',
+    platform = 'android',
+  ): VersionCheckResult {
     const latestInfo = this.getLatestVersionInfo(platform);
-    const hasUpdate = this.compareSemver(latestInfo.latestVersion, currentVersion) > 0;
+    const hasUpdate =
+      this.compareSemver(latestInfo.latestVersion, currentVersion) > 0;
 
     return {
       ...latestInfo,
@@ -78,8 +82,14 @@ export class AppVersionService {
    * @returns 1: v1 > v2, -1: v1 < v2, 0: v1 == v2
    */
   private compareSemver(v1: string, v2: string): number {
-    const clean1 = v1.replace(/^v/, '').split('.').map((n) => Number.parseInt(n, 10) || 0);
-    const clean2 = v2.replace(/^v/, '').split('.').map((n) => Number.parseInt(n, 10) || 0);
+    const clean1 = v1
+      .replace(/^v/, '')
+      .split('.')
+      .map((n) => Number.parseInt(n, 10) || 0);
+    const clean2 = v2
+      .replace(/^v/, '')
+      .split('.')
+      .map((n) => Number.parseInt(n, 10) || 0);
 
     const maxLength = Math.max(clean1.length, clean2.length);
     for (let i = 0; i < maxLength; i++) {
