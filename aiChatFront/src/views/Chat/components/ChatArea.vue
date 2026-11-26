@@ -115,8 +115,8 @@
           </div>
         </div>
 
-        <div class="params-row">
-          <div class="params-left">
+        <div ref="paramsRowRef" :class="['params-row', { 'is-compact': isToolbarOverflowCompact }]">
+          <div ref="paramsLeftRef" class="params-left">
             <ModelSelectorPopover
               :selected-model="selectedModel"
               :model-options="modelOptions"
@@ -126,18 +126,20 @@
               @update:selected-model="handleModelChange"
             />
 
-            <div
-              class="upload-trigger-btn"
-              role="button"
-              tabindex="0"
-              :class="{ disabled: loading }"
-              title="上传文件"
-              @click="triggerFileInput"
-              @keydown.enter="triggerFileInput"
-            >
-              <PaperClipOutlined class="upload-icon" />
-              <span>上传文件</span>
-            </div>
+            <a-tooltip title="上传文件 (支持图片与文档)" placement="top">
+              <div
+                class="upload-trigger-btn"
+                role="button"
+                tabindex="0"
+                :class="{ disabled: loading }"
+                aria-label="上传文件"
+                @click="triggerFileInput"
+                @keydown.enter="triggerFileInput"
+              >
+                <PaperClipOutlined class="upload-icon" />
+                <span class="upload-label">上传文件</span>
+              </div>
+            </a-tooltip>
 
             <WebSearchToggle
               v-model:enabled="webSearchEnabled"
@@ -193,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { message } from 'ant-design-vue'
 import {
@@ -290,6 +292,11 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const messageTextareaRef = ref<any>(null)
 const scrollSignal = ref(0)
 const isMemoryVaultOpen = ref(false)
+const paramsRowRef = ref<HTMLElement | null>(null)
+const paramsLeftRef = ref<HTMLElement | null>(null)
+const isToolbarOverflowCompact = ref(false)
+let expandedToolbarMinWidth = 0
+let toolbarResizeObserver: ResizeObserver | null = null
 
 const conversationStore = useConversationStore()
 const artifactStore = useArtifactStore()
@@ -353,6 +360,67 @@ const hasEnoughCredits = computed(() => {
   }
 
   return props.currentCreditsRemaining >= props.selectedModelReserveCredits
+})
+
+// 当输入栏实际可用宽度不足导致左侧按钮溢出时，自动收起为图标紧凑模式并留出恢复缓冲避免抖动
+const updateToolbarCompactState = () => {
+  const rowEl = paramsRowRef.value
+  const leftEl = paramsLeftRef.value
+  if (!rowEl || !leftEl) return
+
+  if (window.innerWidth <= 1200 || rowEl.clientWidth <= 748) {
+    isToolbarOverflowCompact.value = false
+    expandedToolbarMinWidth = 0
+    return
+  }
+
+  if (!isToolbarOverflowCompact.value) {
+    const overflowWidth = leftEl.scrollWidth - leftEl.clientWidth
+    if (overflowWidth > 1) {
+      expandedToolbarMinWidth = rowEl.clientWidth + overflowWidth
+      isToolbarOverflowCompact.value = true
+    }
+    return
+  }
+
+  if (rowEl.clientWidth >= expandedToolbarMinWidth + 16) {
+    isToolbarOverflowCompact.value = false
+    expandedToolbarMinWidth = 0
+  }
+}
+
+watch(
+  () => [
+    props.selectedModel,
+    props.selectedModelReasoningBadgeLabel,
+    props.selectedModelInputPrice,
+    props.selectedModelOutputPrice,
+    props.hasCreditSnapshot,
+    hasEnoughCredits.value,
+    selectedKnowledgeBaseIds.value.length,
+  ],
+  () => {
+    expandedToolbarMinWidth = 0
+    isToolbarOverflowCompact.value = false
+    nextTick(updateToolbarCompactState)
+  },
+)
+
+onMounted(() => {
+  nextTick(updateToolbarCompactState)
+  window.addEventListener('resize', updateToolbarCompactState)
+  if (typeof ResizeObserver !== 'undefined' && paramsRowRef.value) {
+    toolbarResizeObserver = new ResizeObserver(() => {
+      updateToolbarCompactState()
+    })
+    toolbarResizeObserver.observe(paramsRowRef.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateToolbarCompactState)
+  toolbarResizeObserver?.disconnect()
+  toolbarResizeObserver = null
 })
 
 const canQueue = computed(() => {
@@ -683,6 +751,8 @@ $font-size-lg: 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  container-type: inline-size;
+  container-name: composer-bar;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 
   &:focus-within {
@@ -929,7 +999,8 @@ $font-size-lg: 16px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 8px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 8px;
   font-size: 12px;
   color: #475467;
@@ -971,7 +1042,8 @@ $font-size-lg: 16px;
 
 :deep(.web-search-toggle),
 :deep(.kb-capsule-btn),
-:deep(.tool-capsule-btn),
+:deep(.tool-capsule-trigger),
+:deep(.memory-vault-trigger),
 :deep(.model-capsule-trigger) {
   white-space: nowrap !important;
   flex-shrink: 0 !important;
@@ -991,6 +1063,7 @@ $font-size-lg: 16px;
   align-items: center;
   gap: 4px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .cost-icon {
@@ -1007,6 +1080,121 @@ $font-size-lg: 16px;
   font-size: 11px;
   color: #ef4444;
   font-weight: 500;
+}
+
+// 窄屏及工具栏溢出时的图标紧凑模式（子组件内部类名必须完整放入 :deep() 内以避免附带父组件 scope 属性）
+@mixin compact-toolbar-rules {
+  .params-left {
+    gap: 6px;
+  }
+
+  .upload-trigger-btn {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+
+    .upload-label {
+      display: none;
+    }
+
+    .upload-icon {
+      font-size: 14px;
+    }
+  }
+
+  :deep(.web-search-toggle) {
+    min-width: 28px;
+    padding: 0 7px;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  :deep(.web-search-toggle .toggle-label) {
+    display: none;
+  }
+
+  :deep(.web-search-toggle .search-icon) {
+    font-size: 14px;
+  }
+
+  :deep(.tool-capsule-trigger) {
+    min-width: 28px;
+    padding: 0 7px;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  :deep(.tool-capsule-trigger .trigger-label),
+  :deep(.tool-capsule-trigger .arrow-down) {
+    display: none;
+  }
+
+  :deep(.tool-capsule-trigger .trigger-icon) {
+    font-size: 14px;
+  }
+
+  :deep(.kb-capsule-btn) {
+    min-width: 28px;
+    padding: 0 7px;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  :deep(.kb-capsule-btn .capsule-label) {
+    display: none;
+  }
+
+  :deep(.kb-capsule-btn .capsule-icon) {
+    font-size: 14px;
+  }
+
+  :deep(.memory-vault-trigger) {
+    width: 28px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+
+  :deep(.memory-vault-trigger .vault-label) {
+    display: none;
+  }
+
+  :deep(.memory-vault-trigger .vault-icon) {
+    font-size: 14px;
+  }
+
+  :deep(.model-capsule-trigger .capsule-title) {
+    max-width: 150px;
+  }
+}
+
+.control-bar-card .params-row.is-compact {
+  @include compact-toolbar-rules;
+}
+
+@media (max-width: 1200px) {
+  .control-bar-card .params-row {
+    @include compact-toolbar-rules;
+  }
+}
+
+@container composer-bar (max-width: 780px) {
+  .control-bar-card .params-row {
+    @include compact-toolbar-rules;
+  }
+}
+
+@container composer-bar (max-width: 560px) {
+  .control-bar-card .params-row {
+    .rate-hint {
+      display: none;
+    }
+
+    :deep(.model-capsule-trigger .capsule-title) {
+      max-width: 110px;
+    }
+  }
 }
 
 .fade-enter-active,

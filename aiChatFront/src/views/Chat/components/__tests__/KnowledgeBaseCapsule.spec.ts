@@ -20,6 +20,10 @@ describe('KnowledgeBaseCapsule', () => {
           'a-popover': {
             template: '<div class="a-popover-stub"><slot /><slot name="content" /></div>',
           },
+          'a-tooltip': {
+            props: ['title', 'open'],
+            template: '<div class="a-tooltip-stub" :data-title="title"><slot /></div>',
+          },
           'router-link': {
             template: '<a class="router-link-stub"><slot /></a>',
           },
@@ -29,6 +33,7 @@ describe('KnowledgeBaseCapsule', () => {
 
     expect(wrapper.find('.kb-capsule-btn').exists()).toBe(true)
     expect(wrapper.find('.capsule-label').text()).toBe('知识库')
+    expect(wrapper.find('.a-tooltip-stub').attributes('data-title')).toBe('选择知识库 (开启混合 RAG 检索)')
   })
 
   it('选中知识库时高亮展示计数角标', () => {
@@ -41,6 +46,10 @@ describe('KnowledgeBaseCapsule', () => {
           'a-popover': {
             template: '<div class="a-popover-stub"><slot /><slot name="content" /></div>',
           },
+          'a-tooltip': {
+            props: ['title', 'open'],
+            template: '<div class="a-tooltip-stub" :data-title="title"><slot /></div>',
+          },
           'router-link': {
             template: '<a class="router-link-stub"><slot /></a>',
           },
@@ -52,6 +61,9 @@ describe('KnowledgeBaseCapsule', () => {
     expect(btn.classes()).toContain('active')
     expect(wrapper.find('.capsule-label').text()).toBe('知识库 (2)')
     expect(wrapper.find('.active-dot').exists()).toBe(true)
+    expect(wrapper.find('.a-tooltip-stub').attributes('data-title')).toBe(
+      '已挂载 2 个知识库 (点击管理混合 RAG 检索)',
+    )
   })
 
   it('有缓存数据时立即渲染知识库列表，无 loading 抖动', async () => {
@@ -74,6 +86,10 @@ describe('KnowledgeBaseCapsule', () => {
         stubs: {
           'a-popover': {
             template: '<div class="a-popover-stub"><slot /><slot name="content" /></div>',
+          },
+          'a-tooltip': {
+            props: ['title', 'open'],
+            template: '<div class="a-tooltip-stub" :data-title="title"><slot /></div>',
           },
           'router-link': {
             template: '<a class="router-link-stub"><slot /></a>',

@@ -5,6 +5,7 @@
       :class="['web-search-toggle', { active: enabled, disabled }]"
       :disabled="disabled"
       :aria-pressed="enabled"
+      aria-label="联网搜索"
       @click="handleToggle"
     >
       <GlobalOutlined class="search-icon" />

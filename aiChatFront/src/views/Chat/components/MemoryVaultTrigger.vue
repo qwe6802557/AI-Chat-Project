@@ -1,15 +1,17 @@
 <template>
-  <button
-    type="button"
-    class="memory-vault-trigger"
-    :class="{ disabled }"
-    :disabled="disabled"
-    title="打开记忆工坊 (查看长期核心画像与情境记忆)"
-    @click="handleClick"
-  >
-    <ReadOutlined class="vault-icon" />
-    <span class="vault-label">记忆工坊</span>
-  </button>
+  <a-tooltip title="打开记忆工坊 (查看长期核心画像与情境记忆)" placement="top">
+    <button
+      type="button"
+      class="memory-vault-trigger"
+      :class="{ disabled }"
+      :disabled="disabled"
+      aria-label="打开记忆工坊"
+      @click="handleClick"
+    >
+      <ReadOutlined class="vault-icon" />
+      <span class="vault-label">记忆工坊</span>
+    </button>
+  </a-tooltip>
 </template>
 
 <script setup lang="ts">
@@ -44,18 +46,19 @@ const handleClick = () => {
 .memory-vault-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 8px;
   color: #475467;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
+  flex-shrink: 0;
   user-select: none;
 
   &:hover:not(.disabled) {
