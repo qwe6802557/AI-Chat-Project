@@ -12,14 +12,21 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like } from 'typeorm';
+import { type FindOptionsWhere, Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AgentCoreProfile } from './entities/agent-core-profile.entity';
-import { AgentDailyMemory } from './entities/agent-daily-memory.entity';
-import { UpdateCoreProfileDto, QueryDailyMemoryDto } from './dto';
+import {
+  AgentDailyMemory,
+  type MemoryCategory,
+} from './entities/agent-daily-memory.entity';
+import {
+  CreateDailyMemoryDto,
+  QueryDailyMemoryDto,
+  UpdateCoreProfileDto,
+} from './dto';
 import { MemoryDistillerService } from './services/memory-distiller.service';
-import { MemoryContextService } from './services/memory-context.service';
+import { MemoryVectorStoreService } from './services/memory-vector-store.service';
 
 /**
  * 三层长短期记忆引擎控制器
@@ -35,7 +42,7 @@ export class MemoryController {
     @InjectRepository(AgentDailyMemory)
     private readonly dailyMemoryRepo: Repository<AgentDailyMemory>,
     private readonly distillerService: MemoryDistillerService,
-    private readonly contextService: MemoryContextService,
+    private readonly memoryVectorStore: MemoryVectorStoreService,
   ) {}
 
   /**
@@ -87,9 +94,9 @@ export class MemoryController {
   }
 
   /**
-   * 分页查询日常情境记忆时间线（Layer 2）
+   * 分页查询或语义+词法混合检索日常情境记忆（Layer 2）
    */
-  @ApiOperation({ summary: '分页查询日常工作记忆列表' })
+  @ApiOperation({ summary: '分页查询或混合检索日常工作记忆列表' })
   @Get('daily')
   async getDailyMemories(
     @CurrentUser('id') userId: string,
@@ -97,17 +104,24 @@ export class MemoryController {
   ) {
     const page = query.page || 1;
     const limit = query.limit || 20;
-    const skip = (page - 1) * limit;
+    const keyword = query.keyword?.trim();
 
-    const where: any = { userId };
+    if (keyword) {
+      return this.memoryVectorStore.searchDailyMemories(userId, keyword, {
+        dateKey: query.dateKey,
+        category: query.category,
+        page,
+        limit,
+      });
+    }
+
+    const skip = (page - 1) * limit;
+    const where: FindOptionsWhere<AgentDailyMemory> = { userId };
     if (query.dateKey) {
       where.dateKey = query.dateKey;
     }
     if (query.category) {
-      where.category = query.category;
-    }
-    if (query.keyword && query.keyword.trim()) {
-      where.content = Like(`%${query.keyword.trim()}%`);
+      where.category = query.category as MemoryCategory;
     }
 
     const [items, total] = await this.dailyMemoryRepo.findAndCount({
@@ -133,12 +147,24 @@ export class MemoryController {
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     };
   }
 
   /**
-   * 一键遗忘/彻底删除单条记忆（符合隐私与记忆可控要求）
+   * 手动录入单条日常记忆（自动向量化并执行语义去重）
+   */
+  @ApiOperation({ summary: '手动录入单条日常情境记忆' })
+  @Post('daily')
+  async createDailyMemory(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateDailyMemoryDto,
+  ) {
+    return this.memoryVectorStore.createManualDailyMemory(userId, dto);
+  }
+
+  /**
+   * 一键遗忘/彻底删除单条记忆
    */
   @ApiOperation({ summary: '彻底删除单条日常记忆' })
   @Delete('daily/:id')
@@ -146,7 +172,9 @@ export class MemoryController {
     @CurrentUser('id') userId: string,
     @Param('id') id: string,
   ) {
-    const memory = await this.dailyMemoryRepo.findOne({ where: { id, userId } });
+    const memory = await this.dailyMemoryRepo.findOne({
+      where: { id, userId },
+    });
     if (!memory) {
       throw new NotFoundException('指定记忆条目不存在');
     }

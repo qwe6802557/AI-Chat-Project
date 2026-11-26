@@ -1,15 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import OpenAI from 'openai';
 import { AgentCoreProfile } from '../entities/agent-core-profile.entity';
 import { AgentDailyMemory } from '../entities/agent-daily-memory.entity';
+import { MemoryLlmService } from './memory-llm.service';
 
-interface DistilledProfilePayload {
-  preferences: Record<string, any>;
-  facts: Record<string, any>;
-  rawSummary: string;
+interface DistilledProfilePayload extends Record<string, unknown> {
+  preferences?: Record<string, unknown>;
+  facts?: Record<string, unknown>;
+  rawSummary?: string;
 }
 
 /**
@@ -18,38 +17,22 @@ interface DistilledProfilePayload {
 @Injectable()
 export class MemoryDistillerService {
   private readonly logger = new Logger(MemoryDistillerService.name);
-  private openaiClient: OpenAI | null = null;
-  private readonly modelName: string;
 
   constructor(
     @InjectRepository(AgentCoreProfile)
     private readonly coreProfileRepo: Repository<AgentCoreProfile>,
     @InjectRepository(AgentDailyMemory)
     private readonly dailyMemoryRepo: Repository<AgentDailyMemory>,
-    private readonly configService: ConfigService,
-  ) {
-    const apiKey =
-      this.configService.get<string>('GEMINI_API_KEY') ||
-      process.env.GEMINI_API_KEY ||
-      '';
-    const baseURL =
-      this.configService.get<string>('GEMINI_BASE_URL') ||
-      process.env.GEMINI_BASE_URL ||
-      '';
-
-    if (apiKey && baseURL) {
-      this.openaiClient = new OpenAI({ apiKey, baseURL });
-    }
-    this.modelName = this.configService.get<string>(
-      'MEMORY_DISTILLER_MODEL',
-      'gemini-3.8-flash-low',
-    );
-  }
+    private readonly memoryLlmService: MemoryLlmService,
+  ) {}
 
   /**
    * 触发用户日常记忆向核心画像的深度蒸馏
    */
-  async distillCoreProfile(userId: string, force = false): Promise<AgentCoreProfile | null> {
+  async distillCoreProfile(
+    userId: string,
+    force = false,
+  ): Promise<AgentCoreProfile | null> {
     const unarchived = await this.dailyMemoryRepo.find({
       where: { userId, isArchived: false },
       order: { createdAt: 'ASC' },
@@ -60,7 +43,6 @@ export class MemoryDistillerService {
       return null;
     }
 
-    // 获取或初始化 CoreProfile
     let profile = await this.coreProfileRepo.findOne({ where: { userId } });
     if (!profile) {
       profile = this.coreProfileRepo.create({
@@ -77,11 +59,6 @@ export class MemoryDistillerService {
       return profile;
     }
 
-    if (!this.openaiClient) {
-      this.logger.warn('Gemini 客户端未配置，跳过画像蒸馏');
-      return profile;
-    }
-
     try {
       const memoryItemsText = unarchived
         .map((m) => `[${m.category}] ${m.content} (${m.dateKey})`)
@@ -92,7 +69,7 @@ export class MemoryDistillerService {
 1. 冲突消解：若最新记忆与历史画像冲突，以最新记忆为准（如习惯或约定的更新）。
 2. 去粗取精：剥离临时待办与一次性细节，只提炼长效偏好（preferences）与长期关键事实（facts）。
 3. 严格生成一个精炼的 Markdown 格式摘要（rawSummary，200~300 字以内），将直接注入 System Prompt。
-4. 输出严格合法的 JSON 对象，格式规范为：
+4. 必须输出严格合法的 JSON 对象，格式规范为：
 {
   "preferences": { "key": "value" },
   "facts": { "key": "value" },
@@ -107,29 +84,28 @@ Existing Raw Summary: ${profile.rawSummary || '暂无'}
 【待蒸馏的新记忆碎片】
 ${memoryItemsText}`;
 
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.modelName,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      });
-
-      const rawJson = response.choices[0]?.message?.content?.trim();
-      if (!rawJson) return profile;
-
-      const distilled: DistilledProfilePayload = JSON.parse(rawJson);
+      const distilled =
+        await this.memoryLlmService.completeJson<DistilledProfilePayload>(
+          [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          {
+            preferredModelEnvKey: 'MEMORY_DISTILLER_MODEL',
+            temperature: 0.1,
+          },
+        );
 
       profile.preferences = distilled.preferences || profile.preferences;
       profile.facts = distilled.facts || profile.facts;
-      profile.rawSummary = distilled.rawSummary || profile.rawSummary;
+      profile.rawSummary =
+        typeof distilled.rawSummary === 'string' && distilled.rawSummary.trim()
+          ? distilled.rawSummary
+          : profile.rawSummary;
       profile.version += 1;
 
       const saved = await this.coreProfileRepo.save(profile);
 
-      // 批量将处理过的 daily memories 标记为已归档
       const ids = unarchived.map((m) => m.id);
       await this.dailyMemoryRepo
         .createQueryBuilder()
@@ -138,10 +114,14 @@ ${memoryItemsText}`;
         .whereInIds(ids)
         .execute();
 
-      this.logger.log(`成功为用户 ${userId} 完成核心画像蒸馏 (版本: v${saved.version})`);
+      this.logger.log(
+        `成功为用户 ${userId} 完成核心画像蒸馏 (版本: v${saved.version})`,
+      );
       return saved;
-    } catch (err: any) {
-      this.logger.error(`记忆蒸馏失败: ${err.message}`, err.stack);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errStack = err instanceof Error ? err.stack : undefined;
+      this.logger.error(`记忆蒸馏失败: ${errMsg}`, errStack);
       return profile;
     }
   }

@@ -1,17 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import OpenAI from 'openai';
-import { AgentDailyMemory, MemoryCategory } from '../entities/agent-daily-memory.entity';
+import type { MemoryCategory } from '../entities/agent-daily-memory.entity';
 import { EmbeddingService } from '../../knowledge-base/services/embedding.service';
+import { MemoryLlmService } from './memory-llm.service';
+import { MemoryVectorStoreService } from './memory-vector-store.service';
 
 interface ExtractedItem {
   category: MemoryCategory;
   content: string;
 }
 
-interface ExtractionResult {
+interface ExtractionResult extends Record<string, unknown> {
   items: ExtractedItem[];
 }
 
@@ -21,35 +19,15 @@ interface ExtractionResult {
 @Injectable()
 export class MemoryExtractorService {
   private readonly logger = new Logger(MemoryExtractorService.name);
-  private openaiClient: OpenAI | null = null;
-  private readonly modelName: string;
 
   constructor(
-    @InjectRepository(AgentDailyMemory)
-    private readonly dailyMemoryRepo: Repository<AgentDailyMemory>,
+    private readonly memoryLlmService: MemoryLlmService,
+    private readonly memoryVectorStore: MemoryVectorStoreService,
     private readonly embeddingService: EmbeddingService,
-    private readonly configService: ConfigService,
-  ) {
-    const apiKey =
-      this.configService.get<string>('GEMINI_API_KEY') ||
-      process.env.GEMINI_API_KEY ||
-      '';
-    const baseURL =
-      this.configService.get<string>('GEMINI_BASE_URL') ||
-      process.env.GEMINI_BASE_URL ||
-      '';
-
-    if (apiKey && baseURL) {
-      this.openaiClient = new OpenAI({ apiKey, baseURL });
-    }
-    this.modelName = this.configService.get<string>(
-      'MEMORY_EXTRACTOR_MODEL',
-      'gemini-3.8-flash-low',
-    );
-  }
+  ) {}
 
   /**
-   * 从会话多轮对话中异步提取事实与情境记忆
+   * 从会话多轮对话中异步提取事实与情境记忆，并经语义去重后写入
    */
   async extractFromSession(
     userId: string,
@@ -60,14 +38,11 @@ export class MemoryExtractorService {
       return 0;
     }
 
-    if (!this.openaiClient) {
-      this.logger.warn('Gemini 客户端未配置，跳过记忆异步抽取');
-      return 0;
-    }
-
     try {
-      // 提取对话关键内容（至多最近 10 条）
-      const contextSlice = messages.slice(-10).map((m) => `${m.role}: ${m.content}`).join('\n\n');
+      const contextSlice = messages
+        .slice(-10)
+        .map((m) => `${m.role}: ${m.content}`)
+        .join('\n\n');
 
       const systemPrompt = `你是一个精准的记忆事实提取器。请分析以下对话，提取其中值得长期沉淀的关键信息。
 提取规则：
@@ -80,65 +55,67 @@ export class MemoryExtractorService {
 3. 每条 content 必须保持简练、独立完整，不可出现人称模糊。
 4. 必须输出严格合法的 JSON 对象，格式为：{"items": [{"category": "...", "content": "..."}]}`;
 
-      const response = await this.openaiClient.chat.completions.create({
-        model: this.modelName,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
+      const parsed = await this.memoryLlmService.completeJson<ExtractionResult>(
+        [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: contextSlice },
         ],
-      });
+        {
+          preferredModelEnvKey: 'MEMORY_EXTRACTOR_MODEL',
+          temperature: 0.1,
+        },
+      );
 
-      const rawJson = response.choices[0]?.message?.content?.trim();
-      if (!rawJson) return 0;
+      const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+      const validCategories: MemoryCategory[] = [
+        'fact',
+        'preference',
+        'decision',
+        'todo',
+      ];
+      const normalizedItems = rawItems
+        .filter((item) => typeof item?.content === 'string')
+        .map((item) => ({
+          category: validCategories.includes(item.category)
+            ? item.category
+            : ('fact' as MemoryCategory),
+          content: item.content.trim(),
+        }))
+        .filter((item) => item.content.length >= 2);
 
-      const parsed: ExtractionResult = JSON.parse(rawJson);
-      const items = Array.isArray(parsed.items) ? parsed.items : [];
-      if (items.length === 0) return 0;
+      if (normalizedItems.length === 0) return 0;
 
-      // 计算今天日期键 (YYYY-MM-DD)
-      const now = new Date();
-      const dateKey = now.toISOString().slice(0, 10);
+      const dateKey = new Date().toISOString().slice(0, 10);
+      const embeddings = await this.embeddingService.embedDocuments(
+        normalizedItems.map((i) => i.content),
+      );
 
-      // 批量计算向量
-      const contents = items.map((i) => i.content.trim()).filter(Boolean);
-      let embeddings: number[][] = [];
-      try {
-        embeddings = await this.embeddingService.embedDocuments(contents);
-      } catch (embErr: any) {
-        this.logger.warn(`向量生成失败，将以无向量模式入库: ${embErr.message}`);
-      }
-
-      // 存入每日记忆表
-      const entitiesToSave: AgentDailyMemory[] = [];
-      for (let idx = 0; idx < items.length; idx++) {
-        const item = items[idx];
-        const validCategories: MemoryCategory[] = ['fact', 'preference', 'decision', 'todo'];
-        const category: MemoryCategory = validCategories.includes(item.category)
-          ? item.category
-          : 'fact';
-
-        const entity = this.dailyMemoryRepo.create({
-          userId,
+      let mergedCount = 0;
+      let createdCount = 0;
+      for (let idx = 0; idx < normalizedItems.length; idx++) {
+        const item = normalizedItems[idx];
+        const result = await this.memoryVectorStore.upsertDailyMemory(userId, {
           sessionId,
           dateKey,
-          category,
+          category: item.category,
           content: item.content,
           embedding: embeddings[idx] ?? null,
-          isArchived: false,
         });
-        entitiesToSave.push(entity);
+        if (result.action === 'merged') {
+          mergedCount += 1;
+        } else {
+          createdCount += 1;
+        }
       }
 
-      if (entitiesToSave.length > 0) {
-        await this.dailyMemoryRepo.save(entitiesToSave);
-        this.logger.log(`成功为用户 ${userId} 沉淀 ${entitiesToSave.length} 条每日情境记忆`);
-      }
-
-      return entitiesToSave.length;
-    } catch (err: any) {
-      this.logger.error(`记忆提取执行失败: ${err.message}`, err.stack);
+      this.logger.log(
+        `用户 ${userId} 日常记忆沉淀完成（新建 ${createdCount}，语义合并 ${mergedCount}）`,
+      );
+      return normalizedItems.length;
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errStack = err instanceof Error ? err.stack : undefined;
+      this.logger.error(`记忆提取执行失败: ${errMsg}`, errStack);
       return 0;
     }
   }

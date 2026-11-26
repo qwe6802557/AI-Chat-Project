@@ -4,18 +4,22 @@
 import request, { type ResponseData } from '@/utils/request'
 import type {
   AgentCoreProfile,
-  AgentDailyMemory,
+  CreateDailyMemoryDto,
   DailyMemoryPageResult,
   QueryDailyMemoryDto,
   UpdateCoreProfileDto,
+  UpsertDailyMemoryResult,
 } from '@/interface/memory'
 
 export type {
   AgentCoreProfile,
   AgentDailyMemory,
+  CreateDailyMemoryDto,
   DailyMemoryPageResult,
+  MemoryCategory,
   QueryDailyMemoryDto,
   UpdateCoreProfileDto,
+  UpsertDailyMemoryResult,
 } from '@/interface/memory'
 
 /**
@@ -33,12 +37,19 @@ export function updateCoreProfile(data: UpdateCoreProfileDto) {
 }
 
 /**
- * 分页查询日常情境记忆列表
+ * 分页查询或混合语义检索日常情境记忆列表
  */
 export function getDailyMemories(params?: QueryDailyMemoryDto) {
   return request.get<never, ResponseData<DailyMemoryPageResult>>('/memory/daily', {
     params,
   })
+}
+
+/**
+ * 手动录入单条日常记忆（自动向量化并执行语义去重）
+ */
+export function createDailyMemory(data: CreateDailyMemoryDto) {
+  return request.post<never, ResponseData<UpsertDailyMemoryResult>>('/memory/daily', data)
 }
 
 /**

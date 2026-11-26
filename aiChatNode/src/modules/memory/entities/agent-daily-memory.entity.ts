@@ -12,7 +12,8 @@ export type MemoryCategory = 'fact' | 'preference' | 'decision' | 'todo';
 /**
  * 跨会话日常工作情境记忆实体（Layer 2）
  */
-@Entity('agent_daily_memories')
+// 向量列 embedding 由原生 SQL vector(1024) 读写，关闭同步避免 TypeORM 覆盖列类型
+@Entity('agent_daily_memories', { synchronize: false })
 @Index('idx_agent_daily_memories_user_id', ['userId'])
 @Index('idx_agent_daily_memories_date_key', ['dateKey'])
 @Index('idx_agent_daily_memories_category', ['category'])
@@ -35,9 +36,6 @@ export class AgentDailyMemory {
 
   @Column({ type: 'text' })
   content: string;
-
-  @Column({ type: 'real', array: true, nullable: true })
-  embedding: number[] | null;
 
   @Column({ type: 'boolean', default: false })
   isArchived: boolean;
