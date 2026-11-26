@@ -112,7 +112,7 @@
               @click="selectOtherModel(model.value)"
             >
               <div class="other-item-info">
-                <span class="other-item-name">{{ model.label }}</span>
+                <span class="other-item-name" :title="model.label">{{ model.label }}</span>
                 <span v-if="model.reasoningBadgeLabel" class="other-item-tag">
                   {{ model.reasoningBadgeLabel }}
                 </span>
@@ -131,12 +131,12 @@
 
         <!-- 底部轻量信息栏 -->
         <div class="popover-footer">
-          <span class="footer-target">
-            当前生效: <code>{{ selectedModel }}</code>
-          </span>
-          <span v-if="creditsRemaining !== undefined" class="footer-credits">
-            余额: {{ creditsRemaining }} 积分
-          </span>
+          <div class="footer-target">
+            <span class="footer-label">当前生效:</span>
+            <a-tooltip :title="selectedModel" placement="top">
+              <code class="footer-model-id">{{ selectedModel }}</code>
+            </a-tooltip>
+          </div>
         </div>
       </div>
     </template>
@@ -167,13 +167,11 @@ interface Props {
   modelOptions: ModelOptionItem[]
   disabled?: boolean
   loading?: boolean
-  creditsRemaining?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   loading: false,
-  creditsRemaining: undefined,
 })
 
 const emit = defineEmits<{
@@ -385,7 +383,8 @@ const selectOtherModel = (modelId: string) => {
 }
 
 .model-popover-panel {
-  width: 330px;
+  width: 372px;
+  max-width: calc(100vw - 24px);
   background-color: #ffffff;
   color: #0f172a;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -555,6 +554,7 @@ const selectOtherModel = (modelId: string) => {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       padding: 7px 8px;
       border-radius: 6px;
       cursor: pointer;
@@ -577,10 +577,15 @@ const selectOtherModel = (modelId: string) => {
         display: flex;
         align-items: center;
         gap: 6px;
+        min-width: 0;
+        flex: 1;
 
         .other-item-name {
           font-size: 12px;
           color: #1e293b;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
         .other-item-tag {
@@ -589,6 +594,8 @@ const selectOtherModel = (modelId: string) => {
           background-color: #e0f2fe;
           padding: 1px 4px;
           border-radius: 4px;
+          flex-shrink: 0;
+          white-space: nowrap;
         }
       }
 
@@ -596,6 +603,8 @@ const selectOtherModel = (modelId: string) => {
         display: flex;
         align-items: center;
         gap: 6px;
+        flex-shrink: 0;
+        white-space: nowrap;
 
         .other-item-cost {
           font-size: 11px;
@@ -620,20 +629,38 @@ const selectOtherModel = (modelId: string) => {
   .popover-footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 7px 12px;
     background-color: #f8fafc;
     border-top: 1px solid #f1f5f9;
     font-size: 11px;
     color: #64748b;
 
-    code {
+    .footer-target {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .footer-label {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    .footer-model-id {
+      display: inline-block;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-family: monospace;
-      font-size: 10px;
+      font-size: 10.5px;
       color: #334155;
       background-color: #e2e8f0;
-      padding: 1px 4px;
-      border-radius: 3px;
+      padding: 1px 6px;
+      border-radius: 4px;
     }
   }
 }

@@ -13,14 +13,15 @@ describe('ModelSelectorPopover', () => {
     }>
   }) => {
     return mount(ModelSelectorPopover, {
-      props: {
-        ...props,
-        creditsRemaining: 1000,
-      },
+      props,
       global: {
         stubs: {
           'a-popover': {
             template: '<div><slot /><slot name="content" /></div>',
+          },
+          'a-tooltip': {
+            props: ['title'],
+            template: '<div class="a-tooltip-stub" :data-title="title"><slot /></div>',
           },
           ThunderboltOutlined: true,
           DownOutlined: true,
@@ -73,5 +74,25 @@ describe('ModelSelectorPopover', () => {
 
     expect(wrapper.find('.category-segmented-container').exists()).toBe(false)
     expect(wrapper.find('.other-section').exists()).toBe(true)
+  })
+
+  it('底部信息栏移除重复余额并单行截断超长模型 ID，同时通过 Tooltip 承载完整名称', () => {
+    const longModelId = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'
+    const wrapper = createMount({
+      selectedModel: longModelId,
+      modelOptions: [
+        {
+          label: 'DeepSeek-R1-Distill (7B)',
+          value: longModelId,
+          reserveCredits: 10,
+          reasoningBadgeLabel: '支持思考过程',
+        },
+      ],
+    })
+
+    expect(wrapper.find('.footer-credits').exists()).toBe(false)
+    expect(wrapper.find('.popover-footer').text()).not.toContain('余额')
+    expect(wrapper.find('.footer-model-id').text()).toBe(longModelId)
+    expect(wrapper.find('.a-tooltip-stub').attributes('data-title')).toBe(longModelId)
   })
 })

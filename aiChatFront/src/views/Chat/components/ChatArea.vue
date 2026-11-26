@@ -122,7 +122,6 @@
               :model-options="modelOptions"
               :loading="modelsLoading"
               :disabled="loading"
-              :credits-remaining="currentCreditsRemaining"
               @update:selected-model="handleModelChange"
             />
 
