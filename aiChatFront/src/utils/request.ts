@@ -115,7 +115,34 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse<ResponseData>) => {
-    const { code, message: msg } = response.data
+    const responseData = response.data
+    const headers = response.headers as Record<string, unknown> | undefined
+    const contentType = String(headers?.['content-type'] ?? headers?.['Content-Type'] ?? '').toLowerCase()
+    const isStructuredPayload =
+      typeof responseData === 'object' &&
+      responseData !== null &&
+      !Array.isArray(responseData) &&
+      'code' in responseData
+
+    // 网关未命中后端代理时常回退返回 SPA index.html，拦截器需显式暴露非 JSON 根因
+    if (!isStructuredPayload) {
+      const isHtmlResponse =
+        contentType.includes('text/html') ||
+        (typeof responseData === 'string' && /^\s*(?:<!doctype html|<html)/i.test(responseData))
+      const invalidPayloadMessage = isHtmlResponse
+        ? '接口返回了 HTML 页面，请检查网关代理配置或强刷清理缓存'
+        : '接口返回了非标准 JSON 响应，请检查服务或网关代理配置'
+
+      logger.error('接口返回非标准 JSON 响应:', {
+        url: response.config?.url,
+        status: response.status,
+        contentType,
+      })
+      showSingletonErrorMessage(invalidPayloadMessage)
+      return Promise.reject(new Error(invalidPayloadMessage))
+    }
+
+    const { code, message: msg } = responseData
     const requestUrl = response.config?.url as string | undefined
     const authStore = useAuthStore()
     const hasToken = !!authStore.getToken()
@@ -127,7 +154,7 @@ request.interceptors.response.use(
 
     // 成功
     if (code === 0) {
-      return response.data as never
+      return responseData as never
     }
 
     // 非成功
