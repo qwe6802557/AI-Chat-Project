@@ -54,18 +54,16 @@ class _KnowledgeBaseDetailPageState extends ConsumerState<KnowledgeBaseDetailPag
           if (mounted) {
             progressNotifier.state = progressNotifier.state.copyWith(
               progress: p,
-              isProcessing: p >= 1.0,
             );
           }
         },
       );
 
-      // 上传并提交处理成功
       if (mounted) {
         progressNotifier.state = const UploadProgressState();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('文档「${file.name}」已提交入库解析'),
+            content: Text('文档「${file.name}」已进入后台解析队列'),
             duration: const Duration(seconds: 2),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -78,6 +76,35 @@ class _KnowledgeBaseDetailPageState extends ConsumerState<KnowledgeBaseDetailPag
       if (mounted) {
         ref.read(kbUploadProgressProvider.notifier).state = UploadProgressState(
           error: '上传失败: ${e.toString().replaceAll('Exception:', '').trim()}',
+        );
+      }
+    }
+  }
+
+  Future<void> _retryDocument(DocumentModel doc) async {
+    try {
+      await ref
+          .read(kbDocumentsProvider(widget.knowledgeBaseId).notifier)
+          .retryDocument(doc.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('文档「${doc.title}」已重新加入解析队列'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('重试失败: ${e.toString().replaceAll('Exception:', '').trim()}'),
+            backgroundColor: StitchTokens.crimsonStop,
+          ),
         );
       }
     }
@@ -231,6 +258,7 @@ class _KnowledgeBaseDetailPageState extends ConsumerState<KnowledgeBaseDetailPag
                         document: doc,
                         onTap: () => ChunkDetailDrawer.show(context, document: doc),
                         onDelete: () => _confirmDeleteDocument(doc),
+                        onRetry: doc.isFailed ? () => _retryDocument(doc) : null,
                       ),
                     ),
                   ),

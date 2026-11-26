@@ -12,9 +12,9 @@ import { KnowledgeBase } from './knowledge-base.entity';
 import { KnowledgeDocument } from './knowledge-document.entity';
 
 /**
- * 知识库切片实体
+ * 知识库切片实体（embedding 由 Migration 托管为 vector(1024)，禁止 synchronize 覆盖）
  */
-@Entity('knowledge_chunks')
+@Entity({ name: 'knowledge_chunks', synchronize: false })
 @Index('idx_knowledge_chunks_kb_id', ['knowledgeBaseId'])
 @Index('idx_knowledge_chunks_doc_id', ['documentId'])
 @Index('idx_knowledge_chunks_user_id', ['userId'])
@@ -42,9 +42,6 @@ export class KnowledgeChunk {
 
   @Column({ type: 'boolean', default: true })
   isEnabled: boolean;
-
-  @Column({ type: 'real', array: true, nullable: true })
-  embedding: number[] | null;
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any> | null;

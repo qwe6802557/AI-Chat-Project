@@ -186,6 +186,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.hGetAll(key);
   }
 
+  /**
+   * 发布 Pub/Sub 频道消息
+   */
+  async publish(channel: string, message: string): Promise<number> {
+    return this.client.publish(channel, message);
+  }
+
+  /**
+   * 复制并连接独立订阅客户端（避免阻塞主客户端命令通道）
+   */
+  async createSubscriberClient(): Promise<RedisClientType> {
+    const subscriber = this.client.duplicate();
+    subscriber.on('error', (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Redis 订阅客户端错误: ${message}`);
+    });
+    await subscriber.connect();
+    return subscriber;
+  }
+
   isReady(): boolean {
     return Boolean(this.client?.isOpen);
   }

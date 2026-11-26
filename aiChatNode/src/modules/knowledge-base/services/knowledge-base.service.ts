@@ -4,8 +4,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import type { Queue } from 'bullmq';
+import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { Between, In, Repository } from 'typeorm';
 import { KnowledgeBase } from '../entities/knowledge-base.entity';
 import { KnowledgeDocument } from '../entities/knowledge-document.entity';
 import { KnowledgeChunk } from '../entities/knowledge-chunk.entity';
@@ -15,8 +20,15 @@ import {
   UpdateKnowledgeChunkDto,
 } from '../dto';
 import { DocumentParserService } from './document-parser.service';
-import { RecursiveChunkerService } from './recursive-chunker.service';
 import { EmbeddingService } from './embedding.service';
+import { KnowledgeProgressService } from './knowledge-progress.service';
+import {
+  KNOWLEDGE_INGEST_JOB,
+  KNOWLEDGE_INGEST_QUEUE,
+  KnowledgeIngestJobData,
+  resolveKnowledgeUploadDir,
+} from '../constants/knowledge-queue.constants';
+import { toPgVectorLiteral } from '../utils/pg-vector.util';
 
 export interface KnowledgeChunkSummary {
   id: string;
@@ -61,13 +73,14 @@ export class KnowledgeBaseService {
     private readonly docRepo: Repository<KnowledgeDocument>,
     @InjectRepository(KnowledgeChunk)
     private readonly chunkRepo: Repository<KnowledgeChunk>,
-    private readonly parserService: DocumentParserService,
-    private readonly chunkerService: RecursiveChunkerService,
     private readonly embeddingService: EmbeddingService,
+    private readonly progressService: KnowledgeProgressService,
+    @InjectQueue(KNOWLEDGE_INGEST_QUEUE)
+    private readonly ingestQueue: Queue<KnowledgeIngestJobData>,
   ) {}
 
   /**
-   * 剔除高维 embedding 向量字段，减少切片响应负载
+   * 构造切片摘要视图（KnowledgeChunk 已隔离向量列，仅保持契约映射）
    */
   private toChunkSummary(chunk: KnowledgeChunk): KnowledgeChunkSummary {
     return {
@@ -143,15 +156,22 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 删除知识库（级联删除全部文档与切片）
+   * 删除知识库（同步清理队列任务与磁盘原文件，再级联删除数据库记录）
    */
   async deleteKnowledgeBase(userId: string, id: string): Promise<void> {
     const kb = await this.getKnowledgeBaseById(userId, id);
+    const docs = await this.docRepo.find({
+      where: { knowledgeBaseId: kb.id, userId },
+      select: ['id', 'filePath'],
+    });
+    await Promise.all(
+      docs.map((doc) => this.cleanupDocumentArtifacts(doc.id, doc.filePath)),
+    );
     await this.kbRepo.remove(kb);
   }
 
   /**
-   * 上传并异步解析文档、切片与向量入库
+   * 上传文件落盘并投递 BullMQ 异步解析队列
    */
   async uploadAndProcessDocument(
     userId: string,
@@ -161,79 +181,135 @@ export class KnowledgeBaseService {
     const kb = await this.getKnowledgeBaseById(userId, knowledgeBaseId);
 
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    const ext = originalName.slice(originalName.lastIndexOf('.')).toLowerCase();
+    const dotIndex = originalName.lastIndexOf('.');
+    const ext = dotIndex >= 0 ? originalName.slice(dotIndex).toLowerCase() : '';
+    if (!DocumentParserService.isSupportedFile(originalName, file.mimetype)) {
+      throw new BadRequestException(
+        `暂不支持的文件格式: ${ext || '未知'}，仅支持 .pdf, .docx, .md, .txt 等格式`,
+      );
+    }
 
-    // 1. 初始化文档记录为 processing 状态
-    const doc = this.docRepo.create({
-      knowledgeBaseId: kb.id,
+    const docId = randomUUID();
+    const targetPath = path.join(
+      resolveKnowledgeUploadDir(),
       userId,
-      title: originalName.replace(/\.[^/.]+$/, ''),
-      fileName: originalName,
-      fileType: ext.replace('.', ''),
-      fileSize: file.size,
-      filePath: null,
-      status: 'processing',
-      errorMessage: null,
-      chunkCount: 0,
-      charCount: 0,
-    });
-    const savedDoc = await this.docRepo.save(doc);
+      `${docId}${ext}`,
+    );
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, file.buffer);
 
-    // 2. 执行文本提取与切片向量化（同步完成以确保入库即时可查）
     try {
-      const parsed = await this.parserService.parseBuffer(
-        file.buffer,
-        originalName,
-        file.mimetype,
-      );
+      const doc = this.docRepo.create({
+        id: docId,
+        knowledgeBaseId: kb.id,
+        userId,
+        title: originalName.replace(/\.[^/.]+$/, ''),
+        fileName: originalName,
+        fileType: ext.replace('.', ''),
+        fileSize: file.size,
+        filePath: targetPath,
+        status: 'pending',
+        stage: 'queued',
+        progress: 0,
+        errorMessage: null,
+        chunkCount: 0,
+        charCount: 0,
+      });
+      const savedDoc = await this.docRepo.save(doc);
 
-      const chunks = this.chunkerService.splitText(parsed.text);
-      if (chunks.length === 0) {
-        throw new BadRequestException('切片后未提取到有效文本片段');
-      }
+      await this.enqueueIngestJob({
+        documentId: savedDoc.id,
+        knowledgeBaseId: kb.id,
+        userId,
+      });
 
-      // 批量计算 Embedding
-      const chunkTexts = chunks.map((c) => c.content);
-      const embeddings = await this.embeddingService.embedDocuments(chunkTexts);
-
-      // 构建切片实体批量入库
-      const chunkEntities = chunks.map((c, idx) =>
-        this.chunkRepo.create({
-          knowledgeBaseId: kb.id,
-          documentId: savedDoc.id,
-          userId,
-          chunkIndex: c.chunkIndex,
-          content: c.content,
-          charCount: c.charCount,
-          isEnabled: true,
-          embedding: embeddings[idx] || null,
-          metadata: {
-            docTitle: savedDoc.title,
-            fileName: savedDoc.fileName,
-            fileType: savedDoc.fileType,
-          },
-        }),
-      );
-
-      await this.chunkRepo.save(chunkEntities);
-
-      // 更新文档为已完成
-      savedDoc.status = 'completed';
-      savedDoc.chunkCount = chunks.length;
-      savedDoc.charCount = parsed.charCount;
-      await this.docRepo.save(savedDoc);
-
-      // 更新知识库统计指标
-      await this.recalculateStats(kb.id);
+      await this.progressService.publish({
+        type: 'progress',
+        documentId: savedDoc.id,
+        knowledgeBaseId: kb.id,
+        userId,
+        status: 'pending',
+        stage: 'queued',
+        progress: 0,
+        updatedAt: new Date().toISOString(),
+      });
 
       return savedDoc;
-    } catch (err: any) {
-      this.logger.error(`文档 [${savedDoc.fileName}] 处理失败: ${err.message}`, err.stack);
-      savedDoc.status = 'failed';
-      savedDoc.errorMessage = err.message || '文档切片或向量化失败';
-      await this.docRepo.save(savedDoc);
+    } catch (err) {
+      await this.removeTempFile(targetPath);
       throw err;
     }
+  }
+
+  /**
+   * 失败文档一键重新入队解析
+   */
+  async retryDocument(
+    userId: string,
+    documentId: string,
+  ): Promise<KnowledgeDocument> {
+    const doc = await this.docRepo.findOne({
+      where: { id: documentId, userId },
+    });
+    if (!doc) {
+      throw new NotFoundException('文档不存在或无权访问');
+    }
+    if (doc.status !== 'failed') {
+      throw new BadRequestException('仅支持对解析失败的文档执行重试');
+    }
+    if (!doc.filePath) {
+      throw new BadRequestException('原文件已清理，请重新上传文档');
+    }
+
+    try {
+      await fs.access(doc.filePath);
+    } catch {
+      throw new BadRequestException('磁盘原文件不存在，请重新上传文档');
+    }
+
+    await this.removeQueueJob(doc.id);
+
+    doc.status = 'pending';
+    doc.stage = 'queued';
+    doc.progress = 0;
+    doc.errorMessage = null;
+    const savedDoc = await this.docRepo.save(doc);
+
+    await this.enqueueIngestJob({
+      documentId: savedDoc.id,
+      knowledgeBaseId: savedDoc.knowledgeBaseId,
+      userId,
+    });
+
+    await this.progressService.publish({
+      type: 'progress',
+      documentId: savedDoc.id,
+      knowledgeBaseId: savedDoc.knowledgeBaseId,
+      userId,
+      status: 'pending',
+      stage: 'queued',
+      progress: 0,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return savedDoc;
+  }
+
+  /**
+   * 获取知识库当前排队或处理中的文档快照，消除 SSE 建连前状态竞态
+   */
+  async getActiveDocumentsSnapshot(
+    userId: string,
+    knowledgeBaseId: string,
+  ): Promise<KnowledgeDocument[]> {
+    return this.docRepo.find({
+      where: {
+        knowledgeBaseId,
+        userId,
+        status: In(['pending', 'processing']),
+      },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   /**
@@ -251,7 +327,7 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 删除文档（级联清除其切片）
+   * 删除文档（清除排队任务与临时原文件，再级联删除切片）
    */
   async deleteDocument(userId: string, documentId: string): Promise<void> {
     const doc = await this.docRepo.findOne({
@@ -261,6 +337,7 @@ export class KnowledgeBaseService {
       throw new NotFoundException('文档不存在或无权访问');
     }
     const kbId = doc.knowledgeBaseId;
+    await this.cleanupDocumentArtifacts(doc.id, doc.filePath);
     await this.docRepo.remove(doc);
     await this.recalculateStats(kbId);
   }
@@ -388,7 +465,7 @@ export class KnowledgeBaseService {
       throw new NotFoundException('切片不存在或无权访问');
     }
 
-    let contentChanged = false;
+    let newVector: number[] | null = null;
     if (dto.content !== undefined) {
       const trimmed = dto.content.trim();
       if (!trimmed) {
@@ -397,8 +474,7 @@ export class KnowledgeBaseService {
       if (trimmed !== chunk.content) {
         chunk.content = trimmed;
         chunk.charCount = trimmed.length;
-        chunk.embedding = await this.embeddingService.embedQuery(trimmed);
-        contentChanged = true;
+        newVector = await this.embeddingService.embedQuery(trimmed);
       }
     }
 
@@ -408,7 +484,11 @@ export class KnowledgeBaseService {
 
     const saved = await this.chunkRepo.save(chunk);
 
-    if (contentChanged) {
+    if (newVector) {
+      await this.chunkRepo.manager.query(
+        'UPDATE "knowledge_chunks" SET "embedding" = $1::vector(1024) WHERE "id" = $2 AND "userId" = $3',
+        [toPgVectorLiteral(newVector), chunk.id, userId],
+      );
       const docChunks = await this.chunkRepo.find({
         where: { documentId: chunk.documentId, userId },
         select: ['id', 'charCount'],
@@ -435,5 +515,52 @@ export class KnowledgeBaseService {
       documentCount: docCount,
       chunkCount,
     });
+  }
+
+  private async enqueueIngestJob(data: KnowledgeIngestJobData): Promise<void> {
+    await this.ingestQueue.add(KNOWLEDGE_INGEST_JOB, data, {
+      jobId: data.documentId,
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 3000,
+      },
+      removeOnComplete: 100,
+      removeOnFail: 200,
+    });
+  }
+
+  private async cleanupDocumentArtifacts(
+    documentId: string,
+    filePath: string | null,
+  ): Promise<void> {
+    await this.removeQueueJob(documentId);
+    await this.removeTempFile(filePath);
+  }
+
+  private async removeQueueJob(documentId: string): Promise<void> {
+    try {
+      const existingJob = await this.ingestQueue.getJob(documentId);
+      if (existingJob) {
+        await existingJob.remove();
+      }
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`移除队列任务失败 [${documentId}]: ${msg}`);
+    }
+  }
+
+  private async removeTempFile(filePath: string | null): Promise<void> {
+    if (!filePath) return;
+    try {
+      await fs.unlink(filePath);
+    } catch (error: unknown) {
+      const nodeErr = error as NodeJS.ErrnoException;
+      if (nodeErr?.code !== 'ENOENT') {
+        this.logger.warn(
+          `清理临时文件失败 [${filePath}]: ${nodeErr?.message || String(error)}`,
+        );
+      }
+    }
   }
 }

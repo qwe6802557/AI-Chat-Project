@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { KnowledgeDocument } from './entities/knowledge-document.entity';
 import { KnowledgeChunk } from './entities/knowledge-chunk.entity';
@@ -9,7 +10,10 @@ import { EmbeddingService } from './services/embedding.service';
 import { RerankService } from './services/rerank.service';
 import { HybridRagService } from './services/hybrid-rag.service';
 import { KnowledgeBaseService } from './services/knowledge-base.service';
+import { KnowledgeProgressService } from './services/knowledge-progress.service';
+import { KnowledgeIngestProcessor } from './processors/knowledge-ingest.processor';
 import { KnowledgeBaseController } from './knowledge-base.controller';
+import { KNOWLEDGE_INGEST_QUEUE } from './constants/knowledge-queue.constants';
 
 @Module({
   imports: [
@@ -18,6 +22,9 @@ import { KnowledgeBaseController } from './knowledge-base.controller';
       KnowledgeDocument,
       KnowledgeChunk,
     ]),
+    BullModule.registerQueue({
+      name: KNOWLEDGE_INGEST_QUEUE,
+    }),
   ],
   controllers: [KnowledgeBaseController],
   providers: [
@@ -26,8 +33,16 @@ import { KnowledgeBaseController } from './knowledge-base.controller';
     EmbeddingService,
     RerankService,
     HybridRagService,
+    KnowledgeProgressService,
+    KnowledgeIngestProcessor,
     KnowledgeBaseService,
   ],
-  exports: [HybridRagService, KnowledgeBaseService, EmbeddingService, RerankService],
+  exports: [
+    HybridRagService,
+    KnowledgeBaseService,
+    EmbeddingService,
+    RerankService,
+    KnowledgeProgressService,
+  ],
 })
 export class KnowledgeBaseModule {}

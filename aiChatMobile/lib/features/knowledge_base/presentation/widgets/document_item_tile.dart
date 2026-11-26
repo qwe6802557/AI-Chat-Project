@@ -7,12 +7,14 @@ class DocumentItemTile extends StatelessWidget {
   final DocumentModel document;
   final VoidCallback onTap;
   final VoidCallback onDelete;
+  final VoidCallback? onRetry;
 
   const DocumentItemTile({
     super.key,
     required this.document,
     required this.onTap,
     required this.onDelete,
+    this.onRetry,
   });
 
   Color _getFileTypeColor(String type) {
@@ -128,14 +130,50 @@ class DocumentItemTile extends StatelessWidget {
                         ],
                       ],
                     ),
+                    if (document.isProcessing) ...[
+                      const SizedBox(height: 6.0),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                        child: LinearProgressIndicator(
+                          value: document.progress > 0
+                              ? (document.progress / 100.0).clamp(0.0, 1.0)
+                              : null,
+                          backgroundColor: StitchTokens.surfaceVariant,
+                          valueColor: const AlwaysStoppedAnimation(StitchTokens.primary),
+                          minHeight: 3.0,
+                        ),
+                      ),
+                    ] else if (document.isFailed &&
+                        document.errorMessage != null &&
+                        document.errorMessage!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4.0),
+                      Text(
+                        document.errorMessage!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.0,
+                          color: StitchTokens.crimsonStop,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(width: 8.0),
-              // 状态指示徽标
               _buildStatusIndicator(),
+              if (document.isFailed && onRetry != null)
+                IconButton(
+                  tooltip: '重新解析',
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: StitchTokens.primary,
+                    size: 18.0,
+                  ),
+                  onPressed: onRetry,
+                  splashRadius: 20.0,
+                ),
               const SizedBox(width: 4.0),
-              // 删除操作
               IconButton(
                 icon: const Icon(
                   Icons.delete_outline_rounded,
@@ -154,16 +192,19 @@ class DocumentItemTile extends StatelessWidget {
 
   Widget _buildStatusIndicator() {
     if (document.isProcessing) {
+      final label = document.progress > 0
+          ? '${document.stageLabel} ${document.progress}%'
+          : document.stageLabel;
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
         decoration: BoxDecoration(
           color: StitchTokens.primaryContainer.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(StitchTokens.radiusSm),
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
+            const SizedBox(
               width: 10.0,
               height: 10.0,
               child: CircularProgressIndicator(
@@ -171,10 +212,10 @@ class DocumentItemTile extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation(StitchTokens.primary),
               ),
             ),
-            SizedBox(width: 6.0),
+            const SizedBox(width: 6.0),
             Text(
-              '解析中',
-              style: TextStyle(
+              label,
+              style: const TextStyle(
                 fontSize: 11.0,
                 color: StitchTokens.primary,
                 fontWeight: FontWeight.w500,

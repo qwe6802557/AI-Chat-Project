@@ -136,10 +136,10 @@
               <CloudUploadOutlined class="upload-icon" />
               <div class="upload-texts">
                 <span class="primary-text">
-                  {{ isUploading ? '正在极速解析入库并计算 BGE-M3 向量...' : '点击或拖拽文件至此上传解析' }}
+                  {{ isUploading ? '正在上传文件并加入后台解析队列...' : '点击或拖拽文件至此上传解析' }}
                 </span>
                 <span class="secondary-text">
-                  支持 PDF、DOCX、Markdown、TXT 格式，自动按 500 字语义分块与 100 字滑动窗口重叠
+                  支持 PDF、DOCX、Markdown、TXT 格式，后台异步完成 500 字分块与 BGE-M3 向量化（支持连续上传）
                 </span>
               </div>
             </div>
@@ -187,22 +187,56 @@
                     {{ doc.charCount }}
                   </div>
                   <div class="col-cell col-status">
-                    <span :class="['status-badge', doc.status]">
-                      <CheckCircleOutlined v-if="doc.status === 'completed'" />
-                      <SyncOutlined v-else-if="doc.status === 'processing'" spin />
-                      <CloseCircleOutlined v-else-if="doc.status === 'failed'" />
-                      <ClockCircleOutlined v-else />
-                      <span>{{ getStatusLabel(doc.status) }}</span>
-                    </span>
+                    <div class="status-cell-inner">
+                      <span
+                        :class="['status-badge', doc.status]"
+                        :title="doc.status === 'failed' ? doc.errorMessage || '解析失败' : undefined"
+                      >
+                        <CheckCircleOutlined v-if="doc.status === 'completed'" />
+                        <SyncOutlined
+                          v-else-if="doc.status === 'processing' || doc.status === 'pending'"
+                          :spin="doc.status === 'processing'"
+                        />
+                        <CloseCircleOutlined v-else-if="doc.status === 'failed'" />
+                        <ClockCircleOutlined v-else />
+                        <span>{{ getStatusText(doc) }}</span>
+                      </span>
+                      <div
+                        v-if="doc.status === 'pending' || doc.status === 'processing'"
+                        class="doc-progress-track"
+                      >
+                        <div
+                          class="doc-progress-fill"
+                          :style="{ width: `${Math.min(100, Math.max(0, doc.progress ?? 0))}%` }"
+                        />
+                      </div>
+                      <span
+                        v-else-if="doc.status === 'failed' && doc.errorMessage"
+                        class="doc-error-hint"
+                        :title="doc.errorMessage"
+                      >
+                        {{ doc.errorMessage }}
+                      </span>
+                    </div>
                   </div>
                   <div class="col-cell col-actions">
                     <button
                       type="button"
                       class="text-btn"
-                      title="预览与治理切片"
+                      :disabled="doc.status !== 'completed'"
+                      :title="doc.status === 'completed' ? '预览与治理切片' : '文档解析完成后可预览'"
                       @click="handlePreviewChunks(doc)"
                     >
                       预览切片
+                    </button>
+                    <button
+                      v-if="doc.status === 'failed'"
+                      type="button"
+                      class="text-btn retry"
+                      title="重新解析入库"
+                      @click="handleRetryDocument(doc)"
+                    >
+                      重试
                     </button>
                     <button
                       type="button"
@@ -278,7 +312,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onActivated } from 'vue'
+import { ref, reactive, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { message, Modal } from 'ant-design-vue'
 import {
@@ -301,10 +335,13 @@ import {
   deleteKnowledgeBase,
   getKnowledgeDocuments,
   uploadKnowledgeDocument,
+  retryKnowledgeDocument,
   deleteKnowledgeDocument,
+  subscribeKnowledgeDocumentEvents,
 } from '@/api/knowledge'
 import { useKnowledgeStore } from '@/stores'
 import type {
+  DocumentProgressStreamEvent,
   HighlightSpan,
   KnowledgeBaseItem,
   KnowledgeDocumentItem,
@@ -343,12 +380,78 @@ const drawerChunkId = ref<string | null>(null)
 const drawerHighlights = ref<HighlightSpan[] | undefined>(undefined)
 const previewDoc = ref<KnowledgeDocumentItem | null>(null)
 
+let documentEventHandle: { abort: () => void } | null = null
+
+const stopDocumentEventStream = () => {
+  if (documentEventHandle) {
+    documentEventHandle.abort()
+    documentEventHandle = null
+  }
+}
+
+const applyDocumentEvent = (event: DocumentProgressStreamEvent) => {
+  if (event.type === 'error') return
+
+  if (event.type === 'snapshot') {
+    if (currentKb.value?.id !== event.knowledgeBaseId) return
+    const snapshotMap = new Map(event.documents.map((d) => [d.documentId, d]))
+    currentDocuments.value = currentDocuments.value.map((doc) => {
+      const snap = snapshotMap.get(doc.id)
+      if (!snap) return doc
+      return {
+        ...doc,
+        status: snap.status,
+        stage: snap.stage,
+        progress: snap.progress,
+        chunkCount: snap.chunkCount ?? doc.chunkCount,
+        charCount: snap.charCount ?? doc.charCount,
+        errorMessage: snap.errorMessage ?? undefined,
+      }
+    })
+    return
+  }
+
+  if (currentKb.value?.id !== event.knowledgeBaseId) return
+
+  const targetIdx = currentDocuments.value.findIndex((d) => d.id === event.documentId)
+  if (targetIdx === -1) {
+    void fetchDocuments(event.knowledgeBaseId)
+  } else {
+    const existing = currentDocuments.value[targetIdx]
+    if (existing) {
+      currentDocuments.value[targetIdx] = {
+        ...existing,
+        status: event.status,
+        stage: event.stage,
+        progress: event.progress,
+        processedChunks: event.processedChunks,
+        totalChunks: event.totalChunks,
+        chunkCount: event.chunkCount ?? existing.chunkCount,
+        charCount: event.charCount ?? existing.charCount,
+        errorMessage: event.errorMessage ?? undefined,
+      }
+    }
+  }
+
+  if (event.type === 'completed') {
+    void fetchKnowledgeBases(true, true)
+  }
+}
+
+const startDocumentEventStream = (kbId: string) => {
+  stopDocumentEventStream()
+  documentEventHandle = subscribeKnowledgeDocumentEvents(kbId, {
+    onEvent: applyDocumentEvent,
+  })
+}
+
 const selectKnowledgeBase = (kb: KnowledgeBaseItem) => {
   if (currentKb.value?.id !== kb.id) {
     currentDocuments.value = []
   }
   currentKb.value = kb
-  fetchDocuments(kb.id)
+  void fetchDocuments(kb.id)
+  startDocumentEventStream(kb.id)
 }
 
 const fetchKnowledgeBases = async (force = false, silent = true) => {
@@ -469,16 +572,38 @@ const uploadDocFile = async (file: File) => {
     message.warning('请先选择知识库')
     return
   }
+  const targetKbId = currentKb.value.id
   isUploading.value = true
   try {
-    await uploadKnowledgeDocument(currentKb.value.id, file)
-    message.success(`文档 "${file.name}" 解析与向量化入库成功`)
-    await fetchDocuments(currentKb.value.id)
-    await fetchKnowledgeBases(true, true)
-  } catch (err: any) {
-    message.error(err.message || '上传解析失败')
+    const res = await uploadKnowledgeDocument(targetKbId, file)
+    if (res.data && currentKb.value?.id === targetKbId) {
+      const idx = currentDocuments.value.findIndex((d) => d.id === res.data.id)
+      if (idx >= 0) {
+        currentDocuments.value[idx] = res.data
+      } else {
+        currentDocuments.value = [res.data, ...currentDocuments.value]
+      }
+    }
+    message.success(`文档 "${file.name}" 已上传，正在后台排队解析`)
+  } catch (err: unknown) {
+    message.error(err instanceof Error ? err.message : '上传失败')
   } finally {
     isUploading.value = false
+  }
+}
+
+const handleRetryDocument = async (doc: KnowledgeDocumentItem) => {
+  try {
+    const res = await retryKnowledgeDocument(doc.id)
+    if (res.data) {
+      const idx = currentDocuments.value.findIndex((d) => d.id === doc.id)
+      if (idx >= 0) {
+        currentDocuments.value[idx] = res.data
+      }
+    }
+    message.success(`已重新加入解析队列: ${doc.title}`)
+  } catch (err: unknown) {
+    message.error(err instanceof Error ? err.message : '重试失败')
   }
 }
 
@@ -505,6 +630,7 @@ const handleDeleteDocument = (doc: KnowledgeDocumentItem) => {
 }
 
 const handlePreviewChunks = (doc: KnowledgeDocumentItem) => {
+  if (doc.status !== 'completed') return
   drawerMode.value = 'document'
   drawerChunkId.value = null
   drawerHighlights.value = undefined
@@ -532,25 +658,45 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-const getStatusLabel = (status: string): string => {
-  switch (status) {
-    case 'completed':
-      return '已完成'
-    case 'processing':
-      return '解析中'
-    case 'failed':
-      return '失败'
+const getStatusText = (doc: KnowledgeDocumentItem): string => {
+  if (doc.status === 'completed') return '已完成'
+  if (doc.status === 'failed') return '失败'
+  const pct = Math.min(100, Math.max(0, doc.progress ?? 0))
+  switch (doc.stage) {
+    case 'parsing':
+      return `提取文本 · ${pct}%`
+    case 'chunking':
+      return `语义切片 · ${pct}%`
+    case 'embedding':
+      if (doc.totalChunks) {
+        return `向量化 ${doc.processedChunks ?? 0}/${doc.totalChunks} · ${pct}%`
+      }
+      return `向量化 · ${pct}%`
+    case 'saving':
+      return `写入索引 · ${pct}%`
+    case 'queued':
     default:
-      return '等待中'
+      return doc.status === 'processing' ? `解析中 · ${pct}%` : '排队中'
   }
 }
 
 onMounted(() => {
-  fetchKnowledgeBases()
+  void fetchKnowledgeBases()
 })
 
 onActivated(() => {
-  fetchKnowledgeBases()
+  void fetchKnowledgeBases()
+  if (currentKb.value && !documentEventHandle) {
+    startDocumentEventStream(currentKb.value.id)
+  }
+})
+
+onDeactivated(() => {
+  stopDocumentEventStream()
+})
+
+onBeforeUnmount(() => {
+  stopDocumentEventStream()
 })
 </script>
 
@@ -1013,7 +1159,7 @@ onActivated(() => {
 
   .table-header-row {
     display: grid;
-    grid-template-columns: 2fr 80px 90px 80px 90px 100px 140px;
+    grid-template-columns: 2fr 68px 80px 68px 80px 180px 145px;
     padding: 10px 16px;
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
@@ -1054,7 +1200,7 @@ onActivated(() => {
 
   .table-data-row {
     display: grid;
-    grid-template-columns: 2fr 80px 90px 80px 90px 100px 140px;
+    grid-template-columns: 2fr 68px 80px 68px 80px 180px 145px;
     padding: 12px 16px;
     border-bottom: 1px solid #f1f5f9;
     align-items: center;
@@ -1100,6 +1246,13 @@ onActivated(() => {
     color: #475569;
   }
 
+  .status-cell-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+
   .status-badge {
     display: inline-flex;
     align-items: center;
@@ -1110,12 +1263,39 @@ onActivated(() => {
       color: #059669;
       font-weight: 500;
     }
+    &.pending {
+      color: #64748b;
+    }
     &.processing {
       color: #2563eb;
+      font-weight: 500;
     }
     &.failed {
       color: #dc2626;
     }
+  }
+
+  .doc-progress-track {
+    width: 100%;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+
+    .doc-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #2563eb, #38bdf8);
+      border-radius: 999px;
+      transition: width 0.25s ease;
+    }
+  }
+
+  .doc-error-hint {
+    font-size: 11px;
+    color: #dc2626;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .col-actions {
@@ -1131,8 +1311,17 @@ onActivated(() => {
       cursor: pointer;
       padding: 0;
 
-      &:hover {
+      &:hover:not(:disabled) {
         text-decoration: underline;
+      }
+
+      &:disabled {
+        color: #94a3b8;
+        cursor: not-allowed;
+      }
+
+      &.retry {
+        color: #d97706;
       }
 
       &.danger {

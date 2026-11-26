@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/knowledge_base_repository.dart';
 import '../domain/knowledge_base_model.dart';
@@ -105,53 +106,160 @@ final knowledgeBasesProvider =
   () => KnowledgeBasesNotifier(),
 );
 
-/// 知识库文档列表与流式轮询通知器
+/// 知识库文档列表与 SSE 实时进度通知器
 class KbDocumentsNotifier extends FamilyAsyncNotifier<List<DocumentModel>, String> {
-  Timer? _pollingTimer;
+  StreamSubscription<DocumentProgressEvent>? _eventSub;
+  CancelToken? _sseCancelToken;
+  Timer? _reconnectTimer;
+  bool _disposed = false;
+  int _reconnectAttempts = 0;
 
   @override
   Future<List<DocumentModel>> build(String arg) async {
+    ref.onDispose(() {
+      _disposed = true;
+      _stopEventStream();
+    });
     final repo = ref.watch(knowledgeBaseRepositoryProvider);
     final docs = await repo.getDocuments(arg);
-    _checkPolling(docs);
+    _syncEventStream(docs);
     return docs;
   }
 
-  void _checkPolling(List<DocumentModel> docs) {
+  void _syncEventStream(List<DocumentModel> docs) {
     final hasProcessing = docs.any((d) => d.isProcessing);
-    if (hasProcessing && _pollingTimer == null) {
-      _startPolling();
-    } else if (!hasProcessing && _pollingTimer != null) {
-      _stopPolling();
+    if (hasProcessing && _eventSub == null && _reconnectTimer == null) {
+      _startEventStream();
+    } else if (!hasProcessing) {
+      _stopEventStream();
     }
   }
 
-  void _startPolling() {
-    _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        final repo = ref.read(knowledgeBaseRepositoryProvider);
-        final latestDocs = await repo.getDocuments(arg);
-        state = AsyncValue.data(latestDocs);
-        _checkPolling(latestDocs);
-        // 如果文档解析完毕，联动刷新知识库主列表以更新切片计数
-        if (!latestDocs.any((d) => d.isProcessing)) {
-          ref.read(knowledgeBasesProvider.notifier).refresh();
+  void _startEventStream() {
+    if (_disposed) return;
+    _stopEventStream();
+
+    final cancelToken = CancelToken();
+    _sseCancelToken = cancelToken;
+    final repo = ref.read(knowledgeBaseRepositoryProvider);
+
+    _eventSub = repo
+        .watchDocumentEvents(arg, cancelToken: cancelToken)
+        .listen(
+      (event) {
+        _reconnectAttempts = 0;
+        _applyProgressEvent(event);
+      },
+      onError: (Object err) {
+        if (_disposed || cancelToken.isCancelled) return;
+        _eventSub = null;
+        _sseCancelToken = null;
+        _scheduleReconnect();
+      },
+      onDone: () {
+        if (_disposed || cancelToken.isCancelled) return;
+        _eventSub = null;
+        _sseCancelToken = null;
+        final docs = state.valueOrNull ?? const [];
+        if (docs.any((d) => d.isProcessing)) {
+          _scheduleReconnect();
         }
-      } catch (_) {}
+      },
+    );
+  }
+
+  void _scheduleReconnect() {
+    if (_disposed || _reconnectTimer != null) return;
+    final currentDocs = state.valueOrNull ?? const [];
+    if (!currentDocs.any((d) => d.isProcessing)) return;
+
+    final delaySec = (_reconnectAttempts + 1) * 2;
+    final clampedSec = delaySec > 12 ? 12 : delaySec;
+    _reconnectAttempts += 1;
+
+    _reconnectTimer = Timer(Duration(seconds: clampedSec), () async {
+      _reconnectTimer = null;
+      if (_disposed) return;
+      try {
+        await refresh();
+      } catch (_) {
+        _scheduleReconnect();
+      }
     });
   }
 
-  void _stopPolling() {
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
+  void _applyProgressEvent(DocumentProgressEvent event) {
+    if (event.type == 'error') return;
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    if (event.type == 'snapshot') {
+      if (event.documents.isEmpty) return;
+      final snapMap = {for (final d in event.documents) d.documentId: d};
+      final updated = current.map((doc) {
+        final snap = snapMap[doc.id];
+        if (snap == null) return doc;
+        return doc.copyWith(
+          status: snap.status,
+          stage: snap.stage,
+          progress: snap.progress,
+          chunkCount: snap.chunkCount,
+          charCount: snap.charCount,
+          errorMessage: snap.errorMessage,
+          clearErrorMessage: snap.errorMessage == null,
+        );
+      }).toList();
+      state = AsyncValue.data(updated);
+      _syncEventStream(updated);
+      return;
+    }
+
+    final targetId = event.documentId;
+    if (targetId == null || targetId.isEmpty) return;
+
+    final exists = current.any((d) => d.id == targetId);
+    if (!exists) {
+      unawaited(refresh());
+      return;
+    }
+
+    final updated = current.map((doc) {
+      if (doc.id != targetId) return doc;
+      return doc.copyWith(
+        status: event.status ?? doc.status,
+        stage: event.stage ?? doc.stage,
+        progress: event.progress ?? doc.progress,
+        processedChunks: event.processedChunks,
+        totalChunks: event.totalChunks,
+        chunkCount: event.chunkCount ?? doc.chunkCount,
+        charCount: event.charCount ?? doc.charCount,
+        errorMessage: event.errorMessage,
+        clearErrorMessage: event.type != 'failed' && event.errorMessage == null,
+      );
+    }).toList();
+
+    state = AsyncValue.data(updated);
+    if (event.type == 'completed') {
+      ref.read(knowledgeBasesProvider.notifier).refresh();
+    }
+    _syncEventStream(updated);
+  }
+
+  void _stopEventStream() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _sseCancelToken?.cancel('disposed');
+    _sseCancelToken = null;
+    _eventSub?.cancel();
+    _eventSub = null;
   }
 
   Future<void> refresh() async {
     final repo = ref.read(knowledgeBaseRepositoryProvider);
     final docs = await repo.getDocuments(arg);
+    if (_disposed) return;
     state = AsyncValue.data(docs);
-    _checkPolling(docs);
+    _syncEventStream(docs);
   }
 
   Future<void> uploadDocument({
@@ -161,7 +269,7 @@ class KbDocumentsNotifier extends FamilyAsyncNotifier<List<DocumentModel>, Strin
     void Function(double progress)? onProgress,
   }) async {
     final repo = ref.read(knowledgeBaseRepositoryProvider);
-    await repo.uploadDocument(
+    final created = await repo.uploadDocument(
       arg,
       fileName: fileName,
       bytes: bytes,
@@ -173,15 +281,31 @@ class KbDocumentsNotifier extends FamilyAsyncNotifier<List<DocumentModel>, Strin
       },
     );
 
-    // 上传成功后立即触发列表刷新与轮询检测
-    await refresh();
+    final current = state.valueOrNull ?? [];
+    final next = [
+      created,
+      ...current.where((d) => d.id != created.id),
+    ];
+    state = AsyncValue.data(next);
+    _syncEventStream(next);
+  }
+
+  Future<void> retryDocument(String docId) async {
+    final repo = ref.read(knowledgeBaseRepositoryProvider);
+    final retried = await repo.retryDocument(docId);
+    final current = state.valueOrNull ?? [];
+    final next = current.map((d) => d.id == docId ? retried : d).toList();
+    state = AsyncValue.data(next);
+    _syncEventStream(next);
   }
 
   Future<void> deleteDocument(String docId) async {
     final repo = ref.read(knowledgeBaseRepositoryProvider);
     await repo.deleteDocument(docId);
     final current = state.valueOrNull ?? [];
-    state = AsyncValue.data(current.where((d) => d.id != docId).toList());
+    final next = current.where((d) => d.id != docId).toList();
+    state = AsyncValue.data(next);
+    _syncEventStream(next);
     ref.read(knowledgeBasesProvider.notifier).refresh();
   }
 }

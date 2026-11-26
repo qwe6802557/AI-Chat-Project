@@ -9,18 +9,19 @@ describe('HybridRagService', () => {
   let mockChunkRepo: any;
   let mockDocRepo: any;
   let mockEmbeddingService: any;
-
-  const createQbMock = (chunks: any[]) => ({
-    innerJoinAndSelect: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    andWhere: jest.fn().mockReturnThis(),
-    take: jest.fn().mockReturnThis(),
-    getMany: jest.fn().mockResolvedValue(chunks),
-  });
+  let mockEntityManager: any;
 
   beforeEach(() => {
+    mockEntityManager = {
+      query: jest.fn(),
+    };
     mockChunkRepo = {
-      createQueryBuilder: jest.fn(),
+      manager: {
+        transaction: jest.fn((cb: (em: any) => Promise<any>) =>
+          cb(mockEntityManager),
+        ),
+        query: jest.fn(),
+      },
     };
     mockDocRepo = {};
     mockEmbeddingService = {
@@ -39,47 +40,86 @@ describe('HybridRagService', () => {
     expect(res).toEqual([]);
   });
 
-  it('should perform hybrid ranking, apply isEnabled filter, and return highlights', async () => {
+  it('should push down dense pgvector HNSW iterative scan and sparse pg_trgm SQL', async () => {
     mockEmbeddingService.embedQuery.mockResolvedValue([1, 0, 0]);
 
-    const mockChunks = [
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([
+        {
+          id: 'chunk-1',
+          documentId: 'doc-1',
+          knowledgeBaseId: 'kb-1',
+          content: 'PostgreSQL 向量检索系统设计与索引原理',
+          chunkIndex: 0,
+          charCount: 22,
+          metadata: null,
+          documentTitle: 'PostgreSQL架构指南',
+          denseScore: 0.99,
+        },
+        {
+          id: 'chunk-2',
+          documentId: 'doc-2',
+          knowledgeBaseId: 'kb-1',
+          content: 'PostgreSQL 索引优化与配置',
+          chunkIndex: 0,
+          charCount: 15,
+          metadata: null,
+          documentTitle: '其他指南',
+          denseScore: 0.6,
+        },
+      ]);
+
+    mockChunkRepo.manager.query.mockResolvedValueOnce([
       {
         id: 'chunk-1',
         documentId: 'doc-1',
         knowledgeBaseId: 'kb-1',
         content: 'PostgreSQL 向量检索系统设计与索引原理',
-        embedding: [0.99, 0.05, 0],
         chunkIndex: 0,
         charCount: 22,
-        isEnabled: true,
-        document: { title: 'PostgreSQL架构指南' },
+        metadata: null,
+        documentTitle: 'PostgreSQL架构指南',
+        matchCount: 2,
+        trgmScore: 0.85,
       },
       {
         id: 'chunk-2',
         documentId: 'doc-2',
         knowledgeBaseId: 'kb-1',
         content: 'PostgreSQL 索引优化与配置',
-        embedding: [0.6, 0.8, 0],
         chunkIndex: 0,
         charCount: 15,
-        isEnabled: true,
-        document: { title: '其他指南' },
+        metadata: null,
+        documentTitle: '其他指南',
+        matchCount: 1,
+        trgmScore: 0.5,
       },
-    ];
-
-    const qbMock = createQbMock(mockChunks);
-    mockChunkRepo.createQueryBuilder.mockReturnValue(qbMock);
+    ]);
 
     const results = await service.search({
       userId: 'u1',
       query: 'PostgreSQL 向量检索',
+      knowledgeBaseIds: ['kb-1'],
       limit: 2,
     });
 
-    expect(qbMock.andWhere).toHaveBeenCalledWith(
-      'chunk.isEnabled = :isEnabled',
-      { isEnabled: true },
+    expect(mockEntityManager.query).toHaveBeenCalledWith(
+      "SET LOCAL hnsw.iterative_scan = 'relaxed_order'",
     );
+    expect(mockEntityManager.query).toHaveBeenCalledWith(
+      'SET LOCAL hnsw.ef_search = 64',
+    );
+    const denseSqlCall = mockEntityManager.query.mock.calls[2];
+    expect(denseSqlCall[0]).toContain('<=> $1::vector');
+    expect(denseSqlCall[1][0]).toBe('[1,0,0]');
+    expect(denseSqlCall[1][2]).toEqual(['kb-1']);
+
+    const sparseSqlCall = mockChunkRepo.manager.query.mock.calls[0];
+    expect(sparseSqlCall[0]).toContain('ILIKE ANY($2::text[])');
+    expect(sparseSqlCall[0]).toContain('word_similarity($3, c."content")');
+
     expect(results.length).toBe(2);
     expect(results[0].chunkId).toBe('chunk-1');
     expect(results[0].documentTitle).toBe('PostgreSQL架构指南');
@@ -89,24 +129,25 @@ describe('HybridRagService', () => {
     expect(results[0].matchedTerms).toContain('PostgreSQL');
   });
 
-  it('should return empty list when no chunks pass confidence threshold', async () => {
+  it('should filter out low-similarity dense hits and return empty list when nothing matches', async () => {
     mockEmbeddingService.embedQuery.mockResolvedValue([1, 0, 0]);
-
-    const mockChunks = [
-      {
-        id: 'chunk-irrelevant',
-        documentId: 'doc-irr',
-        knowledgeBaseId: 'kb-1',
-        content: '完全无关的文本内容',
-        embedding: [0, 1, 0],
-        chunkIndex: 0,
-        charCount: 10,
-        isEnabled: true,
-        document: { title: '无关文档' },
-      },
-    ];
-
-    mockChunkRepo.createQueryBuilder.mockReturnValue(createQbMock(mockChunks));
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([
+        {
+          id: 'chunk-irrelevant',
+          documentId: 'doc-irr',
+          knowledgeBaseId: 'kb-1',
+          content: '完全无关的文本内容',
+          chunkIndex: 0,
+          charCount: 10,
+          metadata: null,
+          documentTitle: '无关文档',
+          denseScore: 0.12,
+        },
+      ]);
+    mockChunkRepo.manager.query.mockResolvedValueOnce([]);
 
     const results = await service.search({
       userId: 'u1',
@@ -114,24 +155,24 @@ describe('HybridRagService', () => {
       limit: 2,
     });
 
-    expect(results.length).toBe(0);
+    expect(results).toEqual([]);
   });
 
-  it('should support sparse and dense retrieval modes', async () => {
-    const mockChunks = [
+  it('should support sparse and dense retrieval modes independently', async () => {
+    mockChunkRepo.manager.query.mockResolvedValueOnce([
       {
         id: 'chunk-sparse',
         documentId: 'doc-1',
         knowledgeBaseId: 'kb-1',
         content: 'Redis 缓存穿透与布隆过滤器方案',
-        embedding: [0.1, 0.9, 0],
         chunkIndex: 0,
         charCount: 18,
-        isEnabled: true,
-        document: { title: '缓存指南' },
+        metadata: null,
+        documentTitle: '缓存指南',
+        matchCount: 1,
+        trgmScore: 0.8,
       },
-    ];
-    mockChunkRepo.createQueryBuilder.mockReturnValue(createQbMock(mockChunks));
+    ]);
 
     const sparseRes = await service.search({
       userId: 'u1',
@@ -141,12 +182,30 @@ describe('HybridRagService', () => {
     });
 
     expect(mockEmbeddingService.embedQuery).not.toHaveBeenCalled();
+    expect(mockEntityManager.query).not.toHaveBeenCalled();
     expect(sparseRes).toHaveLength(1);
     expect(sparseRes[0].hitSource).toBe('sparse');
     expect(sparseRes[0].sparseRank).toBe(1);
     expect(sparseRes[0].denseRank).toBeUndefined();
 
     mockEmbeddingService.embedQuery.mockResolvedValue([0, 1, 0]);
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([
+        {
+          id: 'chunk-dense',
+          documentId: 'doc-1',
+          knowledgeBaseId: 'kb-1',
+          content: 'Redis 缓存穿透与布隆过滤器方案',
+          chunkIndex: 0,
+          charCount: 18,
+          metadata: null,
+          documentTitle: '缓存指南',
+          denseScore: 0.9,
+        },
+      ]);
+
     const denseRes = await service.search({
       userId: 'u1',
       query: '布隆过滤器',
@@ -155,38 +214,43 @@ describe('HybridRagService', () => {
     });
 
     expect(mockEmbeddingService.embedQuery).toHaveBeenCalledTimes(1);
+    expect(mockChunkRepo.manager.query).toHaveBeenCalledTimes(1);
     expect(denseRes).toHaveLength(1);
     expect(denseRes[0].hitSource).toBe('dense');
     expect(denseRes[0].denseRank).toBe(1);
     expect(denseRes[0].sparseRank).toBeUndefined();
   });
 
-  it('should reorder results with RerankService and fallback gracefully when rerank returns null', async () => {
+  it('should reorder results with RerankService and fallback to RRF when rerank returns null', async () => {
     mockEmbeddingService.embedQuery.mockResolvedValue([1, 0, 0]);
 
-    const mockChunks = [
+    const denseRows = [
       {
         id: 'chunk-a',
         documentId: 'doc-1',
         knowledgeBaseId: 'kb-1',
         content: 'PostgreSQL 基础语法介绍',
-        embedding: [0.95, 0.05, 0],
         chunkIndex: 0,
         charCount: 14,
-        isEnabled: true,
-        document: { title: 'Doc A' },
+        metadata: null,
+        documentTitle: 'Doc A',
+        denseScore: 0.95,
       },
       {
         id: 'chunk-b',
         documentId: 'doc-2',
         knowledgeBaseId: 'kb-1',
         content: 'PostgreSQL 向量索引与 BGE-Reranker 精排实践',
-        embedding: [0.75, 0.1, 0],
         chunkIndex: 1,
         charCount: 28,
-        isEnabled: true,
-        document: { title: 'Doc B' },
+        metadata: null,
+        documentTitle: 'Doc B',
+        denseScore: 0.75,
       },
+    ];
+    const sparseRows = [
+      { ...denseRows[0], matchCount: 1, trgmScore: 0.6 },
+      { ...denseRows[1], matchCount: 2, trgmScore: 0.8 },
     ];
 
     const mockRerankService = {
@@ -203,7 +267,12 @@ describe('HybridRagService', () => {
       mockRerankService as any,
     );
 
-    mockChunkRepo.createQueryBuilder.mockReturnValue(createQbMock(mockChunks));
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(denseRows);
+    mockChunkRepo.manager.query.mockResolvedValueOnce(sparseRows);
+
     const reranked = await serviceWithRerank.search({
       userId: 'u1',
       query: 'PostgreSQL 精排',
@@ -217,9 +286,13 @@ describe('HybridRagService', () => {
     expect(reranked[0].rerankScore).toBe(0.94);
     expect(reranked[0].score).toBe(0.94);
 
-    // 精排不可用时平滑回退到 RRF
     mockRerankService.rerank.mockResolvedValue(null);
-    mockChunkRepo.createQueryBuilder.mockReturnValue(createQbMock(mockChunks));
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(denseRows);
+    mockChunkRepo.manager.query.mockResolvedValueOnce(sparseRows);
+
     const fallback = await serviceWithRerank.search({
       userId: 'u1',
       query: 'PostgreSQL 精排',

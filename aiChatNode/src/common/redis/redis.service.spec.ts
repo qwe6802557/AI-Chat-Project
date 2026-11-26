@@ -114,4 +114,33 @@ describe('RedisService', () => {
     });
     expect(typeof health.responseTimeMs).toBe('number');
   });
+
+  it('publishes pub/sub messages and creates connected subscriber client', async () => {
+    const mockSub = {
+      on: jest.fn(),
+      connect: jest.fn().mockResolvedValue(undefined),
+    };
+    const extendedClient = {
+      ...mockRedisClient,
+      publish: jest.fn().mockResolvedValue(1),
+      duplicate: jest.fn(() => mockSub),
+    };
+    createClientMock.mockReturnValueOnce(extendedClient as never);
+
+    const configService = {
+      get: jest.fn(() => undefined),
+    };
+    const service = new RedisService(configService as never);
+
+    const receivers = await service.publish('kb:progress:u1:kb1', '{"ok":true}');
+    expect(receivers).toBe(1);
+    expect(extendedClient.publish).toHaveBeenCalledWith(
+      'kb:progress:u1:kb1',
+      '{"ok":true}',
+    );
+
+    const sub = await service.createSubscriberClient();
+    expect(sub).toBe(mockSub);
+    expect(mockSub.connect).toHaveBeenCalledTimes(1);
+  });
 });

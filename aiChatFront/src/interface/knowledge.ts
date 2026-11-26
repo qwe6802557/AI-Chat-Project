@@ -26,6 +26,15 @@ export interface KnowledgeBaseItem {
   updatedAt: string
 }
 
+export type DocumentParseStage =
+  | 'queued'
+  | 'parsing'
+  | 'chunking'
+  | 'embedding'
+  | 'saving'
+  | 'completed'
+  | 'failed'
+
 export interface KnowledgeDocumentItem {
   id: string
   knowledgeBaseId: string
@@ -37,10 +46,52 @@ export interface KnowledgeDocumentItem {
   charCount: number
   chunkCount: number
   status: 'pending' | 'processing' | 'completed' | 'failed'
+  stage?: DocumentParseStage
+  progress?: number
+  processedChunks?: number
+  totalChunks?: number
   errorMessage?: string
   createdAt: string
   updatedAt: string
 }
+
+export interface DocumentProgressSnapshotItem {
+  documentId: string
+  knowledgeBaseId: string
+  status: KnowledgeDocumentItem['status']
+  stage: DocumentParseStage
+  progress: number
+  chunkCount?: number
+  charCount?: number
+  errorMessage?: string | null
+  updatedAt: string
+}
+
+export type DocumentProgressStreamEvent =
+  | {
+      type: 'snapshot'
+      knowledgeBaseId: string
+      documents: DocumentProgressSnapshotItem[]
+    }
+  | {
+      type: 'progress' | 'completed' | 'failed'
+      documentId: string
+      knowledgeBaseId: string
+      userId: string
+      status: KnowledgeDocumentItem['status']
+      stage: DocumentParseStage
+      progress: number
+      processedChunks?: number
+      totalChunks?: number
+      chunkCount?: number
+      charCount?: number
+      errorMessage?: string | null
+      updatedAt: string
+    }
+  | {
+      type: 'error'
+      message: string
+    }
 
 export interface KnowledgeChunkItem {
   id: string
