@@ -42,7 +42,7 @@ import { MemoryModule } from '../memory/memory.module';
     WebSearchModule,
     ToolsModule,
     KnowledgeBaseModule,
-    MemoryModule,
+    forwardRef(() => MemoryModule),
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [

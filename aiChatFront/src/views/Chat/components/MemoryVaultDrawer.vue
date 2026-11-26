@@ -134,8 +134,71 @@
 
       <!-- Tab 2: 每日情境记忆 (Layer 2) -->
       <div v-else class="tab-content daily-tab">
-        <!-- 分类过滤与搜索 -->
+        <!-- 分类过滤、语义检索与手动录入 -->
         <div class="daily-filter-bar">
+          <div class="daily-toolbar">
+            <a-input
+              v-model:value="searchKeyword"
+              allow-clear
+              size="small"
+              placeholder="语义搜索历史记忆（支持自然语言与关键词）"
+              class="memory-search-input"
+              @press-enter="handleSearchImmediate"
+            >
+              <template #prefix>
+                <SearchOutlined class="search-prefix-icon" />
+              </template>
+            </a-input>
+            <button
+              type="button"
+              :class="['add-memory-toggle-btn', { active: showCreateForm }]"
+              @click="showCreateForm = !showCreateForm"
+            >
+              <PlusOutlined />
+              <span>记一条</span>
+            </button>
+          </div>
+
+          <div v-if="showCreateForm" class="create-memory-card">
+            <div class="create-category-row">
+              <button
+                v-for="cat in CREATE_CATEGORY_OPTIONS"
+                :key="cat.value"
+                type="button"
+                :class="['filter-chip', { active: newMemoryCategory === cat.value }]"
+                @click="newMemoryCategory = cat.value"
+              >
+                {{ cat.label }}
+              </button>
+            </div>
+            <a-textarea
+              v-model:value="newMemoryContent"
+              :rows="2"
+              :maxlength="1000"
+              placeholder="记录需要长期记住的偏好、事实、技术决策或待办..."
+              class="create-memory-textarea"
+            />
+            <div class="create-memory-actions">
+              <button
+                type="button"
+                class="cancel-create-btn"
+                :disabled="isCreatingMemory"
+                @click="showCreateForm = false"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                class="submit-create-btn"
+                :disabled="isCreatingMemory || newMemoryContent.trim().length < 2"
+                @click="handleCreateMemory"
+              >
+                <LoadingOutlined v-if="isCreatingMemory" spin />
+                <span>{{ isCreatingMemory ? '向量化入库...' : '保存记忆' }}</span>
+              </button>
+            </div>
+          </div>
+
           <div class="category-chips">
             <button
               v-for="cat in CATEGORY_OPTIONS"
@@ -155,8 +218,14 @@
         </div>
 
         <div v-else-if="dailyList.length === 0" class="empty-state">
-          <p class="empty-title">暂无匹配的情境记忆</p>
-          <span class="empty-desc">在会话中深入交流 3 分钟后，系统将自动提炼关键决策与偏好。</span>
+          <p class="empty-title">{{ searchKeyword.trim() ? '未检索到匹配记忆' : '暂无匹配的情境记忆' }}</p>
+          <span class="empty-desc">
+            {{
+              searchKeyword.trim()
+                ? '可以换个语义描述，或点击「记一条」直接补充录入。'
+                : '在会话中深入交流 3 分钟后，系统将自动提炼关键决策与偏好。'
+            }}
+          </span>
         </div>
 
         <div v-else class="daily-list-body">
@@ -170,6 +239,12 @@
                 <span class="category-tag font-mono">{{ formatCategoryLabel(item.category) }}</span>
                 <span class="date-tag font-mono">{{ item.dateKey }}</span>
                 <span v-if="item.isArchived" class="archived-tag font-mono">已蒸馏</span>
+                <span
+                  v-if="searchKeyword.trim() && typeof item.score === 'number'"
+                  class="relevance-tag font-mono"
+                >
+                  相关度 {{ Math.round(item.score * 100) }}%
+                </span>
               </div>
               <a-popconfirm
                 title="确定彻底遗忘此条记忆？"
@@ -198,9 +273,9 @@
 <script setup lang="ts">
 /**
  * 记忆工坊侧边抽屉组件
- * 支持长期核心画像查看与纠偏、日常情境记忆时间线查看与一键遗忘、手动增量蒸馏
+ * 支持长期核心画像查看与纠偏、日常情境记忆语义检索/手动录入/一键遗忘、手动增量蒸馏
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   CloseOutlined,
@@ -208,15 +283,18 @@ import {
   LoadingOutlined,
   CheckOutlined,
   DeleteOutlined,
+  SearchOutlined,
+  PlusOutlined,
 } from '@ant-design/icons-vue'
 import {
   getCoreProfile,
   updateCoreProfile,
   getDailyMemories,
+  createDailyMemory,
   deleteDailyMemory,
   triggerDistillMemories,
 } from '@/api/memory'
-import type { AgentCoreProfile, AgentDailyMemory } from '@/interface/memory'
+import type { AgentCoreProfile, AgentDailyMemory, MemoryCategory } from '@/interface/memory'
 
 defineOptions({
   name: 'MemoryVaultDrawer',
@@ -249,15 +327,28 @@ const dailyList = ref<AgentDailyMemory[]>([])
 const dailyTotal = ref(0)
 const dailyLoading = ref(false)
 const selectedCategory = ref<string>('')
+const searchKeyword = ref('')
+const showCreateForm = ref(false)
+const newMemoryCategory = ref<MemoryCategory>('fact')
+const newMemoryContent = ref('')
+const isCreatingMemory = ref(false)
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+const CREATE_CATEGORY_OPTIONS: Array<{ label: string; value: MemoryCategory }> = [
+  { label: '事实 (fact)', value: 'fact' },
+  { label: '偏好 (preference)', value: 'preference' },
+  { label: '决策 (decision)', value: 'decision' },
+  { label: '待办 (todo)', value: 'todo' },
+]
 
 const CATEGORY_OPTIONS = [
   { label: '全部', value: '' },
-  { label: '决策 (decision)', value: 'decision' },
-  { label: '偏好 (preference)', value: 'preference' },
-  { label: '工作进展 (progress)', value: 'work_progress' },
-  { label: '事实 (fact)', value: 'fact' },
-  { label: '洞察 (insight)', value: 'insight' },
+  ...CREATE_CATEGORY_OPTIONS,
 ]
+
+const getErrorMessage = (err: unknown): string => {
+  return err instanceof Error ? err.message : '网络异常'
+}
 
 const hasPreferences = computed(() => {
   return coreProfile.value?.preferences && Object.keys(coreProfile.value.preferences).length > 0
@@ -275,8 +366,8 @@ const fetchProfile = async () => {
       coreProfile.value = res.data
       editingSummary.value = res.data.rawSummary || ''
     }
-  } catch (err: any) {
-    message.error('获取核心画像失败: ' + (err.message || '网络异常'))
+  } catch (err: unknown) {
+    message.error('获取核心画像失败: ' + getErrorMessage(err))
   } finally {
     profileLoading.value = false
   }
@@ -285,16 +376,18 @@ const fetchProfile = async () => {
 const fetchDaily = async () => {
   dailyLoading.value = true
   try {
+    const trimmedKeyword = searchKeyword.value.trim()
     const res = await getDailyMemories({
       category: selectedCategory.value || undefined,
+      keyword: trimmedKeyword || undefined,
       limit: 50,
     })
     if (res.data) {
       dailyList.value = res.data.items || []
       dailyTotal.value = res.data.total || 0
     }
-  } catch (err: any) {
-    message.error('获取情境记忆列表失败: ' + (err.message || '网络异常'))
+  } catch (err: unknown) {
+    message.error('获取情境记忆列表失败: ' + getErrorMessage(err))
   } finally {
     dailyLoading.value = false
   }
@@ -303,6 +396,37 @@ const fetchDaily = async () => {
 const handleCategoryChange = (val: string) => {
   selectedCategory.value = val
   fetchDaily()
+}
+
+const handleSearchImmediate = () => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+  fetchDaily()
+}
+
+const handleCreateMemory = async () => {
+  const content = newMemoryContent.value.trim()
+  if (content.length < 2) return
+
+  isCreatingMemory.value = true
+  try {
+    const res = await createDailyMemory({
+      category: newMemoryCategory.value,
+      content,
+    })
+    const actionText =
+      res.data?.action === 'merged' ? '已与高度相似记忆合并更新' : '已保存新记忆'
+    message.success(actionText)
+    newMemoryContent.value = ''
+    showCreateForm.value = false
+    fetchDaily()
+  } catch (err: unknown) {
+    message.error('保存记忆失败: ' + getErrorMessage(err))
+  } finally {
+    isCreatingMemory.value = false
+  }
 }
 
 const handleSaveProfile = async () => {
@@ -317,25 +441,24 @@ const handleSaveProfile = async () => {
       editingSummary.value = res.data.rawSummary || ''
       message.success('核心画像已纠偏保存')
     }
-  } catch (err: any) {
-    message.error('保存核心画像失败: ' + (err.message || '网络异常'))
+  } catch (err: unknown) {
+    message.error('保存核心画像失败: ' + getErrorMessage(err))
   } finally {
     isSavingProfile.value = false
   }
 }
 
 const handleDeleteMemory = async (id: string) => {
-  // 乐观更新 UI
   const prevList = [...dailyList.value]
   dailyList.value = dailyList.value.filter((item) => item.id !== id)
   dailyTotal.value = Math.max(0, dailyTotal.value - 1)
   try {
     await deleteDailyMemory(id)
     message.success('记忆条目已彻底遗忘')
-  } catch (err: any) {
+  } catch (err: unknown) {
     dailyList.value = prevList
     dailyTotal.value = prevList.length
-    message.error('遗忘记忆失败: ' + (err.message || '网络异常'))
+    message.error('遗忘记忆失败: ' + getErrorMessage(err))
   }
 }
 
@@ -347,11 +470,10 @@ const handleDistill = async () => {
       coreProfile.value = res.data
       editingSummary.value = res.data.rawSummary || ''
       message.success('增量蒸馏成功，核心画像已更新')
-      // 重新拉取以同步已归档状态
       fetchDaily()
     }
-  } catch (err: any) {
-    message.error('记忆蒸馏失败: ' + (err.message || '网络异常'))
+  } catch (err: unknown) {
+    message.error('记忆蒸馏失败: ' + getErrorMessage(err))
   } finally {
     isDistilling.value = false
   }
@@ -363,12 +485,10 @@ const formatCategoryLabel = (cat: string) => {
       return 'DECISION'
     case 'preference':
       return 'PREFERENCE'
-    case 'work_progress':
-      return 'PROGRESS'
     case 'fact':
       return 'FACT'
-    case 'insight':
-      return 'INSIGHT'
+    case 'todo':
+      return 'TODO'
     default:
       return cat.toUpperCase()
   }
@@ -384,11 +504,22 @@ const formatTimestamp = (ts?: string) => {
   }
 }
 
-const formatValue = (val: any): string => {
+const formatValue = (val: unknown): string => {
   if (val === null || val === undefined) return '-'
   if (typeof val === 'object') return JSON.stringify(val)
   return String(val)
 }
+
+watch(searchKeyword, () => {
+  if (!visible.value) return
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  searchDebounceTimer = setTimeout(() => {
+    searchDebounceTimer = null
+    fetchDaily()
+  }, 300)
+})
 
 watch(
   visible,
@@ -400,6 +531,13 @@ watch(
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -713,32 +851,140 @@ watch(
     gap: 12px;
 
     .daily-filter-bar {
-      .category-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
 
-        .filter-chip {
-          padding: 3px 8px;
-          background: #f1f5f9;
-          border: 1px solid #e2e8f0;
-          border-radius: 4px;
+      .daily-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .memory-search-input {
+          flex: 1;
+          border-radius: 6px;
+          font-size: 12px;
+
+          .search-prefix-icon {
+            color: #94a3b8;
+            font-size: 12px;
+          }
+        }
+
+        .add-memory-toggle-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          height: 26px;
+          padding: 0 9px;
+          background: #f8fafc;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
           font-size: 11px;
-          color: #475467;
+          font-weight: 500;
+          color: #334155;
           cursor: pointer;
+          white-space: nowrap;
+          flex-shrink: 0;
           transition: all 0.15s ease;
 
-          &:hover {
-            border-color: #cbd5e1;
-            color: #0f172a;
-          }
-
+          &:hover,
           &.active {
             background: #0f172a;
             border-color: #0f172a;
             color: #ffffff;
-            font-weight: 500;
           }
+        }
+      }
+
+      .create-memory-card {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .create-category-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .create-memory-textarea {
+          font-size: 12px;
+          border-radius: 4px;
+        }
+
+        .create-memory-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 6px;
+
+          .cancel-create-btn,
+          .submit-create-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            height: 26px;
+            padding: 0 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+          }
+
+          .cancel-create-btn {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            color: #475467;
+
+            &:hover:not(:disabled) {
+              background: #f1f5f9;
+            }
+          }
+
+          .submit-create-btn {
+            background: #0f172a;
+            border: 1px solid #0f172a;
+            color: #ffffff;
+            font-weight: 500;
+
+            &:disabled {
+              opacity: 0.55;
+              cursor: not-allowed;
+            }
+          }
+        }
+      }
+
+      .category-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .filter-chip {
+        padding: 3px 8px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #475467;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &:hover {
+          border-color: #cbd5e1;
+          color: #0f172a;
+        }
+
+        &.active {
+          background: #0f172a;
+          border-color: #0f172a;
+          color: #ffffff;
+          font-weight: 500;
         }
       }
     }
@@ -809,6 +1055,15 @@ watch(
               background: #d1fae5;
               padding: 0 4px;
               border-radius: 2px;
+            }
+
+            .relevance-tag {
+              font-size: 10px;
+              color: #0284c7;
+              background: #e0f2fe;
+              padding: 1px 5px;
+              border-radius: 3px;
+              font-weight: 600;
             }
           }
 

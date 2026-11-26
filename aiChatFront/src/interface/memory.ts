@@ -2,14 +2,16 @@
  * 智能体三层记忆系统相关接口
  */
 
+export type MemoryCategory = 'fact' | 'preference' | 'decision' | 'todo'
+
 /**
  * 长期核心画像 (Layer 3)
  */
 export interface AgentCoreProfile {
   id: string
   userId: string
-  preferences: Record<string, any>
-  facts: Record<string, any>
+  preferences: Record<string, unknown>
+  facts: Record<string, unknown>
   rawSummary: string
   version: number
   createdAt: string
@@ -24,9 +26,10 @@ export interface AgentDailyMemory {
   userId: string
   sessionId?: string
   dateKey: string
-  category: 'decision' | 'preference' | 'work_progress' | 'fact' | 'insight' | string
+  category: MemoryCategory | string
   content: string
   isArchived: boolean
+  score?: number
   createdAt: string
   updatedAt: string
 }
@@ -55,9 +58,26 @@ export interface MemoryRecallPayload {
  * 更新核心画像 DTO
  */
 export interface UpdateCoreProfileDto {
-  preferences?: Record<string, any>
-  facts?: Record<string, any>
+  preferences?: Record<string, unknown>
+  facts?: Record<string, unknown>
   rawSummary?: string
+}
+
+/**
+ * 手动录入日常记忆 DTO
+ */
+export interface CreateDailyMemoryDto {
+  category: MemoryCategory
+  content: string
+}
+
+/**
+ * 手动或自动写入记忆结果（支持语义去重合并提示）
+ */
+export interface UpsertDailyMemoryResult {
+  item: AgentDailyMemory
+  action: 'created' | 'merged'
+  similarity?: number
 }
 
 /**

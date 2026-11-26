@@ -23,6 +23,7 @@ class ChatBottomInputBar extends StatelessWidget {
   final ValueChanged<String>? onToggleTool;
   final List<String> selectedKnowledgeBaseIds;
   final VoidCallback? onOpenKnowledgeBasePicker;
+  final VoidCallback? onOpenMemoryVault;
 
   const ChatBottomInputBar({
     super.key,
@@ -42,6 +43,7 @@ class ChatBottomInputBar extends StatelessWidget {
     this.onToggleTool,
     this.selectedKnowledgeBaseIds = const [],
     this.onOpenKnowledgeBasePicker,
+    this.onOpenMemoryVault,
   });
 
   Widget _buildWebSearchPill() {
@@ -157,6 +159,43 @@ class ChatBottomInputBar extends StatelessWidget {
     );
   }
 
+  Widget _buildMemoryVaultPill() {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+        onTap: isGenerating ? null : onOpenMemoryVault,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.auto_stories_outlined,
+                size: 13.0,
+                color: Color(0xFF64748B),
+              ),
+              SizedBox(width: 3.0),
+              Text(
+                '记忆工坊',
+                style: TextStyle(
+                  fontSize: 11.0,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF475467),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildToolCapsules() {
     final activeCount = enabledTools.length;
     return Row(
@@ -165,6 +204,10 @@ class ChatBottomInputBar extends StatelessWidget {
         _buildWebSearchPill(),
         const SizedBox(width: 6.0),
         _buildKnowledgeBasePill(),
+        if (onOpenMemoryVault != null) ...[
+          const SizedBox(width: 6.0),
+          _buildMemoryVaultPill(),
+        ],
         const SizedBox(width: 6.0),
         Material(
           color: Colors.transparent,

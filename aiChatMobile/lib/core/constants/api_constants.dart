@@ -45,6 +45,11 @@ class ApiConstants {
   static const String videoDeletePrefix = '/videos';
   static const int videoGenerationCost = 200;
 
+  // 三层记忆引擎链路
+  static const String memoryProfile = '/memory/profile';
+  static const String memoryDaily = '/memory/daily';
+  static const String memoryDistill = '/memory/distill';
+
   // 业务默认值与阈值
   static const String appVersion = '1.2.1';
   static const String defaultChatModel = 'gemini-3.8-flash-medium';

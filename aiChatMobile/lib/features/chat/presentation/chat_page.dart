@@ -265,6 +265,7 @@ class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClie
               selectedKnowledgeBaseIds: chatState.selectedKnowledgeBaseIds,
               onOpenPluginCenter: _openPluginCenter,
               onOpenKnowledgeBasePicker: _openKnowledgeBasePicker,
+              onOpenMemoryVault: () => context.push('/memory-vault'),
               onToggleTool: (toolId) => ref.read(chatProvider.notifier).toggleTool(toolId),
               onToggleWebSearch: () => ref.read(chatProvider.notifier).toggleWebSearch(),
               onPickImages: () => ref.read(chatProvider.notifier).pickAndUploadImages(),

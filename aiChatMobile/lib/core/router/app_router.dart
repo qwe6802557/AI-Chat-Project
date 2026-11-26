@@ -11,6 +11,7 @@ import '../../features/explore/presentation/explore_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../features/knowledge_base/presentation/knowledge_base_list_page.dart';
 import '../../features/knowledge_base/presentation/knowledge_base_detail_page.dart';
+import '../../features/memory/presentation/memory_vault_page.dart';
 import '../../features/chat/providers/chat_provider.dart';
 import '../../shared/widgets/animated_branch_fade.dart';
 import '../../shared/widgets/floating_glass_nav_bar.dart';
@@ -79,6 +80,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id'] ?? '';
           return KnowledgeBaseDetailPage(knowledgeBaseId: id);
         },
+      ),
+      GoRoute(
+        path: '/memory-vault',
+        builder: (context, state) => const MemoryVaultPage(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
