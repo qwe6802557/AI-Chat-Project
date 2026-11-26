@@ -306,12 +306,12 @@ onBeforeUnmount(() => {
 }
 
 .reasoning-body {
-  margin: 0 12px 12px 17px;
-  padding: 2px 0 2px 12px;
-  border-left: 2px solid #e2e8f0;
+  margin: 0 12px 12px;
+  padding: 8px 2px 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
 
   &.is-streaming-scroll {
-    border-left-color: rgba(37, 99, 235, 0.32);
+    border-top-color: rgba(37, 99, 235, 0.12);
     max-height: 240px;
     overflow-y: auto;
     overscroll-behavior: contain;

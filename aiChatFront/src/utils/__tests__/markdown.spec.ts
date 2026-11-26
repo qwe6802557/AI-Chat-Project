@@ -47,4 +47,24 @@ describe('markdown.ts 引用角标与渲染解析', () => {
     expect(canRenderSafely('未闭合代码块 ```ts\nconst a = 1')).toBe(false)
     expect(canRenderSafely('已闭合代码块 ```ts\nconst a = 1\n```')).toBe(true)
   })
+
+  it('禁止单波浪号语气词与数值区间误触发删除线', () => {
+    const toneMd = '比如“这个说法不太准确哦~”，然后继续说明。\n比如：“这个说法不太准确呀~”'
+    const toneHtml = renderMarkdown(toneMd)
+    expect(toneHtml).not.toContain('<del>')
+    expect(toneHtml).toContain('哦~')
+    expect(toneHtml).toContain('呀~')
+
+    const rangeMd = '建议区间 10~20 分钟，或者 30~40 分钟'
+    const rangeHtml = renderMarkdown(rangeMd)
+    expect(rangeHtml).not.toContain('<del>')
+    expect(rangeHtml).toContain('10~20')
+  })
+
+  it('标准双波浪号 ~~...~~ 仍正常渲染为删除线', () => {
+    const md = '保留正常 ~~旧方案~~ 与 ~~A~~ 删除线'
+    const html = renderMarkdown(md)
+    expect(html).toContain('<del>旧方案</del>')
+    expect(html).toContain('<del>A</del>')
+  })
 })
