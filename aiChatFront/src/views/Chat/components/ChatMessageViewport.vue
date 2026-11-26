@@ -138,80 +138,85 @@
               </button>
             </div>
             <div
-              v-if="message.role === 'assistant' && !message.streaming && (message.model || message.usage || message.durationMs)"
-              class="assistant-meta"
+              v-if="message.role === 'assistant' && !message.streaming && (message.content || message.model || message.usage || message.durationMs)"
+              class="assistant-footer-bar"
             >
-              <span v-if="message.failover" class="meta-chip failover-chip">
-                <ThunderboltOutlined class="failover-chip-icon" /> 高可用备用通道
-              </span>
-              <span v-if="message.model" class="meta-chip">{{ message.model }}</span>
-              <span v-if="message.usage" class="meta-chip">
-                输入 {{ message.usage.promptTokens }} tok
-              </span>
-              <span v-if="message.usage" class="meta-chip">
-                输出 {{ message.usage.completionTokens }} tok
-              </span>
-              <span v-if="message.usage" class="meta-chip">
-                总计 {{ message.usage.totalTokens }} tok
-              </span>
-              <span v-else-if="message.model" class="meta-chip">
-                Token 待统计
-              </span>
-              <span v-if="formatDuration(message.durationMs)" class="meta-chip">
-                {{ formatDuration(message.durationMs) }}
-              </span>
-            </div>
-
-            <!-- AI 消息操作工具栏：语音朗读、复制、重新生成 -->
-            <div
-              v-if="message.role === 'assistant' && !message.streaming && message.content"
-              class="assistant-actions-bar"
-            >
-              <!-- 语音朗读按钮 -->
-              <button
-                type="button"
-                class="action-btn read-aloud-btn"
-                :class="{
-                  'is-playing': playingMessageId === message.id,
-                  'is-loading': audioLoadingMessageId === message.id,
-                }"
-                :disabled="audioLoadingMessageId === message.id"
-                :title="getReadAloudTitle(message.id)"
-                @click="handleToggleReadAloud(message)"
+              <!-- AI 消息操作工具栏：语音朗读、复制、重新生成 -->
+              <div
+                v-if="message.content"
+                class="assistant-actions-bar"
               >
-                <LoadingOutlined v-if="audioLoadingMessageId === message.id" class="action-icon" spin />
-                <span v-else-if="playingMessageId === message.id" class="sound-wave-bars">
-                  <span class="bar bar-1"></span>
-                  <span class="bar bar-2"></span>
-                  <span class="bar bar-3"></span>
+                <!-- 语音朗读按钮 -->
+                <button
+                  type="button"
+                  class="action-btn read-aloud-btn"
+                  :class="{
+                    'is-playing': playingMessageId === message.id,
+                    'is-loading': audioLoadingMessageId === message.id,
+                  }"
+                  :disabled="audioLoadingMessageId === message.id"
+                  :title="getReadAloudTitle(message.id)"
+                  @click="handleToggleReadAloud(message)"
+                >
+                  <LoadingOutlined v-if="audioLoadingMessageId === message.id" class="action-icon" spin />
+                  <span v-else-if="playingMessageId === message.id" class="sound-wave-bars">
+                    <span class="bar bar-1"></span>
+                    <span class="bar bar-2"></span>
+                    <span class="bar bar-3"></span>
+                  </span>
+                  <SoundOutlined v-else class="action-icon" />
+                  <span class="action-text">{{ getReadAloudLabel(message.id) }}</span>
+                </button>
+
+                <!-- 复制消息内容按钮 -->
+                <button
+                  type="button"
+                  class="action-btn copy-btn"
+                  :title="copiedMessageId === message.id ? '已复制' : '复制内容'"
+                  @click="handleCopyMessage(message)"
+                >
+                  <CheckOutlined v-if="copiedMessageId === message.id" class="action-icon check-icon" />
+                  <CopyOutlined v-else class="action-icon" />
+                  <span class="action-text">{{ copiedMessageId === message.id ? '已复制' : '复制' }}</span>
+                </button>
+
+                <!-- 重新生成按钮 -->
+                <button
+                  type="button"
+                  class="action-btn retry-btn"
+                  title="重新生成此回答"
+                  :disabled="loading"
+                  @click="emit('retry-message', message.id)"
+                >
+                  <ReloadOutlined class="action-icon" />
+                  <span class="action-text">重新生成</span>
+                </button>
+              </div>
+
+              <span
+                v-if="message.content && (message.model || message.usage || message.durationMs)"
+                class="footer-sep"
+                aria-hidden="true"
+              />
+
+              <div
+                v-if="message.model || message.usage || message.durationMs"
+                class="assistant-meta"
+              >
+                <span v-if="message.failover" class="meta-chip failover-chip">
+                  <ThunderboltOutlined class="failover-chip-icon" /> 高可用备用通道
                 </span>
-                <SoundOutlined v-else class="action-icon" />
-                <span class="action-text">{{ getReadAloudLabel(message.id) }}</span>
-              </button>
-
-              <!-- 复制消息内容按钮 -->
-              <button
-                type="button"
-                class="action-btn copy-btn"
-                :title="copiedMessageId === message.id ? '已复制' : '复制内容'"
-                @click="handleCopyMessage(message)"
-              >
-                <CheckOutlined v-if="copiedMessageId === message.id" class="action-icon check-icon" />
-                <CopyOutlined v-else class="action-icon" />
-                <span class="action-text">{{ copiedMessageId === message.id ? '已复制' : '复制' }}</span>
-              </button>
-
-              <!-- 重新生成按钮 -->
-              <button
-                type="button"
-                class="action-btn retry-btn"
-                title="重新生成此回答"
-                :disabled="loading"
-                @click="emit('retry-message', message.id)"
-              >
-                <ReloadOutlined class="action-icon" />
-                <span class="action-text">重新生成</span>
-              </button>
+                <span v-if="message.model" class="meta-item meta-model">{{ message.model }}</span>
+                <span v-if="message.usage" class="meta-item">
+                  <a-tooltip :title="formatUsageTooltip(message.usage)" placement="top">
+                    <span class="meta-tokens">{{ message.usage.totalTokens }} tok</span>
+                  </a-tooltip>
+                </span>
+                <span v-else-if="message.model" class="meta-item">Token 待统计</span>
+                <span v-if="formatDuration(message.durationMs)" class="meta-item">
+                  {{ formatDuration(message.durationMs) }}
+                </span>
+              </div>
             </div>
             <div v-if="message.role === 'user'" class="user-message-content">
               <div v-if="message.attachments?.length" class="message-attachments">
@@ -595,6 +600,10 @@ const formatDuration = (ms?: number | null): string => {
   if (typeof ms !== 'number' || ms <= 0) return ''
   const sec = (ms / 1000).toFixed(1)
   return `耗时 ${sec}s`
+}
+
+const formatUsageTooltip = (usage: NonNullable<Message['usage']>): string => {
+  return `输入 ${usage.promptTokens} tok · 输出 ${usage.completionTokens} tok · 总计 ${usage.totalTokens} tok`
 }
 
 /**
@@ -1364,11 +1373,61 @@ $avatar-size: 32px;
         }
       }
 
+      .assistant-footer-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 12px;
+        margin-top: 6px;
+        padding-top: 2px;
+
+        .footer-sep {
+          width: 1px;
+          height: 12px;
+          background: #e2e8f0;
+          flex-shrink: 0;
+        }
+      }
+
       .assistant-meta {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: 6px;
-        margin-top: 8px;
+        margin-top: 0;
+        color: #94a3b8;
+        font-size: 11.5px;
+        line-height: 1.4;
+        font-variant-numeric: tabular-nums;
+
+        .meta-item {
+          display: inline-flex;
+          align-items: center;
+
+          + .meta-item::before {
+            content: '·';
+            margin-right: 6px;
+            color: #cbd5e1;
+          }
+        }
+
+        .meta-model {
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .meta-tokens {
+          border-bottom: 1px dashed rgba(148, 163, 184, 0.55);
+          cursor: default;
+          transition:
+            color 0.15s ease,
+            border-color 0.15s ease;
+
+          &:hover {
+            color: #475469;
+            border-bottom-color: #64748b;
+          }
+        }
 
         .meta-chip {
           display: inline-flex;
@@ -1636,8 +1695,6 @@ $avatar-size: 32px;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
-  padding-top: 2px;
 
   .action-btn {
     display: inline-flex;
