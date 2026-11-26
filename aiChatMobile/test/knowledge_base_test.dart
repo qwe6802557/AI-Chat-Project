@@ -244,6 +244,99 @@ void main() {
       expect(find.text('72%'), findsOneWidget);
     });
 
+    test('DocumentModel 解析 stage/progress 与 DocumentProgressEvent SSE 事件', () {
+      final doc = DocumentModel.fromJson({
+        'id': 'doc-sse-1',
+        'knowledgeBaseId': 'kb-1',
+        'title': 'SSE白皮书',
+        'fileName': 'sse.pdf',
+        'fileType': 'pdf',
+        'status': 'processing',
+        'stage': 'embedding',
+        'progress': 64,
+        'processedChunks': 16,
+        'totalChunks': 25,
+      });
+
+      expect(doc.isProcessing, isTrue);
+      expect(doc.progress, 64);
+      expect(doc.stageLabel, '向量化 16/25');
+
+      final evt = DocumentProgressEvent.fromJson({
+        'type': 'completed',
+        'documentId': 'doc-sse-1',
+        'knowledgeBaseId': 'kb-1',
+        'status': 'completed',
+        'stage': 'completed',
+        'progress': 100,
+        'chunkCount': 25,
+        'charCount': 6400,
+      });
+      expect(evt.type, 'completed');
+      expect(evt.progress, 100);
+      expect(evt.chunkCount, 25);
+    });
+
+    testWidgets('DocumentItemTile 在解析中展示进度条，失败时展示错误信息与重试按钮', (tester) async {
+      bool retried = false;
+      const processingDoc = DocumentModel(
+        id: 'doc-proc',
+        knowledgeBaseId: 'kb-1',
+        title: '长文档.pdf',
+        fileName: '长文档.pdf',
+        fileType: 'pdf',
+        status: 'processing',
+        stage: 'embedding',
+        progress: 48,
+        processedChunks: 12,
+        totalChunks: 25,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DocumentItemTile(
+              document: processingDoc,
+              onTap: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('向量化 12/25 48%'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+
+      const failedDoc = DocumentModel(
+        id: 'doc-fail',
+        knowledgeBaseId: 'kb-1',
+        title: '失败文档.pdf',
+        fileName: '失败文档.pdf',
+        fileType: 'pdf',
+        status: 'failed',
+        stage: 'failed',
+        errorMessage: 'Embedding 429',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: DocumentItemTile(
+              document: failedDoc,
+              onTap: () {},
+              onDelete: () {},
+              onRetry: () => retried = true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('失败'), findsOneWidget);
+      expect(find.text('Embedding 429'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.refresh_rounded));
+      expect(retried, isTrue);
+    });
+
     test('ChunkModel 支持搜索结果字段 (chunkId, highlights, hitSource) 与上下文模型解析', () {
       final searchJson = {
         'chunkId': 'chk-search-1',

@@ -12,7 +12,9 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -24,6 +26,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { KnowledgeBaseService } from './services/knowledge-base.service';
 import { HybridRagService } from './services/hybrid-rag.service';
+import { KnowledgeProgressService } from './services/knowledge-progress.service';
 import {
   CreateKnowledgeBaseDto,
   UpdateKnowledgeBaseDto,
@@ -39,6 +42,7 @@ export class KnowledgeBaseController {
   constructor(
     private readonly kbService: KnowledgeBaseService,
     private readonly ragService: HybridRagService,
+    private readonly progressService: KnowledgeProgressService,
   ) {}
 
   @Post()
@@ -111,6 +115,100 @@ export class KnowledgeBaseController {
     @Param('id') kbId: string,
   ) {
     return this.kbService.getDocuments(userId, kbId);
+  }
+
+  @Get(':id/documents/events')
+  @ApiOperation({ summary: '订阅知识库文档异步解析进度 SSE 流' })
+  async streamDocumentEvents(
+    @CurrentUser('id') userId: string,
+    @Param('id') kbId: string,
+    @Res() res: Response,
+  ) {
+    await this.kbService.getKnowledgeBaseById(userId, kbId);
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const writeEvent = (payload: unknown) => {
+      if (res.writableEnded || res.destroyed) return;
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    let closed = false;
+    let unsubscribe: (() => Promise<void>) | null = null;
+    const heartbeatTimer = setInterval(() => {
+      if (!res.writableEnded && !res.destroyed) {
+        res.write(': heartbeat\n\n');
+      }
+    }, 25000);
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      clearInterval(heartbeatTimer);
+      if (unsubscribe) {
+        const fn = unsubscribe;
+        unsubscribe = null;
+        void fn();
+      }
+    };
+
+    res.on('close', cleanup);
+    res.on('error', cleanup);
+
+    try {
+      // 先订阅频道再读 DB 快照，消除建连窗口事件丢失；重复状态按幂等合并
+      unsubscribe = await this.progressService.subscribe(
+        userId,
+        kbId,
+        (evt) => {
+          writeEvent(evt);
+        },
+      );
+      if (closed) {
+        cleanup();
+        return;
+      }
+
+      const activeDocs = await this.kbService.getActiveDocumentsSnapshot(
+        userId,
+        kbId,
+      );
+      writeEvent({
+        type: 'snapshot',
+        knowledgeBaseId: kbId,
+        documents: activeDocs.map((doc) => ({
+          documentId: doc.id,
+          knowledgeBaseId: doc.knowledgeBaseId,
+          status: doc.status,
+          stage: doc.stage,
+          progress: doc.progress,
+          chunkCount: doc.chunkCount,
+          charCount: doc.charCount,
+          errorMessage: doc.errorMessage,
+          updatedAt: doc.updatedAt?.toISOString?.() || new Date().toISOString(),
+        })),
+      });
+    } catch (error) {
+      cleanup();
+      if (!res.writableEnded && !res.destroyed) {
+        const msg = error instanceof Error ? error.message : '订阅流异常';
+        writeEvent({ type: 'error', message: msg });
+        res.end();
+      }
+    }
+  }
+
+  @Post('documents/:docId/retry')
+  @ApiOperation({ summary: '重新将解析失败的文档加入异步队列' })
+  async retryDocument(
+    @CurrentUser('id') userId: string,
+    @Param('docId') docId: string,
+  ) {
+    return this.kbService.retryDocument(userId, docId);
   }
 
   @Delete('documents/:docId')

@@ -33,11 +33,12 @@ export class EmbeddingService {
   }
 
   /**
-   * 批量文本向量计算（支持自动切分 batch 批次）
+   * 批量文本向量计算（支持自动切分 batch 批次并回调进度）
    */
   async embedDocuments(
     texts: string[],
     batchSize = 16,
+    onBatchComplete?: (processed: number, total: number) => Promise<void> | void,
   ): Promise<number[][]> {
     if (texts.length === 0) return [];
     if (!this.apiKey) {
@@ -51,6 +52,9 @@ export class EmbeddingService {
       const batch = texts.slice(i, i + batchSize);
       const batchVectors = await this.callSiliconFlowApi(batch);
       allEmbeddings.push(...batchVectors);
+      if (onBatchComplete) {
+        await onBatchComplete(allEmbeddings.length, texts.length);
+      }
     }
 
     return allEmbeddings;

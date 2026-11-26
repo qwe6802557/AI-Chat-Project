@@ -15,6 +15,22 @@ export class DocumentParserService {
   private readonly logger = new Logger(DocumentParserService.name);
 
   /**
+   * 校验文件扩展名与 MIME 类型是否受支持
+   */
+  static isSupportedFile(fileName: string, mimeType?: string): boolean {
+    const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
+    return (
+      ext === '.pdf' ||
+      mimeType === 'application/pdf' ||
+      ext === '.docx' ||
+      mimeType ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      ['.txt', '.md', '.markdown', '.json', '.js', '.ts', '.py'].includes(ext) ||
+      Boolean(mimeType?.startsWith('text/'))
+    );
+  }
+
+  /**
    * 根据文件名后缀与 Buffer 解析出清洗后的纯文本
    */
   async parseBuffer(
@@ -23,6 +39,12 @@ export class DocumentParserService {
     mimeType?: string,
   ): Promise<ParsedDocumentResult> {
     const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
+    if (!DocumentParserService.isSupportedFile(fileName, mimeType)) {
+      throw new BadRequestException(
+        `暂不支持的文件格式: ${ext}，仅支持 .pdf, .docx, .md, .txt 等格式`,
+      );
+    }
+
     let rawText = '';
 
     try {
@@ -36,15 +58,8 @@ export class DocumentParserService {
       ) {
         const result = await mammoth.extractRawText({ buffer });
         rawText = result.value || '';
-      } else if (
-        ['.txt', '.md', '.markdown', '.json', '.js', '.ts', '.py'].includes(ext) ||
-        mimeType?.startsWith('text/')
-      ) {
-        rawText = buffer.toString('utf-8');
       } else {
-        throw new BadRequestException(
-          `暂不支持的文件格式: ${ext}，仅支持 .pdf, .docx, .md, .txt 等格式`,
-        );
+        rawText = buffer.toString('utf-8');
       }
     } catch (err: any) {
       this.logger.error(`解析文件 [${fileName}] 失败: ${err.message}`, err.stack);

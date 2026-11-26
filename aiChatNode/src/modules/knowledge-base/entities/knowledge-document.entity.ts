@@ -18,6 +18,15 @@ export type DocumentParseStatus =
   | 'completed'
   | 'failed';
 
+export type DocumentParseStage =
+  | 'queued'
+  | 'parsing'
+  | 'chunking'
+  | 'embedding'
+  | 'saving'
+  | 'completed'
+  | 'failed';
+
 /**
  * 知识库文档记录实体
  */
@@ -55,6 +64,16 @@ export class KnowledgeDocument {
     default: 'pending',
   })
   status: DocumentParseStatus;
+
+  @Column({
+    type: 'varchar',
+    length: 32,
+    default: 'queued',
+  })
+  stage: DocumentParseStage;
+
+  @Column({ type: 'smallint', default: 0 })
+  progress: number;
 
   @Column({ type: 'text', nullable: true })
   errorMessage: string | null;

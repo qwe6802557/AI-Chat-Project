@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ChatModule } from './modules/chat/chat.module';
@@ -20,6 +21,7 @@ import { ChannelModule } from './modules/channel/channel.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
+import { buildBullRedisConnection } from './common/redis/redis-connection.util';
 import databaseConfig from './config/database.config';
 import { buildDatabaseCoreOptions } from './config/database-options';
 
@@ -47,6 +49,13 @@ import { buildDatabaseCoreOptions } from './config/database-options';
           synchronize: enableSynchronize,
         };
       },
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: buildBullRedisConnection(configService),
+      }),
     }),
     RedisModule,
     UserModule,

@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { KnowledgeChunk } from '../entities/knowledge-chunk.entity';
 import { KnowledgeDocument } from '../entities/knowledge-document.entity';
 import { EmbeddingService } from './embedding.service';
@@ -10,6 +10,7 @@ import {
   extractSearchTerms,
   HighlightSpan,
 } from '../utils/chunk-highlight.util';
+import { escapeLikePattern, toPgVectorLiteral } from '../utils/pg-vector.util';
 import type { RetrievalMode } from '../dto/search-knowledge-base.dto';
 
 export type RagHitSource = 'hybrid' | 'dense' | 'sparse';
@@ -45,8 +46,22 @@ export interface HybridSearchOptions {
   enableRerank?: boolean;
 }
 
+interface SqlCandidateChunk {
+  id: string;
+  documentId: string;
+  knowledgeBaseId: string;
+  chunkIndex: number;
+  content: string;
+  charCount: number;
+  metadata: Record<string, any> | null;
+  documentTitle: string;
+  denseScore?: number;
+  matchCount?: number;
+  trgmScore?: number;
+}
+
 interface FusedCandidate {
-  chunk: KnowledgeChunk;
+  chunk: SqlCandidateChunk;
   hitSource: RagHitSource;
   denseScore?: number;
   denseRank?: number;
@@ -56,14 +71,16 @@ interface FusedCandidate {
 }
 
 /**
- * 混合双路检索、RRF 融合与 Cross-Encoder 精排引擎
+ * 混合双路 SQL 下推检索、RRF 融合与 Cross-Encoder 精排引擎
  */
 @Injectable()
 export class HybridRagService {
   private readonly logger = new Logger(HybridRagService.name);
   private static readonly RRF_K = 60;
-  private static readonly MAX_CANDIDATE_POOL = 2000;
+  private static readonly RECALL_TOP_K = 30;
   private static readonly RERANK_CANDIDATE_LIMIT = 15;
+  private static readonly MIN_DENSE_SCORE = 0.35;
+  private static readonly MIN_TRGM_SIMILARITY = 0.2;
 
   constructor(
     @InjectRepository(KnowledgeChunk)
@@ -76,7 +93,7 @@ export class HybridRagService {
   ) {}
 
   /**
-   * 执行双路或单路召回、RRF 融合与可选 Rerank 精排，并生成安全高亮区间
+   * 执行 PostgreSQL pgvector + pg_trgm 下推召回、RRF 融合与可选 Rerank 精排
    */
   async search(options: HybridSearchOptions): Promise<RagSearchResult[]> {
     const {
@@ -92,95 +109,61 @@ export class HybridRagService {
     const cleanQuery = query.trim();
     if (!cleanQuery) return [];
 
-    // 1. 按检索模式按需计算 1024 维查询向量
-    let queryVector: number[] = [];
-    if (mode !== 'sparse') {
-      try {
-        queryVector = await this.embeddingService.embedQuery(cleanQuery);
-      } catch (err: any) {
-        this.logger.warn(`向量生成降级为关键词召回: ${err.message}`);
-      }
-    }
+    const searchTerms = extractSearchTerms(cleanQuery);
+    const needDense = mode !== 'sparse';
+    const needSparse = mode !== 'dense' && searchTerms.length > 0;
 
-    // 2. 拉取已解析且处于启用状态的候选切片池
-    const qb = this.chunkRepo
-      .createQueryBuilder('chunk')
-      .innerJoinAndSelect('chunk.document', 'doc')
-      .where('chunk.userId = :userId', { userId })
-      .andWhere('chunk.isEnabled = :isEnabled', { isEnabled: true });
+    const [denseRows, sparseRows] = await Promise.all([
+      needDense
+        ? this.queryDenseCandidates({
+            userId,
+            cleanQuery,
+            knowledgeBaseIds,
+            documentIds,
+          })
+        : Promise.resolve([]),
+      needSparse
+        ? this.querySparseCandidates({
+            userId,
+            cleanQuery,
+            searchTerms,
+            knowledgeBaseIds,
+            documentIds,
+          })
+        : Promise.resolve([]),
+    ]);
 
-    if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
-      qb.andWhere('chunk.knowledgeBaseId IN (:...kbIds)', {
-        kbIds: knowledgeBaseIds,
-      });
-    }
-
-    if (documentIds && documentIds.length > 0) {
-      qb.andWhere('chunk.documentId IN (:...docIds)', {
-        docIds: documentIds,
-      });
-    }
-
-    qb.andWhere('doc.status = :docStatus', { docStatus: 'completed' });
-
-    const candidateChunks = await qb
-      .take(HybridRagService.MAX_CANDIDATE_POOL)
-      .getMany();
-    if (candidateChunks.length === 0) return [];
-
-    // 3. Dense 稠密向量召回
+    const chunkMap = new Map<string, SqlCandidateChunk>();
     const denseRankMap = new Map<string, number>();
     const denseScoreMap = new Map<string, number>();
-    if (mode !== 'sparse' && queryVector.length > 0) {
-      const denseScored = candidateChunks
-        .filter((c) => c.embedding && c.embedding.length > 0)
-        .map((c) => ({
-          id: c.id,
-          sim: this.cosineSimilarity(queryVector, c.embedding!),
-        }))
-        .filter((item) => item.sim >= 0.35)
-        .sort((a, b) => b.sim - a.sim);
 
-      denseScored.slice(0, 30).forEach((item, index) => {
-        denseRankMap.set(item.id, index + 1);
-        denseScoreMap.set(item.id, item.sim);
-      });
-    }
+    denseRows.forEach((row, index) => {
+      chunkMap.set(row.id, row);
+      denseRankMap.set(row.id, index + 1);
+      denseScoreMap.set(row.id, Number(row.denseScore ?? 0));
+    });
 
-    // 4. Sparse 稀疏关键词召回
-    const searchTerms = extractSearchTerms(cleanQuery);
     const sparseRankMap = new Map<string, number>();
     const sparseRatioMap = new Map<string, number>();
-    if (mode !== 'dense' && searchTerms.length > 0) {
-      const sparseScored = candidateChunks
-        .map((c) => {
-          let matchCount = 0;
-          const lowerContent = c.content.toLowerCase();
-          for (const term of searchTerms) {
-            if (lowerContent.includes(term.toLowerCase())) {
-              matchCount++;
-            }
-          }
-          return {
-            id: c.id,
-            matchCount,
-            ratio: matchCount / searchTerms.length,
-          };
-        })
-        .filter((item) => item.matchCount > 0)
-        .sort((a, b) => b.matchCount - a.matchCount);
+    const sparseTermDenominator = Math.max(1, Math.min(searchTerms.length, 12));
 
-      sparseScored.slice(0, 30).forEach((item, index) => {
-        sparseRankMap.set(item.id, index + 1);
-        sparseRatioMap.set(item.id, item.ratio);
-      });
-    }
+    sparseRows.forEach((row, index) => {
+      if (!chunkMap.has(row.id)) {
+        chunkMap.set(row.id, row);
+      }
+      sparseRankMap.set(row.id, index + 1);
+      const matchCount = Number(row.matchCount ?? 0);
+      const trgmScore = Number(row.trgmScore ?? 0);
+      const ratio =
+        matchCount > 0
+          ? Math.min(1, matchCount / sparseTermDenominator)
+          : Math.min(1, Math.max(0, trgmScore));
+      sparseRatioMap.set(row.id, ratio);
+    });
 
-    // 5. RRF 倒数排名融合
-    const chunkMap = new Map(candidateChunks.map((c) => [c.id, c]));
     const candidateIds = new Set<string>([
-      ...(mode !== 'sparse' ? denseRankMap.keys() : []),
-      ...(mode !== 'dense' ? sparseRankMap.keys() : []),
+      ...(needDense ? denseRankMap.keys() : []),
+      ...(needSparse ? sparseRankMap.keys() : []),
     ]);
 
     if (candidateIds.size === 0) {
@@ -235,13 +218,16 @@ export class HybridRagService {
 
     fusedList.sort((a, b) => b.rrfScore - a.rrfScore);
 
-    // 6. 可选 Cross-Encoder 精排（对 Top-15 粗排重排，失败则平滑回退 RRF）
     const rerankPool = fusedList.slice(
       0,
       HybridRagService.RERANK_CANDIDATE_LIMIT,
     );
     let finalCandidates: Array<
-      FusedCandidate & { finalScore: number; rerankScore?: number; rerankApplied: boolean }
+      FusedCandidate & {
+        finalScore: number;
+        rerankScore?: number;
+        rerankApplied: boolean;
+      }
     >;
 
     const rerankResults =
@@ -278,7 +264,6 @@ export class HybridRagService {
       }));
     }
 
-    // 7. 最低置信度阈值过滤并计算服务端高亮偏移
     const filtered =
       typeof minScore === 'number' && minScore > 0
         ? finalCandidates.filter((item) => item.finalScore >= minScore)
@@ -294,7 +279,7 @@ export class HybridRagService {
         chunkId: item.chunk.id,
         documentId: item.chunk.documentId,
         knowledgeBaseId: item.chunk.knowledgeBaseId,
-        documentTitle: item.chunk.document?.title || '未命名文档',
+        documentTitle: item.chunk.documentTitle || '未命名文档',
         content: item.chunk.content,
         chunkIndex: item.chunk.chunkIndex,
         score: item.finalScore,
@@ -310,6 +295,143 @@ export class HybridRagService {
         metadata: item.chunk.metadata || undefined,
       };
     });
+  }
+
+  /**
+   * 通过 pgvector HNSW 迭代扫描下推 Top-K 语义向量召回
+   */
+  private async queryDenseCandidates(params: {
+    userId: string;
+    cleanQuery: string;
+    knowledgeBaseIds?: string[];
+    documentIds?: string[];
+  }): Promise<SqlCandidateChunk[]> {
+    const queryVector = await this.embeddingService.embedQuery(
+      params.cleanQuery,
+    );
+    const vectorLiteral = toPgVectorLiteral(queryVector);
+
+    const conditions = [
+      'c."userId" = $2',
+      'c."isEnabled" = true',
+      'd."status" = \'completed\'',
+      'c."embedding" IS NOT NULL',
+    ];
+    const queryParams: unknown[] = [vectorLiteral, params.userId];
+
+    if (params.knowledgeBaseIds && params.knowledgeBaseIds.length > 0) {
+      queryParams.push(params.knowledgeBaseIds);
+      conditions.push(
+        `c."knowledgeBaseId" = ANY($${queryParams.length}::uuid[])`,
+      );
+    }
+    if (params.documentIds && params.documentIds.length > 0) {
+      queryParams.push(params.documentIds);
+      conditions.push(`c."documentId" = ANY($${queryParams.length}::uuid[])`);
+    }
+
+    const sql = `
+      SELECT
+        c."id",
+        c."documentId",
+        c."knowledgeBaseId",
+        c."chunkIndex",
+        c."content",
+        c."charCount",
+        c."metadata",
+        d."title" AS "documentTitle",
+        (1 - (c."embedding" <=> $1::vector))::float8 AS "denseScore"
+      FROM "knowledge_chunks" c
+      INNER JOIN "knowledge_documents" d ON d."id" = c."documentId"
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY c."embedding" <=> $1::vector ASC
+      LIMIT ${HybridRagService.RECALL_TOP_K}
+    `;
+
+    const rows = await this.chunkRepo.manager.transaction<SqlCandidateChunk[]>(
+      async (em: EntityManager) => {
+        // 开启 pgvector 0.8+ 迭代扫描，避免多租户/知识库过滤后 HNSW 提前截断召回不足
+        await em.query("SET LOCAL hnsw.iterative_scan = 'relaxed_order'");
+        await em.query('SET LOCAL hnsw.ef_search = 64');
+        return em.query(sql, queryParams);
+      },
+    );
+
+    return rows.filter(
+      (row) => Number(row.denseScore ?? 0) >= HybridRagService.MIN_DENSE_SCORE,
+    );
+  }
+
+  /**
+   * 通过 PostgreSQL pg_trgm GIN 索引与多词元匹配下推稀疏检索
+   */
+  private async querySparseCandidates(params: {
+    userId: string;
+    cleanQuery: string;
+    searchTerms: string[];
+    knowledgeBaseIds?: string[];
+    documentIds?: string[];
+  }): Promise<SqlCandidateChunk[]> {
+    const terms = params.searchTerms.slice(0, 12);
+    if (terms.length === 0) return [];
+
+    const likePatterns = terms.map((t) => `%${escapeLikePattern(t)}%`);
+    const conditions = [
+      'c."userId" = $1',
+      'c."isEnabled" = true',
+      'd."status" = \'completed\'',
+      '(c."content" ILIKE ANY($2::text[]) OR c."content" % $3)',
+    ];
+    const queryParams: unknown[] = [
+      params.userId,
+      likePatterns,
+      params.cleanQuery,
+    ];
+
+    if (params.knowledgeBaseIds && params.knowledgeBaseIds.length > 0) {
+      queryParams.push(params.knowledgeBaseIds);
+      conditions.push(
+        `c."knowledgeBaseId" = ANY($${queryParams.length}::uuid[])`,
+      );
+    }
+    if (params.documentIds && params.documentIds.length > 0) {
+      queryParams.push(params.documentIds);
+      conditions.push(`c."documentId" = ANY($${queryParams.length}::uuid[])`);
+    }
+
+    const sql = `
+      SELECT
+        c."id",
+        c."documentId",
+        c."knowledgeBaseId",
+        c."chunkIndex",
+        c."content",
+        c."charCount",
+        c."metadata",
+        d."title" AS "documentTitle",
+        (
+          SELECT COUNT(*)::int
+          FROM unnest($2::text[]) AS p
+          WHERE c."content" ILIKE p
+        ) AS "matchCount",
+        word_similarity($3, c."content")::float8 AS "trgmScore"
+      FROM "knowledge_chunks" c
+      INNER JOIN "knowledge_documents" d ON d."id" = c."documentId"
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY "matchCount" DESC, "trgmScore" DESC
+      LIMIT ${HybridRagService.RECALL_TOP_K}
+    `;
+
+    const rows = await this.chunkRepo.manager.query<SqlCandidateChunk[]>(
+      sql,
+      queryParams,
+    );
+
+    return rows.filter(
+      (row) =>
+        Number(row.matchCount ?? 0) > 0 ||
+        Number(row.trgmScore ?? 0) >= HybridRagService.MIN_TRGM_SIMILARITY,
+    );
   }
 
   /**
@@ -339,17 +461,5 @@ export class HybridRagService {
     }
 
     return Number(Math.min(0.99, Math.max(0.01, rawScore)).toFixed(2));
-  }
-
-  /**
-   * 两个单位向量的内积（等于余弦相似度）
-   */
-  private cosineSimilarity(a: number[], b: number[]): number {
-    const len = Math.min(a.length, b.length);
-    let dot = 0;
-    for (let i = 0; i < len; i++) {
-      dot += a[i] * b[i];
-    }
-    return dot;
   }
 }

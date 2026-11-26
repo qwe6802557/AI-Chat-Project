@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -162,6 +164,59 @@ class KnowledgeBaseRepository {
         ? res['data'] as Map<String, dynamic>
         : res as Map<String, dynamic>;
     return DocumentModel.fromJson(data);
+  }
+
+  /// 失败文档重新入队解析
+  Future<DocumentModel> retryDocument(String docId) async {
+    final response = await _client.dio.post(
+      '/knowledge-bases/documents/$docId/retry',
+    );
+    final res = response.data;
+    final Map<String, dynamic> data =
+        res is Map<String, dynamic> && res['data'] is Map<String, dynamic>
+            ? res['data'] as Map<String, dynamic>
+            : res as Map<String, dynamic>;
+    return DocumentModel.fromJson(data);
+  }
+
+  /// 订阅知识库文档后台解析进度 SSE 流
+  Stream<DocumentProgressEvent> watchDocumentEvents(
+    String kbId, {
+    CancelToken? cancelToken,
+  }) async* {
+    final response = await _client.dio.get<ResponseBody>(
+      '/knowledge-bases/$kbId/documents/events',
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: const {'Accept': 'text/event-stream'},
+        receiveTimeout: const Duration(minutes: 15),
+      ),
+      cancelToken: cancelToken,
+    );
+
+    final bodyStream = response.data?.stream;
+    if (bodyStream == null) return;
+
+    final lines = bodyStream
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+
+    await for (final line in lines) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      final rawPayload = trimmed.substring(5).trim();
+      if (rawPayload.isEmpty) continue;
+
+      try {
+        final decoded = jsonDecode(rawPayload);
+        if (decoded is Map<String, dynamic>) {
+          yield DocumentProgressEvent.fromJson(decoded);
+        }
+      } catch (_) {
+        // 忽略心跳或非 JSON 注释片段
+      }
+    }
   }
 
   /// 删除文档
