@@ -71,6 +71,10 @@ const globalStubs = {
   },
   ToolQuickCapsules: true,
   PluginCenterModal: true,
+  'a-tooltip': {
+    props: ['title'],
+    template: '<div class="a-tooltip-stub" :data-title="title"><slot /></div>',
+  },
   'a-select': true,
   transition: false,
 }
@@ -232,5 +236,25 @@ describe('ChatArea', () => {
 
     await submitBtn.trigger('click')
     expect(wrapper.emitted('stop-generation')).toBeTruthy()
+  })
+
+  it('renders upload trigger with tooltip wrapper and label class', () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: false,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    const uploadBtn = wrapper.find('.upload-trigger-btn')
+    expect(uploadBtn.exists()).toBe(true)
+    expect(uploadBtn.attributes('aria-label')).toBe('上传文件')
+    expect(uploadBtn.find('.upload-label').text()).toBe('上传文件')
+    expect(wrapper.find('.a-tooltip-stub[data-title="上传文件 (支持图片与文档)"]').exists()).toBe(true)
   })
 })

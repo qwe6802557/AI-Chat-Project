@@ -52,22 +52,25 @@
       </div>
     </template>
 
-    <button
-      type="button"
-      :class="['kb-capsule-btn', { active: selectedIds.length > 0, disabled }]"
-      :disabled="disabled"
-    >
-      <DatabaseOutlined class="capsule-icon" />
-      <span class="capsule-label">
-        {{ selectedIds.length > 0 ? `知识库 (${selectedIds.length})` : '知识库' }}
-      </span>
-      <span v-if="selectedIds.length > 0" class="active-dot" />
-    </button>
+    <a-tooltip :title="triggerTooltip" placement="top" :open="isOpen ? false : undefined">
+      <button
+        type="button"
+        :class="['kb-capsule-btn', { active: selectedIds.length > 0, disabled }]"
+        :disabled="disabled"
+        aria-label="知识库"
+      >
+        <DatabaseOutlined class="capsule-icon" />
+        <span class="capsule-label">
+          {{ selectedIds.length > 0 ? `知识库 (${selectedIds.length})` : '知识库' }}
+        </span>
+        <span v-if="selectedIds.length > 0" class="active-dot" />
+      </button>
+    </a-tooltip>
   </a-popover>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { DatabaseOutlined, LoadingOutlined, CheckOutlined } from '@ant-design/icons-vue'
 import { useKnowledgeStore } from '@/stores'
@@ -94,6 +97,14 @@ const emit = defineEmits<{
 const isOpen = ref(false)
 const knowledgeStore = useKnowledgeStore()
 const { activeBases, loading, isRefreshing } = storeToRefs(knowledgeStore)
+
+const triggerTooltip = computed(() => {
+  if (props.disabled) return '当前不可配置知识库'
+  if (props.selectedIds.length > 0) {
+    return `已挂载 ${props.selectedIds.length} 个知识库 (点击管理混合 RAG 检索)`
+  }
+  return '选择知识库 (开启混合 RAG 检索)'
+})
 
 const toggleSelect = (id: string) => {
   const current = [...props.selectedIds]

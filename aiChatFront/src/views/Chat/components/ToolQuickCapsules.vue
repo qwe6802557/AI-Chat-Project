@@ -71,6 +71,7 @@
             { active: activeCount > 0, open: isOpen, disabled },
           ]"
           :disabled="disabled"
+          aria-label="扩展工具"
         >
           <AppstoreOutlined class="trigger-icon" />
           <span class="trigger-label">扩展工具</span>
