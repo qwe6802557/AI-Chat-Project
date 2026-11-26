@@ -153,15 +153,25 @@ describe('ChatMessageViewport', () => {
       },
       shallow: true,
       global: {
-        stubs: ['a-avatar', 'a-image', 'a-image-preview-group', 'MarkdownMessage'],
+        stubs: {
+          'a-avatar': true,
+          'a-image': true,
+          'a-image-preview-group': true,
+          MarkdownMessage: true,
+          'a-tooltip': {
+            props: ['title'],
+            template: '<span class="a-tooltip-stub" :data-title="title"><slot /></span>',
+          },
+        },
       },
     })
 
     expect(wrapper.text()).toContain('GLM-5')
-    expect(wrapper.text()).toContain('输入 10 tok')
-    expect(wrapper.text()).toContain('输出 5 tok')
-    expect(wrapper.text()).toContain('总计 15 tok')
+    expect(wrapper.text()).toContain('15 tok')
     expect(wrapper.text()).toContain('耗时 8.5s')
+    expect(wrapper.find('.a-tooltip-stub').attributes('data-title')).toBe(
+      '输入 10 tok · 输出 5 tok · 总计 15 tok',
+    )
     // 估算成本 chip 已暂时隐藏
     expect(wrapper.text()).not.toContain('估算')
     expect(wrapper.text()).not.toContain('扣费 100 积分')
