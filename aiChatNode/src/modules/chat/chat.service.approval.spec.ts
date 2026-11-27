@@ -13,10 +13,25 @@ import { CreditsService } from '../credits/credits.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { ToolRegistryService } from '../tools/tools.registry.service';
 import { ApprovalManagerService } from './services/approval-manager.service';
+import {
+  AgentStreamExecutorService,
+  type AgentStreamOptions,
+} from './services/agent-stream-executor.service';
+import { ActiveStreamRegistry } from './services/active-stream.registry';
 import { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
+import type { CompletionChunk } from './types/completion.types';
+import type { ToolExecutionRecord } from '../tools/types/tools.types';
+
+/** 测试内部 ReAct 流执行器用的类型视图 */
+interface ChatServiceApprovalTestable {
+  executeReActStream(
+    params: AgentStreamOptions,
+  ): AsyncIterable<CompletionChunk>;
+}
 
 describe('ChatService - Human-in-the-Loop Approval', () => {
   let service: ChatService;
+  let internalService: ChatServiceApprovalTestable;
 
   const mockToolRegistryService = {
     getPlugin: jest.fn(),
@@ -52,12 +67,18 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
         { provide: CreditsService, useValue: {} },
         { provide: WebSearchService, useValue: {} },
         { provide: ToolRegistryService, useValue: mockToolRegistryService },
-        { provide: ApprovalManagerService, useValue: mockApprovalManagerService },
+        {
+          provide: ApprovalManagerService,
+          useValue: mockApprovalManagerService,
+        },
+        ActiveStreamRegistry,
+        AgentStreamExecutorService,
         { provide: HybridRagService, useValue: {} },
       ],
     }).compile();
 
     service = module.get<ChatService>(ChatService);
+    internalService = service as unknown as ChatServiceApprovalTestable;
   });
 
   it('高危工具需要审批时，流中暂停抛出 tool_approval_required，操作者放行后继续执行', async () => {
@@ -83,24 +104,32 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
     });
 
     let callCount = 0;
-    mockAiClientService.createStreamChatCompletion.mockImplementation(async () => {
+    mockAiClientService.createStreamChatCompletion.mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
-        return (async function* () {
-          yield {
-            delta: {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: 'call_code',
-                  function: { name: 'code_interpreter', arguments: '{"code":"console.log(42)"}' },
-                },
-              ],
-            },
-          };
-        })();
-      } else {
-        return (async function* () {
+        return Promise.resolve(
+          (async function* () {
+            await Promise.resolve();
+            yield {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_code',
+                    function: {
+                      name: 'code_interpreter',
+                      arguments: '{"code":"console.log(42)"}',
+                    },
+                  },
+                ],
+              },
+            };
+          })(),
+        );
+      }
+      return Promise.resolve(
+        (async function* () {
+          await Promise.resolve();
           yield {
             type: 'answer_delta',
             delta: { content: '执行结果是 42' },
@@ -109,16 +138,25 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
             finish_reason: 'stop',
             usage: { promptTokens: 30, completionTokens: 10, totalTokens: 40 },
           };
-        })();
-      }
+        })(),
+      );
     });
 
-    const toolRecords: any[] = [];
-    const chunks: any[] = [];
-    const stream = (service as any).executeReActStream({
+    const toolRecords: ToolExecutionRecord[] = [];
+    const chunks: CompletionChunk[] = [];
+    const stream = internalService.executeReActStream({
       modelId: 'gpt-4o',
       initialMessages: [{ role: 'user', content: '运行代码' }],
-      tools: [{ type: 'function', function: { name: 'code_interpreter' } }],
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'code_interpreter',
+            description: '',
+            parameters: {},
+          },
+        },
+      ],
       context: { userId: 'u1', sessionId: 's1', userMessage: '运行代码' },
       toolExecutionRecords: toolRecords,
     });
@@ -127,17 +165,21 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
       chunks.push(chunk);
     }
 
-    const approvalChunk = chunks.find((c) => c.type === 'tool_approval_required');
+    const approvalChunk = chunks.find(
+      (c) => c.type === 'tool_approval_required',
+    );
     expect(approvalChunk).toBeDefined();
-    expect(approvalChunk.toolCall.status).toBe('pending_approval');
-    expect(approvalChunk.toolCall.approvalId).toBe('app_1');
-    expect(approvalChunk.toolCall.riskLevel).toBe('high');
-    expect(mockApprovalManagerService.waitForDecision).toHaveBeenCalledWith('app_1');
+    expect(approvalChunk?.toolCall?.status).toBe('pending_approval');
+    expect(approvalChunk?.toolCall?.approvalId).toBe('app_1');
+    expect(approvalChunk?.toolCall?.riskLevel).toBe('high');
+    expect(mockApprovalManagerService.waitForDecision).toHaveBeenCalledWith(
+      'app_1',
+    );
     expect(mockToolRegistryService.executeTool).toHaveBeenCalled();
 
     const resultChunk = chunks.find((c) => c.type === 'tool_call_result');
     expect(resultChunk).toBeDefined();
-    expect(resultChunk.toolCall.status).toBe('success');
+    expect(resultChunk?.toolCall?.status).toBe('success');
   });
 
   it('高危工具被拒绝时，流中返回 rejected 状态并跳过工具实际调用', async () => {
@@ -158,24 +200,32 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
     });
 
     let callCount = 0;
-    mockAiClientService.createStreamChatCompletion.mockImplementation(async () => {
+    mockAiClientService.createStreamChatCompletion.mockImplementation(() => {
       callCount++;
       if (callCount === 1) {
-        return (async function* () {
-          yield {
-            delta: {
-              tool_calls: [
-                {
-                  index: 0,
-                  id: 'call_code_rej',
-                  function: { name: 'code_interpreter', arguments: '{"code":"rmdir"}' },
-                },
-              ],
-            },
-          };
-        })();
-      } else {
-        return (async function* () {
+        return Promise.resolve(
+          (async function* () {
+            await Promise.resolve();
+            yield {
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'call_code_rej',
+                    function: {
+                      name: 'code_interpreter',
+                      arguments: '{"code":"rmdir"}',
+                    },
+                  },
+                ],
+              },
+            };
+          })(),
+        );
+      }
+      return Promise.resolve(
+        (async function* () {
+          await Promise.resolve();
           yield {
             type: 'answer_delta',
             delta: { content: '由于操作被终止，未执行该脚本' },
@@ -184,16 +234,25 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
             finish_reason: 'stop',
             usage: { promptTokens: 30, completionTokens: 10, totalTokens: 40 },
           };
-        })();
-      }
+        })(),
+      );
     });
 
-    const toolRecords: any[] = [];
-    const chunks: any[] = [];
-    const stream = (service as any).executeReActStream({
+    const toolRecords: ToolExecutionRecord[] = [];
+    const chunks: CompletionChunk[] = [];
+    const stream = internalService.executeReActStream({
       modelId: 'gpt-4o',
       initialMessages: [{ role: 'user', content: '删除目录' }],
-      tools: [{ type: 'function', function: { name: 'code_interpreter' } }],
+      tools: [
+        {
+          type: 'function',
+          function: {
+            name: 'code_interpreter',
+            description: '',
+            parameters: {},
+          },
+        },
+      ],
       context: { userId: 'u1', sessionId: 's1', userMessage: '删除目录' },
       toolExecutionRecords: toolRecords,
     });
@@ -204,8 +263,8 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
 
     const resultChunk = chunks.find((c) => c.type === 'tool_call_result');
     expect(resultChunk).toBeDefined();
-    expect(resultChunk.toolCall.status).toBe('rejected');
-    expect(resultChunk.toolCall.error).toContain('拒绝删除目录操作');
+    expect(resultChunk?.toolCall?.status).toBe('rejected');
+    expect(resultChunk?.toolCall?.error).toContain('拒绝删除目录操作');
     expect(mockToolRegistryService.executeTool).not.toHaveBeenCalled();
   });
 
@@ -222,7 +281,12 @@ describe('ChatService - Human-in-the-Loop Approval', () => {
       decidedAt: 1234567,
     });
 
-    const res = await service.decideApproval('app_3', 'approved', 'u1', '同意执行');
+    const res = await service.decideApproval(
+      'app_3',
+      'approved',
+      'u1',
+      '同意执行',
+    );
     expect(res.approvalId).toBe('app_3');
     expect(res.status).toBe('approved');
     expect(res.decisionReason).toBe('同意执行');

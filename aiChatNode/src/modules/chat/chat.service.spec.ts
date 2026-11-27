@@ -13,17 +13,67 @@ import { CreditsService } from '../credits/credits.service';
 import { WebSearchService } from '../web-search/web-search.service';
 import { ToolRegistryService } from '../tools/tools.registry.service';
 import { ApprovalManagerService } from './services/approval-manager.service';
+import {
+  AgentStreamExecutorService,
+  type AgentStreamOptions,
+} from './services/agent-stream-executor.service';
+import { ActiveStreamRegistry } from './services/active-stream.registry';
 import { HybridRagService } from '../knowledge-base/services/hybrid-rag.service';
-import { DEFAULT_CHAT_BILLING_MODE, DEFAULT_CHAT_MODEL_CREDIT_COST } from '../credits/types/credits.types';
+import {
+  DEFAULT_CHAT_BILLING_MODE,
+  DEFAULT_CHAT_MODEL_CREDIT_COST,
+} from '../credits/types/credits.types';
+import type { FileDataDto } from './dto';
+import type {
+  ChatMessage,
+  CompletionChunk,
+  CompletionUsageStats,
+  MultimodalContent,
+} from './types/completion.types';
+import type { ToolExecutionRecord } from '../tools/types/tools.types';
+
+/** 测试内部方法用的类型视图，避免 any 透传 */
+interface ChatServiceTestable {
+  estimateReserveCredits(params: {
+    messages: ChatMessage[];
+    model: Record<string, unknown>;
+    maxTokens?: number;
+  }): number;
+  estimateActualChargeCredits(
+    usage: Partial<CompletionUsageStats> | undefined,
+    model: Record<string, unknown>,
+  ): number;
+  resolveChatModelConfig(requestedModel?: string): Promise<{
+    modelId: string;
+    billingMode: string;
+    reserveCredits: number;
+  }>;
+  buildMultimodalContent(
+    textContent: string,
+    files?: FileDataDto[],
+  ): string | MultimodalContent[];
+  formatHistoryUserMessage(msg: {
+    userMessage: string;
+    attachments?: Array<{
+      originalName: string;
+      extractedText?: string;
+      charCount?: number;
+    }>;
+  }): string;
+  executeReActStream(
+    params: AgentStreamOptions,
+  ): AsyncIterable<CompletionChunk>;
+}
 
 describe('ChatService - Billing & Credits', () => {
   let service: ChatService;
+  let internalService: ChatServiceTestable;
 
   const mockHybridRagService = {
     search: jest.fn().mockResolvedValue([]),
   };
 
-const mockApprovalManagerService = {
+  const mockApprovalManagerService = {
     createPendingApproval: jest.fn(),
     waitForDecision: jest.fn(),
     resolveApproval: jest.fn(),
@@ -36,11 +86,15 @@ const mockApprovalManagerService = {
     listTools: jest.fn().mockReturnValue([]),
     toOpenAITools: jest.fn().mockReturnValue([]),
     getPlugin: jest.fn(),
-    evaluateToolRisk: jest.fn().mockReturnValue({ level: 'low', requiresApproval: false }),
+    evaluateToolRisk: jest
+      .fn()
+      .mockReturnValue({ level: 'low', requiresApproval: false }),
   };
 
   const mockWebSearchService = {
-    search: jest.fn().mockResolvedValue({ query: '', sources: [], contextPrompt: '' }),
+    search: jest
+      .fn()
+      .mockResolvedValue({ query: '', sources: [], contextPrompt: '' }),
   };
 
   const mockAiClientService = {
@@ -78,7 +132,9 @@ const mockApprovalManagerService = {
   };
 
   const mockFilesService = {
-    prepareChatAttachments: jest.fn().mockResolvedValue({ attachmentIds: [], fileDataForAI: [] }),
+    prepareChatAttachments: jest
+      .fn()
+      .mockResolvedValue({ attachmentIds: [], fileDataForAI: [] }),
     bindAttachmentsToMessage: jest.fn(),
     buildSignedFileUrl: jest.fn(),
   };
@@ -100,7 +156,10 @@ const mockApprovalManagerService = {
       providers: [
         ChatService,
         { provide: AIClientService, useValue: mockAiClientService },
-        { provide: getRepositoryToken(ChatRecord), useValue: mockChatRecordRepo },
+        {
+          provide: getRepositoryToken(ChatRecord),
+          useValue: mockChatRecordRepo,
+        },
         { provide: DataSource, useValue: mockDataSource },
         { provide: UserService, useValue: mockUserService },
         { provide: ChatSessionService, useValue: mockChatSessionService },
@@ -110,12 +169,18 @@ const mockApprovalManagerService = {
         { provide: CreditsService, useValue: mockCreditsService },
         { provide: WebSearchService, useValue: mockWebSearchService },
         { provide: ToolRegistryService, useValue: mockToolRegistryService },
-        { provide: ApprovalManagerService, useValue: mockApprovalManagerService },
+        {
+          provide: ApprovalManagerService,
+          useValue: mockApprovalManagerService,
+        },
+        ActiveStreamRegistry,
+        AgentStreamExecutorService,
         { provide: HybridRagService, useValue: mockHybridRagService },
       ],
     }).compile();
 
     service = module.get<ChatService>(ChatService);
+    internalService = service as unknown as ChatServiceTestable;
   });
 
   describe('estimateReserveCredits & estimateActualChargeCredits', () => {
@@ -129,28 +194,27 @@ const mockApprovalManagerService = {
         maxOutput: 4096,
       };
 
-      const reserve = (service as any).estimateReserveCredits({
+      const reserve = internalService.estimateReserveCredits({
         messages: [{ role: 'user', content: 'Hello' }],
         model: flatModel,
       });
       expect(reserve).toBe(10);
 
-      const actualCredits = (service as any).estimateActualChargeCredits(
+      const actualCredits = internalService.estimateActualChargeCredits(
         { promptTokens: 0, completionTokens: 0 },
         flatModel,
       );
       expect(actualCredits).toBe(10);
 
-      const actualCreditsWithTokens = (service as any).estimateActualChargeCredits(
-        { promptTokens: 500, completionTokens: 1000 },
-        flatModel,
-      );
+      const actualCreditsWithTokens =
+        internalService.estimateActualChargeCredits(
+          { promptTokens: 500, completionTokens: 1000 },
+          flatModel,
+        );
       expect(actualCreditsWithTokens).toBe(10);
 
-      const actualCreditsWithoutUsage = (service as any).estimateActualChargeCredits(
-        undefined,
-        flatModel,
-      );
+      const actualCreditsWithoutUsage =
+        internalService.estimateActualChargeCredits(undefined, flatModel);
       expect(actualCreditsWithoutUsage).toBe(10);
     });
 
@@ -164,13 +228,13 @@ const mockApprovalManagerService = {
         maxOutput: 1000,
       };
 
-      const reserve = (service as any).estimateReserveCredits({
+      const reserve = internalService.estimateReserveCredits({
         messages: [{ role: 'user', content: 'Test prompt' }],
         model: tokenModel,
       });
       expect(reserve).toBe(50);
 
-      const actualCredits = (service as any).estimateActualChargeCredits(
+      const actualCredits = internalService.estimateActualChargeCredits(
         { promptTokens: 1000, completionTokens: 2000 },
         tokenModel,
       );
@@ -190,7 +254,8 @@ const mockApprovalManagerService = {
         provider: { name: 'Grok2API' },
       });
 
-      const config = await (service as any).resolveChatModelConfig('grok-chat-fast');
+      const config =
+        await internalService.resolveChatModelConfig('grok-chat-fast');
       expect(config.billingMode).toBe(DEFAULT_CHAT_BILLING_MODE);
       expect(config.reserveCredits).toBe(DEFAULT_CHAT_MODEL_CREDIT_COST);
       expect(config.modelId).toBe('grok-chat-fast');
@@ -199,7 +264,7 @@ const mockApprovalManagerService = {
 
   describe('Document Context Injection & Multi-turn History', () => {
     it('returns plain string with structured document block when only documents are attached', () => {
-      const content = (service as any).buildMultimodalContent('请总结核心要点', [
+      const content = internalService.buildMultimodalContent('请总结核心要点', [
         {
           base64: '',
           type: 'application/pdf',
@@ -216,7 +281,7 @@ const mockApprovalManagerService = {
     });
 
     it('returns multimodal array when both image and document are attached', () => {
-      const content = (service as any).buildMultimodalContent('对比图与文档', [
+      const content = internalService.buildMultimodalContent('对比图与文档', [
         {
           base64: 'data:image/webp;base64,AAAA',
           type: 'image/webp',
@@ -232,18 +297,25 @@ const mockApprovalManagerService = {
       ]);
 
       expect(Array.isArray(content)).toBe(true);
+      if (!Array.isArray(content)) {
+        throw new Error('预期应返回多模态数组');
+      }
       expect(content).toHaveLength(2);
       expect(content[0]).toEqual({
         type: 'image_url',
         image_url: { url: 'data:image/webp;base64,AAAA', detail: 'auto' },
       });
       expect(content[1].type).toBe('text');
-      expect(content[1].text).toContain('【附件文档：notes.md（共 7 字符）】');
-      expect(content[1].text).toContain('营收增长 50%');
+      if (content[1].type === 'text') {
+        expect(content[1].text).toContain(
+          '【附件文档：notes.md（共 7 字符）】',
+        );
+        expect(content[1].text).toContain('营收增长 50%');
+      }
     });
 
     it('mounts historical document attachments automatically in formatHistoryUserMessage', () => {
-      const formatted = (service as any).formatHistoryUserMessage({
+      const formatted = internalService.formatHistoryUserMessage({
         userMessage: '分析这份代码',
         attachments: [
           {
@@ -276,42 +348,59 @@ const mockApprovalManagerService = {
       });
 
       let callCount = 0;
-      mockAiClientService.createStreamChatCompletion.mockImplementation(async () => {
+      mockAiClientService.createStreamChatCompletion.mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
-          return (async function* () {
-            yield {
-              delta: {
-                tool_calls: [
-                  {
-                    index: 0,
-                    id: 'call_1',
-                    function: { name: 'calculator', arguments: '{"expression":"12 * 12"}' },
-                  },
-                ],
-              },
-            };
-          })();
-        } else {
-          return (async function* () {
+          return Promise.resolve(
+            (async function* () {
+              await Promise.resolve();
+              yield {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_1',
+                      function: {
+                        name: 'calculator',
+                        arguments: '{"expression":"12 * 12"}',
+                      },
+                    },
+                  ],
+                },
+              };
+            })(),
+          );
+        }
+        return Promise.resolve(
+          (async function* () {
+            await Promise.resolve();
             yield {
               type: 'answer_delta',
               delta: { content: '计算结果是 144' },
             };
             yield {
               finish_reason: 'stop',
-              usage: { promptTokens: 30, completionTokens: 10, totalTokens: 40 },
+              usage: {
+                promptTokens: 30,
+                completionTokens: 10,
+                totalTokens: 40,
+              },
             };
-          })();
-        }
+          })(),
+        );
       });
 
-      const toolRecords: any[] = [];
-      const chunks: any[] = [];
-      const stream = (service as any).executeReActStream({
+      const toolRecords: ToolExecutionRecord[] = [];
+      const chunks: CompletionChunk[] = [];
+      const stream = internalService.executeReActStream({
         modelId: 'gpt-4o',
         initialMessages: [{ role: 'user', content: '计算 12 * 12' }],
-        tools: [{ type: 'function', function: { name: 'calculator' } }],
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'calculator', description: '', parameters: {} },
+          },
+        ],
         context: { userId: 'u1', sessionId: 's1', userMessage: '计算 12 * 12' },
         toolExecutionRecords: toolRecords,
       });
@@ -325,15 +414,14 @@ const mockApprovalManagerService = {
       const answerChunk = chunks.find((c) => c.type === 'answer_delta');
 
       expect(startChunk).toBeDefined();
-      expect(startChunk.toolCall.name).toBe('calculator');
+      expect(startChunk?.toolCall?.name).toBe('calculator');
       expect(resultChunk).toBeDefined();
-      expect(resultChunk.toolCall.status).toBe('success');
-      expect(resultChunk.toolCall.output).toBe(144);
+      expect(resultChunk?.toolCall?.status).toBe('success');
+      expect(resultChunk?.toolCall?.output).toBe(144);
       expect(answerChunk).toBeDefined();
-      expect(answerChunk.delta.content).toBe('计算结果是 144');
+      expect(answerChunk?.delta?.content).toBe('计算结果是 144');
       expect(toolRecords).toHaveLength(1);
       expect(toolRecords[0].name).toBe('calculator');
     });
   });
 });
-
