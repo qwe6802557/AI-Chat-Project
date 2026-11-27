@@ -112,7 +112,9 @@ export class KnowledgeVisionService {
       ? `\n补充参考文本（同页文本层提取，供术语对齐参考）：\n${params.pageTextHint.trim().slice(0, 600)}`
       : '';
 
-    const pageInfo = params.pageNumber ? `第 ${params.pageNumber} 页` : '独立图像';
+    const pageInfo = params.pageNumber
+      ? `第 ${params.pageNumber} 页`
+      : '独立图像';
     const userPrompt = [
       `请分析来源文档《${params.fileName}》（${pageInfo}）中的图像内容，并严格输出单个 JSON 对象（不要输出多余解释）：`,
       '{"visualType":"chart|table|diagram|screenshot|document_page|photo","title":"不超过40字标题","summary":"详细描述核心结论、指标趋势、结构关系或关键实体","ocrText":"完整转录图像中的关键文字、数字、坐标轴标签与图例","tableMarkdown":"若包含表格或对比数据请转为标准 Markdown 表格，否则为空字符串"}',
@@ -142,12 +144,16 @@ export class KnowledgeVisionService {
       },
     ];
 
+    /* glm-4v-flash 限制 max_tokens ∈ [1, 1024]，其他视觉模型保持 2048 */
+    const maxTokens =
+      modelId.trim().toLowerCase() === 'glm-4v-flash' ? 1024 : 2048;
+
     const completion = await this.aiClientService.createChatCompletion(
       modelId,
       messages,
       {
         temperature: 0.1,
-        maxTokens: 2048,
+        maxTokens,
         abortSignal: AbortSignal.timeout(45000),
       },
     );
