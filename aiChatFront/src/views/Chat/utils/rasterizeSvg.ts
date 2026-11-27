@@ -40,9 +40,17 @@ export async function rasterizeSvgToPng(
       const viewBox = svgEl.getAttribute('viewBox')
       if (viewBox) {
         const parts = viewBox.split(/[\s,]+/).map(Number)
-        if (parts.length >= 4 && !isNaN(parts[2]) && !isNaN(parts[3])) {
-          width = parts[2]
-          height = parts[3]
+        const vbWidth = parts[2]
+        const vbHeight = parts[3]
+        if (
+          parts.length >= 4 &&
+          vbWidth !== undefined &&
+          vbHeight !== undefined &&
+          !isNaN(vbWidth) &&
+          !isNaN(vbHeight)
+        ) {
+          width = vbWidth
+          height = vbHeight
         }
       }
     }

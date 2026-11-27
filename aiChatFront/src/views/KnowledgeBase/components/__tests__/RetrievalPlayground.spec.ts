@@ -149,7 +149,7 @@ describe('RetrievalPlayground', () => {
     await flushPromises()
 
     expect(wrapper.find('.stub-visual-img').attributes('src')).toBe(
-      '/knowledge-bases/assets/asset-5?expires=999&signature=sig',
+      'http://localhost:3000/knowledge-bases/assets/asset-5?expires=999&signature=sig',
     )
     expect(wrapper.text()).toContain('数据图表')
     expect(wrapper.text()).toContain('P.5')

@@ -49,15 +49,18 @@ export function computeLineDiff(oldText: string, newText: string): DiffResult {
   const midOld = oldLines.slice(start, oldEnd + 1)
   const midNew = newLines.slice(start, newEnd + 1)
   const dp: number[][] = Array.from({ length: midOld.length + 1 }, () =>
-    new Array(midNew.length + 1).fill(0)
+    new Array<number>(midNew.length + 1).fill(0)
   )
+  const getDpCell = (row: number, col: number): number => dp[row]?.[col] ?? 0
 
   for (let i = 0; i < midOld.length; i++) {
+    const targetRow = dp[i + 1]
+    if (!targetRow) continue
     for (let j = 0; j < midNew.length; j++) {
       if (midOld[i] === midNew[j]) {
-        dp[i + 1][j + 1] = dp[i][j] + 1
+        targetRow[j + 1] = getDpCell(i, j) + 1
       } else {
-        dp[i + 1][j + 1] = Math.max(dp[i + 1][j], dp[i][j + 1])
+        targetRow[j + 1] = Math.max(getDpCell(i + 1, j), getDpCell(i, j + 1))
       }
     }
   }
@@ -73,7 +76,7 @@ export function computeLineDiff(oldText: string, newText: string): DiffResult {
       type: 'unchanged',
       oldLineNumber: i + 1,
       newLineNumber: i + 1,
-      content: oldLines[i],
+      content: oldLines[i] ?? '',
     })
     unchangedCount++
   }
@@ -88,24 +91,24 @@ export function computeLineDiff(oldText: string, newText: string): DiffResult {
         type: 'unchanged',
         oldLineNumber: start + i,
         newLineNumber: start + j,
-        content: midOld[i - 1],
+        content: midOld[i - 1] ?? '',
       })
       unchangedCount++
       i--
       j--
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+    } else if (j > 0 && (i === 0 || getDpCell(i, j - 1) >= getDpCell(i - 1, j))) {
       midDiff.unshift({
         type: 'added',
         newLineNumber: start + j,
-        content: midNew[j - 1],
+        content: midNew[j - 1] ?? '',
       })
       addedCount++
       j--
-    } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
+    } else if (i > 0 && (j === 0 || getDpCell(i, j - 1) < getDpCell(i - 1, j))) {
       midDiff.unshift({
         type: 'removed',
         oldLineNumber: start + i,
-        content: midOld[i - 1],
+        content: midOld[i - 1] ?? '',
       })
       removedCount++
       i--
@@ -122,7 +125,7 @@ export function computeLineDiff(oldText: string, newText: string): DiffResult {
       type: 'unchanged',
       oldLineNumber: oldIdx + 1,
       newLineNumber: newIdx + 1,
-      content: oldLines[oldIdx],
+      content: oldLines[oldIdx] ?? '',
     })
     unchangedCount++
   }
