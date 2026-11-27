@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AIClientService } from '../../chat/services/ai-client.service';
 import type { ChatMessage } from '../../chat/types/completion.types';
 import { extractJsonFromLlmOutput } from '../../memory/utils/memory-json.util';
+import { resolveEffectiveSupportsVision } from '../../chat/utils/vision-profile.util';
 
 export type VisualContentType =
   | 'chart'
@@ -80,7 +81,12 @@ export class KnowledgeVisionService {
     }
 
     const visionModels = activeChatModels.filter((m) =>
-      Boolean(m.supportsVision),
+      resolveEffectiveSupportsVision({
+        providerName: m.provider?.name,
+        modelId: m.modelId,
+        category: m.category,
+        supportsVision: m.supportsVision,
+      }),
     );
     if (visionModels.length === 0) {
       throw new Error(

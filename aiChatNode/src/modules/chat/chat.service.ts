@@ -41,6 +41,7 @@ import {
   extractAssistantContent,
   type ExtractedAssistantReasoning,
 } from './utils/assistant-content.util';
+import { resolveEffectiveSupportsVision } from './utils/vision-profile.util';
 import { WebSearchService } from '../web-search/web-search.service';
 import type { SearchSource, WebSearchResult } from '../web-search/types/web-search.types';
 import { ToolRegistryService } from '../tools/tools.registry.service';
@@ -165,7 +166,12 @@ export class ChatService {
       outputPrice: Number(model.outputPrice || 0),
       maxOutput: Number(model.maxOutput || 0),
       providerName: model.provider?.name || null,
-      supportsVision: Boolean(model.supportsVision),
+      supportsVision: resolveEffectiveSupportsVision({
+        providerName: model.provider?.name,
+        modelId: model.modelId,
+        category: model.category,
+        supportsVision: model.supportsVision,
+      }),
     };
   }
 

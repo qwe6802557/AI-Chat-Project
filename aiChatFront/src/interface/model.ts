@@ -28,6 +28,8 @@ export interface BackendAiModel {
   reasoningIntegration?: 'responses_summary' | 'anthropic_blocks' | 'inline_tag' | 'none'
   reasoningBadgeLabel?: string
   supportsVision?: boolean
+  visionCapability?: 'supported' | 'unsupported'
+  visionUnsupportedReason?: string
   providerId: string
   provider?: BackendAiProvider
 }

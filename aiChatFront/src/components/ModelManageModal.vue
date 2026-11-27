@@ -91,13 +91,17 @@
           <!-- 视觉能力开关 -->
           <template v-else-if="column.key === 'supportsVision'">
             <a-switch
-              v-if="(record.category || 'chat') === 'chat'"
+              v-if="isVisionCapable(record)"
               size="small"
               :checked="Boolean(record.supportsVision)"
               :loading="updatingIds.has(record.id)"
               @change="(checked: boolean | string | number) => handleToggleVision(record, Boolean(checked))"
             />
-            <span v-else class="untested-text">-</span>
+            <span
+              v-else
+              class="untested-text"
+              :title="record.visionUnsupportedReason || '当前模型不支持视觉图像输入'"
+            >-</span>
           </template>
 
           <!-- 启用状态开关 -->
@@ -346,7 +350,17 @@ const handleToggleActive = async (record: BackendAiModel, newActive: boolean) =>
   }
 }
 
+/** 判断当前模型在接入能力上是否支持切换视觉开关 */
+const isVisionCapable = (record: BackendAiModel): boolean => {
+  if ((record.category || 'chat') !== 'chat') return false
+  if (record.visionCapability) {
+    return record.visionCapability === 'supported'
+  }
+  return Boolean(record.supportsVision)
+}
+
 const handleToggleVision = async (record: BackendAiModel, nextVision: boolean) => {
+  if (!isVisionCapable(record)) return
   updatingIds.add(record.id)
   const previousVision = Boolean(record.supportsVision)
   record.supportsVision = nextVision
