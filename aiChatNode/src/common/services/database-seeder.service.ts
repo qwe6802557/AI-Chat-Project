@@ -422,6 +422,7 @@ export class DatabaseSeederService implements OnModuleInit {
         sortOrder: 8,
         isActive: true,
         supportsVision: true,
+        maxOutput: 1024,
       },
     ];
 
@@ -433,7 +434,7 @@ export class DatabaseSeederService implements OnModuleInit {
         inputPrice: 0,
         outputPrice: 0,
         contextLength: 128000,
-        maxOutput: 4096,
+        maxOutput: model.maxOutput ?? 4096,
         availability: 99.9,
         tps: 60,
         description: model.description,

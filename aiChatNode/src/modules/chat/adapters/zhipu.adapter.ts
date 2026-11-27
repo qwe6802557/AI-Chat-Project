@@ -55,6 +55,26 @@ export class ZhipuAdapter implements IProviderAdapter {
   }
 
   /**
+   * 按模型能力约束解析 max_tokens（glm-4v-flash 限制在 [1, 1024]）
+   */
+  private resolveMaxTokens(model: string, requestedMaxTokens?: number): number {
+    if (model.trim().toLowerCase() === 'glm-4v-flash') {
+      const glm4vFlashMax = 1024;
+      if (
+        typeof requestedMaxTokens !== 'number' ||
+        Number.isNaN(requestedMaxTokens)
+      ) {
+        return glm4vFlashMax;
+      }
+      return Math.min(
+        glm4vFlashMax,
+        Math.max(1, Math.floor(requestedMaxTokens)),
+      );
+    }
+    return requestedMaxTokens ?? 4096;
+  }
+
+  /**
    * 创建非流式聊天补全
    */
   async createChatCompletion(
@@ -65,15 +85,20 @@ export class ZhipuAdapter implements IProviderAdapter {
     try {
       this.logger.log(`调用 ${this.providerName} API - 模型: ${model}`);
 
+      const toolChoice =
+        options?.toolChoice as OpenAI.Chat.ChatCompletionToolChoiceOption;
+
       const completion = await this.getClient().chat.completions.create(
         {
           model,
           messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
           temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? 4096,
+          max_tokens: this.resolveMaxTokens(model, options?.maxTokens),
           stream: false,
-          ...(options?.tools?.length ? { tools: options.tools } : {}),
-          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
+          ...(options?.tools?.length
+            ? { tools: options.tools as OpenAI.Chat.ChatCompletionTool[] }
+            : {}),
+          ...(toolChoice ? { tool_choice: toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -92,6 +117,12 @@ export class ZhipuAdapter implements IProviderAdapter {
     model: string,
     options?: CompletionOptions,
   ): Promise<AsyncIterable<CompletionChunk>> {
+    const toolChoice =
+      options?.toolChoice as OpenAI.Chat.ChatCompletionToolChoiceOption;
+    const tools = options?.tools?.length
+      ? (options.tools as OpenAI.Chat.ChatCompletionTool[])
+      : undefined;
+
     try {
       this.logger.log(`调用 ${this.providerName} 流式 API - 模型: ${model}`);
 
@@ -100,13 +131,13 @@ export class ZhipuAdapter implements IProviderAdapter {
           model,
           messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
           temperature: options?.temperature ?? 0.7,
-          max_tokens: options?.maxTokens ?? 4096,
+          max_tokens: this.resolveMaxTokens(model, options?.maxTokens),
           stream: true,
           stream_options: {
             include_usage: true,
           },
-          ...(options?.tools?.length ? { tools: options.tools } : {}),
-          ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
+          ...(tools ? { tools } : {}),
+          ...(toolChoice ? { tool_choice: toolChoice } : {}),
         },
         options?.abortSignal ? { signal: options.abortSignal } : undefined,
       );
@@ -127,10 +158,10 @@ export class ZhipuAdapter implements IProviderAdapter {
             model,
             messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
             temperature: options?.temperature ?? 0.7,
-            max_tokens: options?.maxTokens ?? 4096,
+            max_tokens: this.resolveMaxTokens(model, options?.maxTokens),
             stream: true,
-            ...(options?.tools?.length ? { tools: options.tools } : {}),
-            ...(options?.toolChoice ? { tool_choice: options.toolChoice } : {}),
+            ...(tools ? { tools } : {}),
+            ...(toolChoice ? { tool_choice: toolChoice } : {}),
           },
           options?.abortSignal ? { signal: options.abortSignal } : undefined,
         );
@@ -177,11 +208,13 @@ export class ZhipuAdapter implements IProviderAdapter {
     }
   }
 
-  private transformResponse(completion: any): CompletionResponse {
+  private transformResponse(
+    completion: OpenAI.Chat.Completions.ChatCompletion,
+  ): CompletionResponse {
     const firstChoice = completion.choices?.[0];
-    const usage = completion.usage || {};
-    const promptTokens = usage.prompt_tokens || 0;
-    const completionTokens = usage.completion_tokens || 0;
+    const usage = completion.usage;
+    const promptTokens = usage?.prompt_tokens || 0;
+    const completionTokens = usage?.completion_tokens || 0;
 
     return {
       content:
@@ -192,19 +225,19 @@ export class ZhipuAdapter implements IProviderAdapter {
       usage: {
         promptTokens,
         completionTokens,
-        totalTokens: usage.total_tokens || promptTokens + completionTokens,
+        totalTokens: usage?.total_tokens || promptTokens + completionTokens,
       },
       toolCalls: firstChoice?.message?.tool_calls,
     };
   }
 
   private async *transformStream(
-    stream: AsyncIterable<any>,
+    stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
   ): AsyncIterable<CompletionChunk> {
     for await (const chunk of stream) {
       const firstChoice = chunk.choices?.[0];
       const delta = firstChoice?.delta;
-      const usage = chunk.usage || {};
+      const usage = chunk.usage;
 
       yield {
         delta: {
@@ -213,7 +246,7 @@ export class ZhipuAdapter implements IProviderAdapter {
           tool_calls: delta?.tool_calls,
         },
         finish_reason: firstChoice?.finish_reason,
-        usage: chunk.usage
+        usage: usage
           ? {
               promptTokens: usage.prompt_tokens || 0,
               completionTokens: usage.completion_tokens || 0,
