@@ -110,7 +110,10 @@ class DocumentItemTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 3.0),
-                    Row(
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 4.0,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           document.formattedSize,
@@ -120,7 +123,6 @@ class DocumentItemTile extends StatelessWidget {
                           ),
                         ),
                         if (document.isCompleted) ...[
-                          const SizedBox(width: 8.0),
                           Container(
                             width: 3.0,
                             height: 3.0,
@@ -129,7 +131,6 @@ class DocumentItemTile extends StatelessWidget {
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: 8.0),
                           Text(
                             '${document.chunkCount} 个切片',
                             style: const TextStyle(
@@ -138,6 +139,7 @@ class DocumentItemTile extends StatelessWidget {
                             ),
                           ),
                         ],
+                        if (document.isProcessing) _buildStatusIndicator(),
                       ],
                     ),
                     if (document.isProcessing) ...[
@@ -170,8 +172,10 @@ class DocumentItemTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8.0),
-              _buildStatusIndicator(),
+              if (!document.isProcessing) ...[
+                const SizedBox(width: 8.0),
+                _buildStatusIndicator(),
+              ],
               if (document.isFailed && onRetry != null)
                 IconButton(
                   tooltip: '重新解析',
@@ -181,6 +185,8 @@ class DocumentItemTile extends StatelessWidget {
                     size: 18.0,
                   ),
                   onPressed: onRetry,
+                  constraints: const BoxConstraints(minWidth: 34.0, minHeight: 34.0),
+                  padding: const EdgeInsets.all(4.0),
                   splashRadius: 20.0,
                 ),
               const SizedBox(width: 4.0),
@@ -191,6 +197,8 @@ class DocumentItemTile extends StatelessWidget {
                   size: 18.0,
                 ),
                 onPressed: onDelete,
+                constraints: const BoxConstraints(minWidth: 34.0, minHeight: 34.0),
+                padding: const EdgeInsets.all(4.0),
                 splashRadius: 20.0,
               ),
             ],
@@ -223,12 +231,16 @@ class DocumentItemTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6.0),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11.0,
-                color: StitchTokens.primary,
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11.0,
+                  color: StitchTokens.primary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
