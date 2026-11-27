@@ -8,7 +8,7 @@ describe('vision-profile.util', () => {
     expect(
       resolveModelVisionProfile({
         providerName: 'Gemini',
-        modelId: 'gemini-3.8-flash-medium',
+        modelId: 'gemini-2.5-flash',
         category: 'chat',
       }),
     ).toEqual({ capability: 'supported' });
@@ -89,7 +89,7 @@ describe('vision-profile.util', () => {
       expect(
         resolveModelVisionProfile({
           providerName: 'Gemini',
-          modelId: 'gemini-3.8-flash-medium',
+          modelId: 'gemini-2.5-flash',
           category,
         }).capability,
       ).toBe('unsupported');

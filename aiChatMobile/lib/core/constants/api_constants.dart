@@ -68,7 +68,7 @@ class ApiConstants {
 
   // 业务默认值与阈值
   static const String appVersion = '1.3.0';
-  static const String defaultChatModel = 'gemini-3.8-flash-medium';
+  static const String defaultChatModel = 'spark-x2.6-4b';
   static const int chatMessageCost = 10;
   static const int imageGenerationCost = 100;
 

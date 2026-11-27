@@ -25,7 +25,6 @@ describe('ModelSelectorPopover', () => {
           },
           ThunderboltOutlined: true,
           DownOutlined: true,
-          CheckCircleFilled: true,
           CheckOutlined: true,
         },
       },
@@ -50,9 +49,9 @@ describe('ModelSelectorPopover', () => {
 
   it('存在启用的 Gemini 模型时展示 Gemini 系列与其它模型切换 Tab 并支持动态显隐', async () => {
     const wrapper = createMount({
-      selectedModel: 'gemini-3.8-flash-medium',
+      selectedModel: 'gemini-2.5-flash',
       modelOptions: [
-        { label: 'Gemini 3.8 Flash (Medium 思考)', value: 'gemini-3.8-flash-medium', reserveCredits: 10 },
+        { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash', reserveCredits: 10 },
         { label: 'Grok Chat Fast', value: 'grok-chat-fast', reserveCredits: 10 },
       ],
     })
@@ -60,6 +59,7 @@ describe('ModelSelectorPopover', () => {
     expect(wrapper.find('.category-segmented-container').exists()).toBe(true)
     expect(wrapper.find('.gemini-section').exists()).toBe(true)
     expect(wrapper.text()).toContain('Gemini 系列')
+    expect(wrapper.text()).toContain('Gemini 2.5 Flash')
     expect(wrapper.text()).toContain('其它模型')
 
     await wrapper.findAll('.segmented-pill')[1]!.trigger('click')

@@ -147,7 +147,7 @@ export class DatabaseSeederService implements OnModuleInit {
     //   summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     // }
 
-    // ===== Gemini (Google) 供应商及模型种子 =====
+    // ===== Gemini (Google) 供应商通道（预留，暂不下发淘汰型号种子，后续接入新模型时按需补充）=====
     const geminiProviderResult = await this.ensureProvider({
       name: 'Gemini',
       description: 'Google Gemini 美区原生高吞吐大模型通道',
@@ -157,77 +157,25 @@ export class DatabaseSeederService implements OnModuleInit {
       geminiProviderResult.created ? 'createdProviders' : 'skippedProviders'
     ] += 1;
 
-    const GEMINI_CHAT_MODELS = [
-      {
-        modelId: 'gemini-3.8-flash-low',
-        modelName: 'Gemini 3.8 Flash (Low 思考)',
-        description: 'Google Gemini 3.8 Flash 极速思考版，毫秒级快速响应',
-        creditCost: 10,
-        sortOrder: 1,
-        isActive: true,
-      },
-      {
-        modelId: 'gemini-3.8-flash-medium',
-        modelName: 'Gemini 3.8 Flash (Medium 思考)',
-        description: 'Google Gemini 3.8 Flash 均衡思考版，兼顾响应与逻辑深度',
-        creditCost: 10,
-        sortOrder: 2,
-        isActive: true,
-      },
-      {
-        modelId: 'gemini-3.8-flash-high',
-        modelName: 'Gemini 3.8 Flash (High 思考)',
-        description: 'Google Gemini 3.8 Flash 深度思考版，适合复杂代码与严谨逻辑',
-        creditCost: 10,
-        sortOrder: 3,
-        isActive: true,
-      },
-      {
-        modelId: 'gemini-4-argon-low',
-        modelName: 'Gemini 4 Argon (Low 思考)',
-        description: 'Google Gemini 4 Argon 前沿旗舰轻思考版，高智商极速问答',
-        creditCost: 20,
-        sortOrder: 4,
-        isActive: true,
-      },
-      {
-        modelId: 'gemini-4-argon-medium',
-        modelName: 'Gemini 4 Argon (Medium 思考)',
-        description: 'Google Gemini 4 Argon 前沿旗舰深度思考版，复杂架构与全栈推导',
-        creditCost: 20,
-        sortOrder: 5,
-        isActive: true,
-      },
-      {
-        modelId: 'gemini-4-argon-high',
-        modelName: 'Gemini 4 Argon (High 思考)',
-        description: 'Google Gemini 4 Argon 极限深思旗舰版，复杂系统级论证与深度推理',
-        creditCost: 20,
-        sortOrder: 6,
-        isActive: true,
-      },
+    // 彻底下架并移除官方即将淘汰的 Gemini 3.8 Flash 与 Gemini 4 Argon 模型记录
+    const REMOVED_GEMINI_MODEL_IDS = [
+      'gemini-3.8-flash-low',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-high',
+      'gemini-4-argon-low',
+      'gemini-4-argon-medium',
+      'gemini-4-argon-high',
     ];
-
-    for (const model of GEMINI_CHAT_MODELS) {
-      const result = await this.ensureModel({
-        providerId: geminiProviderResult.provider.id,
-        modelName: model.modelName,
-        modelId: model.modelId,
-        inputPrice: 0,
-        outputPrice: 0,
-        contextLength: 1048576,
-        maxOutput: 65536,
-        availability: 99.9,
-        tps: 80,
-        description: model.description,
-        billingMode: DEFAULT_CHAT_BILLING_MODE,
-        creditCost: model.creditCost,
-        sortOrder: model.sortOrder,
-        isActive: model.isActive,
-        category: 'chat',
-        supportsVision: true,
-      });
-      summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
+    for (const removedId of REMOVED_GEMINI_MODEL_IDS) {
+      try {
+        const existing = await this.aiModelService.findByModelIdOrNull(removedId);
+        if (existing) {
+          await this.aiModelService.remove(existing.id);
+          this.logger.log(`已彻底下架并移除淘汰模型: ${removedId}`);
+        }
+      } catch (err) {
+        this.logger.warn(`移除淘汰模型 ${removedId} 失败: ${err}`);
+      }
     }
 
     // ===== Grok2API 供应商及模型种子 =====
@@ -689,7 +637,7 @@ export class DatabaseSeederService implements OnModuleInit {
     try {
       const allModels = await this.aiModelService.findAll();
       for (const m of allModels) {
-        if ((m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-lite' && m.modelId !== 'grok-imagine-image-2.0')) && !m.modelId.startsWith('spark-') && !m.modelId.startsWith('xfyun-') && !m.modelId.startsWith('gemini-4-argon')) {
+        if ((m.category === 'chat' || (!m.category && m.modelId !== 'grok-imagine-image-lite' && m.modelId !== 'grok-imagine-image-2.0')) && !m.modelId.startsWith('spark-') && !m.modelId.startsWith('xfyun-')) {
           if (m.creditCost !== DEFAULT_CHAT_MODEL_CREDIT_COST || m.billingMode !== DEFAULT_CHAT_BILLING_MODE) {
             await this.aiModelService.update(m.id, {
               creditCost: DEFAULT_CHAT_MODEL_CREDIT_COST,
@@ -708,7 +656,7 @@ export class DatabaseSeederService implements OnModuleInit {
       );
       if (!hasActiveDefaultChat) {
         const defaultCandidate =
-          allModels.find((m) => m.modelId === 'gemini-3.8-flash-medium' && m.isActive) ||
+          allModels.find((m) => m.modelId === 'spark-x2.6-4b' && m.isActive) ||
           allModels.find((m) => m.modelId === 'grok-chat-fast' && m.isActive) ||
           allModels.find((m) => m.category === 'chat' && m.isActive);
         if (defaultCandidate) {

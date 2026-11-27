@@ -51,7 +51,7 @@ describe('MemoryLlmService', () => {
     const service = new MemoryLlmService(
       aiClientMock,
       createConfigMock({
-        MEMORY_EXTRACTOR_MODEL: 'gemini-3.8-flash-low',
+        MEMORY_EXTRACTOR_MODEL: 'deprecated-disabled-model',
         DEFAULT_CHAT_MODEL: 'spark-x2.6-4b',
       }),
     );

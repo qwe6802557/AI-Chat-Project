@@ -96,18 +96,12 @@ class ModelSwitcherBottomSheet extends StatefulWidget {
 
   /// 格式化模型名称显示（精炼且去 AI 味）
   static String formatModelLabel(String modelId) {
-    if (modelId.startsWith('gemini-3.8-flash')) {
-      final effort = modelId.contains('low')
-          ? 'Low'
-          : (modelId.contains('high') ? 'High' : 'Med');
-      return 'Gemini 3.8 Flash · $effort';
-    } else if (modelId.startsWith('gemini-4-argon')) {
-      final effort = modelId.contains('low')
-          ? 'Low'
-          : (modelId.contains('high') ? 'High' : 'Med');
-      return 'Gemini 4 Argon · $effort';
-    }
     return modelId;
+  }
+
+  /// 判定模型 ID 是否归属通用 Gemini 系列（预留后续接入任意新 Gemini 模型）
+  static bool isGeminiModelId(String modelId) {
+    return modelId.toLowerCase().startsWith('gemini-');
   }
 
   static Future<void> show(
@@ -135,78 +129,41 @@ class ModelSwitcherBottomSheet extends StatefulWidget {
 
 class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
   late ModelTab _activeTab;
-  late String _geminiBaseModel;
-  late String _thinkingEffort;
+  late String _selectedGeminiModel;
   late String _selectedOtherModel;
   String _selectedCategory = '全部模型';
 
   List<ModelInfo> get _effectiveModels => widget.availableModels ?? kAvailableChatModels;
 
   List<ModelInfo> get _geminiModels =>
-      _effectiveModels.where((m) => m.id.startsWith('gemini-')).toList();
+      _effectiveModels.where((m) => ModelSwitcherBottomSheet.isGeminiModelId(m.id)).toList();
 
   List<ModelInfo> get _otherModels =>
-      _effectiveModels.where((m) => !m.id.startsWith('gemini-')).toList();
+      _effectiveModels.where((m) => !ModelSwitcherBottomSheet.isGeminiModelId(m.id)).toList();
 
   bool get _hasGeminiModels => _geminiModels.isNotEmpty;
 
-  bool get _hasFlashFamily =>
-      _geminiModels.any((m) => m.id.startsWith('gemini-3.8-flash'));
-
-  bool get _hasArgonFamily =>
-      _geminiModels.any((m) => m.id.startsWith('gemini-4-argon'));
-
-  int get _flashCost {
-    final matched = _geminiModels.where((m) => m.id.startsWith('gemini-3.8-flash'));
-    return matched.isNotEmpty ? matched.first.cost : 10;
-  }
-
-  int get _argonCost {
-    final matched = _geminiModels.where((m) => m.id.startsWith('gemini-4-argon'));
-    return matched.isNotEmpty ? matched.first.cost : 20;
-  }
-
-  List<String> get _availableEfforts {
-    const allEfforts = ['low', 'medium', 'high'];
-    final available = allEfforts
-        .where((e) => _geminiModels.any((m) => m.id == '$_geminiBaseModel-$e'))
-        .toList();
-    return available.isNotEmpty ? available : allEfforts;
-  }
-
   void _syncSelectionWithAvailableModels({bool initial = false}) {
     final model = widget.currentModel;
+    final isCurrentGemini = ModelSwitcherBottomSheet.isGeminiModelId(model);
 
     if (initial) {
-      _geminiBaseModel = model.contains('gemini-4-argon')
-          ? 'gemini-4-argon'
-          : 'gemini-3.8-flash';
-      if (model.endsWith('-low')) {
-        _thinkingEffort = 'low';
-      } else if (model.endsWith('-high')) {
-        _thinkingEffort = 'high';
-      } else {
-        _thinkingEffort = 'medium';
-      }
-      _selectedOtherModel = model.isNotEmpty && !model.startsWith('gemini-')
+      _selectedGeminiModel = isCurrentGemini && _geminiModels.any((m) => m.id == model)
+          ? model
+          : (_geminiModels.isNotEmpty ? _geminiModels.first.id : '');
+      _selectedOtherModel = model.isNotEmpty && !isCurrentGemini
           ? model
           : (_otherModels.isNotEmpty ? _otherModels.first.id : 'grok-chat-fast');
-      _activeTab = (_hasGeminiModels && model.startsWith('gemini-'))
+      _activeTab = (_hasGeminiModels && isCurrentGemini)
           ? ModelTab.gemini
           : ModelTab.others;
     }
 
     if (!_hasGeminiModels) {
       _activeTab = ModelTab.others;
-    } else {
-      if (_geminiBaseModel == 'gemini-4-argon' && !_hasArgonFamily && _hasFlashFamily) {
-        _geminiBaseModel = 'gemini-3.8-flash';
-      } else if (_geminiBaseModel == 'gemini-3.8-flash' && !_hasFlashFamily && _hasArgonFamily) {
-        _geminiBaseModel = 'gemini-4-argon';
-      }
-      if (!_availableEfforts.contains(_thinkingEffort)) {
-        _thinkingEffort = _availableEfforts.first;
-      }
+      _selectedGeminiModel = '';
+    } else if (!_geminiModels.any((m) => m.id == _selectedGeminiModel)) {
+      _selectedGeminiModel = _geminiModels.first.id;
     }
 
     if (_otherModels.isNotEmpty && !_otherModels.any((m) => m.id == _selectedOtherModel)) {
@@ -231,13 +188,8 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
 
   String get _currentFinalModel {
     if (_hasGeminiModels && _activeTab == ModelTab.gemini) {
-      final exactId = '$_geminiBaseModel-$_thinkingEffort';
-      if (_geminiModels.any((m) => m.id == exactId)) {
-        return exactId;
-      }
-      final fallback = _geminiModels.where((m) => m.id.startsWith('$_geminiBaseModel-'));
-      if (fallback.isNotEmpty) {
-        return fallback.first.id;
+      if (_geminiModels.any((m) => m.id == _selectedGeminiModel)) {
+        return _selectedGeminiModel;
       }
       return _geminiModels.first.id;
     }
@@ -488,14 +440,14 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
     );
   }
 
+  /// 动态渲染后端已启用的 Gemini 系列模型列表（与具体版本号解耦）
   Widget _buildGeminiContent() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 14.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 提示条
-          Container(
+    final models = _geminiModels;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 6.0),
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
             decoration: BoxDecoration(
               color: StitchTokens.thinkingBg,
@@ -508,260 +460,31 @@ class _ModelSwitcherBottomSheetState extends State<ModelSwitcherBottomSheet> {
                 SizedBox(width: 8.0),
                 Expanded(
                   child: Text(
-                    '已接入 Google 原生推理协议，全量开放多模态感知与动态思考强度微调',
+                    '已同步服务端启用的 Google Gemini 系列多模态模型',
                     style: TextStyle(fontSize: 11.5, color: StitchTokens.thinkingText, height: 1.3),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14.0),
-          const Text(
-            '选择模型型号',
-            style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.w700, color: StitchTokens.onSurface),
+        ),
+        Flexible(
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+            itemCount: models.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8.0),
+            itemBuilder: (context, index) {
+              final model = models[index];
+              return ModelInfoCard(
+                model: model,
+                isSelected: _selectedGeminiModel == model.id,
+                onTap: () => setState(() => _selectedGeminiModel = model.id),
+              );
+            },
           ),
-          const SizedBox(height: 8.0),
-          // 仅渲染已启用的 Gemini 模型卡片
-          if (_hasFlashFamily)
-            _buildGeminiModelCard(
-              baseId: 'gemini-3.8-flash',
-              title: 'Gemini 3.8 Flash',
-              badge: '推荐日常',
-              desc: '新一代高响应极速模型，毫秒级起流，多模态图文兼修，擅长日常问答、搜索与快速编码',
-              cost: _flashCost,
-            ),
-          if (_hasFlashFamily && _hasArgonFamily) const SizedBox(height: 10.0),
-          if (_hasArgonFamily)
-            _buildGeminiModelCard(
-              baseId: 'gemini-4-argon',
-              title: 'Gemini 4 Argon',
-              badge: '前沿旗舰',
-              desc: '最强前沿智力旗舰，擅长复杂工程架构、跨领域深度推导与长上下文严谨逻辑闭环',
-              cost: _argonCost,
-            ),
-          const SizedBox(height: 18.0),
-          // 思考强度分段器
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                '思考强度 (Reasoning Effort)',
-                style: TextStyle(fontSize: 13.0, fontWeight: FontWeight.w700, color: StitchTokens.onSurface),
-              ),
-              Text(
-                '当前：${_getEffortDisplayName(_thinkingEffort)}',
-                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: StitchTokens.primary),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8.0),
-          Container(
-            padding: const EdgeInsets.all(4.0),
-            decoration: BoxDecoration(
-              color: StitchTokens.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
-            ),
-            child: Row(
-              children: [
-                if (_availableEfforts.contains('low'))
-                  Expanded(child: _buildEffortOption('low', 'Low', '轻度推导 · 快速响应')),
-                if (_availableEfforts.contains('low') && _availableEfforts.contains('medium'))
-                  const SizedBox(width: 4.0),
-                if (_availableEfforts.contains('medium'))
-                  Expanded(child: _buildEffortOption('medium', 'Medium', '平衡思考 · 推荐日常')),
-                if (_availableEfforts.contains('medium') && _availableEfforts.contains('high'))
-                  const SizedBox(width: 4.0),
-                if (_availableEfforts.contains('high'))
-                  Expanded(child: _buildEffortOption('high', 'High', '深度思维链 · 严谨推理')),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
-  }
-
-  Widget _buildGeminiModelCard({
-    required String baseId,
-    required String title,
-    required String badge,
-    required String desc,
-    required int cost,
-  }) {
-    final isSelected = _geminiBaseModel == baseId;
-    return GestureDetector(
-      onTap: () => setState(() => _geminiBaseModel = baseId),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(14.0),
-        decoration: BoxDecoration(
-          color: isSelected ? StitchTokens.thinkingBg : StitchTokens.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(16.0),
-          border: Border.all(
-            color: isSelected ? StitchTokens.primary : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 34.0,
-              height: 34.0,
-              decoration: BoxDecoration(
-                color: isSelected ? StitchTokens.primary : StitchTokens.surfaceGlassDark,
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-              child: const Icon(
-                Icons.auto_awesome_rounded,
-                color: Colors.white,
-                size: 18.0,
-              ),
-            ),
-            const SizedBox(width: 12.0),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15.0,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                          color: StitchTokens.onSurface,
-                        ),
-                      ),
-                      const SizedBox(width: 6.0),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: isSelected ? StitchTokens.primary : StitchTokens.surfaceVariant,
-                          borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
-                        ),
-                        child: Text(
-                          badge,
-                          style: TextStyle(
-                            fontSize: 10.0,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : StitchTokens.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4.0),
-                  Text(
-                    desc,
-                    style: const TextStyle(fontSize: 12.0, color: StitchTokens.onSurfaceVariant, height: 1.35),
-                  ),
-                  const SizedBox(height: 6.0),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: StitchTokens.creditBg,
-                          borderRadius: BorderRadius.circular(4.0),
-                          border: Border.all(color: StitchTokens.creditBorder),
-                        ),
-                        child: Text(
-                          '$cost 算力/次',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: StitchTokens.creditAmber,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8.0),
-                      const Text(
-                        '128k 上下文',
-                        style: TextStyle(fontSize: 10.5, color: StitchTokens.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 20.0,
-              height: 20.0,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? StitchTokens.primary : StitchTokens.outlineVariant,
-                  width: isSelected ? 5.5 : 1.5,
-                ),
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEffortOption(String effort, String label, String sub) {
-    final isSelected = _thinkingEffort == effort;
-    return GestureDetector(
-      onTap: () => setState(() => _thinkingEffort = effort),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(StitchTokens.radiusMd),
-          border: Border.all(
-            color: isSelected ? StitchTokens.primary.withValues(alpha: 0.3) : Colors.transparent,
-            width: 1.0,
-          ),
-          boxShadow: isSelected
-              ? const [
-                  BoxShadow(
-                    color: Color.fromRGBO(0, 0, 0, 0.06),
-                    blurRadius: 4.0,
-                    offset: Offset(0, 1),
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                color: isSelected ? StitchTokens.primary : StitchTokens.onSurface,
-              ),
-            ),
-            const SizedBox(height: 2.0),
-            Text(
-              sub.split(' · ').first,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 10.0,
-                color: isSelected ? StitchTokens.primary : StitchTokens.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getEffortDisplayName(String effort) {
-    switch (effort) {
-      case 'low':
-        return 'Low (轻度推导)';
-      case 'high':
-        return 'High (深度思维链)';
-      case 'medium':
-      default:
-        return 'Medium (平衡推荐)';
-    }
   }
 
   Widget _buildOthersContent() {
