@@ -716,5 +716,51 @@ describe('AIClientService', () => {
       expect(chunks[0]?.failover?.activeModelId).toBe('claude-3-5-sonnet');
       expect(chunks[1]?.delta?.content).toBe('Recovered');
     });
+
+    it('携带 image_url 的多模态请求在查找备用模型时仅筛选 supportsVision=true 模型', async () => {
+      findActiveModelsMock.mockResolvedValueOnce([
+        {
+          id: 'model-text-only',
+          modelId: 'spark-x2.6-4b',
+          modelName: 'Spark Text',
+          isActive: true,
+          supportsVision: false,
+          provider: { id: 'p-iflytek', name: 'iFLYTEK', isActive: true },
+        } as any,
+        {
+          id: 'model-vision',
+          modelId: 'glm-4v-flash',
+          modelName: 'GLM-4V-Flash',
+          isActive: true,
+          supportsVision: true,
+          provider: { id: 'p-zhipu', name: 'Zhipu', isActive: true },
+        } as any,
+      ]);
+
+      const visionFallback = await service.findFallbackModel(
+        'gemini-3.8-flash',
+        'Gemini',
+        { requireVision: true },
+      );
+      expect(visionFallback?.modelId).toBe('glm-4v-flash');
+
+      findActiveModelsMock.mockResolvedValueOnce([
+        {
+          id: 'model-text-only',
+          modelId: 'spark-x2.6-4b',
+          modelName: 'Spark Text',
+          isActive: true,
+          supportsVision: false,
+          provider: { id: 'p-iflytek', name: 'iFLYTEK', isActive: true },
+        } as any,
+      ]);
+
+      const noVisionFallback = await service.findFallbackModel(
+        'gemini-3.8-flash',
+        'Gemini',
+        { requireVision: true },
+      );
+      expect(noVisionFallback).toBeNull();
+    });
   });
 });

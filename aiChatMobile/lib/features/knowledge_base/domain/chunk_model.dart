@@ -1,3 +1,5 @@
+import '../../../core/constants/api_constants.dart';
+
 /// 高亮匹配字符区间
 class HighlightSpan {
   final int start;
@@ -44,6 +46,12 @@ class ChunkModel {
   final bool rerankApplied;
   final List<String> matchedTerms;
   final List<HighlightSpan> highlights;
+  final String? chunkType;
+  final String? assetId;
+  final String? assetType;
+  final String? visualType;
+  final int? pageNumber;
+  final String? visualAssetUrl;
   final Map<String, dynamic>? metadata;
   final DateTime? createdAt;
 
@@ -65,9 +73,25 @@ class ChunkModel {
     this.rerankApplied = false,
     this.matchedTerms = const [],
     this.highlights = const [],
+    this.chunkType,
+    this.assetId,
+    this.assetType,
+    this.visualType,
+    this.pageNumber,
+    this.visualAssetUrl,
     this.metadata,
     this.createdAt,
   });
+
+  /// 解析可供原生网络组件直接加载的视觉资产绝对 URL
+  String? get resolvedVisualAssetUrl {
+    final raw = visualAssetUrl;
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    return '${ApiConstants.baseUrl}$raw';
+  }
 
   ChunkModel copyWith({
     String? content,
@@ -94,6 +118,12 @@ class ChunkModel {
       rerankApplied: rerankApplied,
       matchedTerms: matchedTerms,
       highlights: highlights ?? this.highlights,
+      chunkType: chunkType,
+      assetId: assetId,
+      assetType: assetType,
+      visualType: visualType,
+      pageNumber: pageNumber,
+      visualAssetUrl: visualAssetUrl,
       metadata: metadata,
       createdAt: createdAt,
     );
@@ -133,6 +163,12 @@ class ChunkModel {
       rerankApplied: json['rerankApplied'] as bool? ?? false,
       matchedTerms: matchedTerms,
       highlights: highlights,
+      chunkType: json['chunkType'] as String?,
+      assetId: json['assetId'] as String?,
+      assetType: json['assetType'] as String?,
+      visualType: json['visualType'] as String?,
+      pageNumber: (json['pageNumber'] as num?)?.toInt(),
+      visualAssetUrl: json['visualAssetUrl'] as String?,
       metadata: json['metadata'] is Map<String, dynamic> ? json['metadata'] as Map<String, dynamic> : null,
       createdAt: parseDate(json['createdAt']),
     );
@@ -157,6 +193,12 @@ class ChunkModel {
       'rerankApplied': rerankApplied,
       if (matchedTerms.isNotEmpty) 'matchedTerms': matchedTerms,
       if (highlights.isNotEmpty) 'highlights': highlights.map((h) => h.toJson()).toList(),
+      if (chunkType != null) 'chunkType': chunkType,
+      if (assetId != null) 'assetId': assetId,
+      if (assetType != null) 'assetType': assetType,
+      if (visualType != null) 'visualType': visualType,
+      if (pageNumber != null) 'pageNumber': pageNumber,
+      if (visualAssetUrl != null) 'visualAssetUrl': visualAssetUrl,
       if (metadata != null) 'metadata': metadata,
       if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
     };

@@ -94,6 +94,12 @@ export class AiModel {
   category: 'chat' | 'image' | 'video' | 'voice';
 
   /**
+   * 是否支持视觉图像输入（多模态看图理解）
+   */
+  @Column({ type: 'boolean', default: false })
+  supportsVision: boolean;
+
+  /**
    * 计费模式
    * - 当前使用“预占后按实际 token 结算”的模式
    */

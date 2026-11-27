@@ -8,6 +8,7 @@ import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/know
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/document_item_tile.dart';
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/document_upload_stream_card.dart';
 import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/highlighted_chunk_text.dart';
+import 'package:ai_chat_mobile/features/knowledge_base/presentation/widgets/chunk_visual_preview_card.dart';
 
 void main() {
   group('KnowledgeBaseModel Serialization Tests', () {
@@ -418,6 +419,61 @@ void main() {
       expect(children.length, 3);
       expect((children[1] as TextSpan).text, 'BGE-M3');
       expect((children[1] as TextSpan).style?.fontWeight, FontWeight.w700);
+    });
+
+    test('DocumentModel 与 ChunkModel 正确解析多模态视觉解析阶段与相对资产地址', () {
+      const doc = DocumentModel(
+        id: 'doc-v',
+        knowledgeBaseId: 'kb-1',
+        title: '图表报告',
+        fileName: 'report.pdf',
+        fileType: 'pdf',
+        status: 'processing',
+        stage: 'vision_extracting',
+        progress: 35,
+        processedVisuals: 2,
+        totalVisuals: 5,
+      );
+      expect(doc.stageLabel, '视觉解析 2/5');
+
+      final chunk = ChunkModel.fromJson({
+        'id': 'chk-vis-1',
+        'knowledgeBaseId': 'kb-1',
+        'documentId': 'doc-v',
+        'chunkIndex': 1,
+        'content': '系统架构图摘要',
+        'chunkType': 'visual',
+        'assetId': 'asset-1',
+        'visualType': 'diagram',
+        'pageNumber': 3,
+        'visualAssetUrl': '/knowledge-bases/assets/asset-1?expires=999&signature=sig',
+      });
+      expect(chunk.chunkType, 'visual');
+      expect(chunk.pageNumber, 3);
+      expect(
+        chunk.resolvedVisualAssetUrl,
+        endsWith('/knowledge-bases/assets/asset-1?expires=999&signature=sig'),
+      );
+    });
+
+    testWidgets('ChunkVisualPreviewCard 渲染类型标签、页码徽章与视觉直连状态', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ChunkVisualPreviewCard(
+              imageUrl: 'https://example.com/chart.webp',
+              visualType: 'chart',
+              pageNumber: 7,
+              visualInjected: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('数据图表'), findsOneWidget);
+      expect(find.text('P.7'), findsOneWidget);
+      expect(find.text('已直连视觉模型'), findsOneWidget);
+      expect(find.text('放大'), findsOneWidget);
     });
   });
 }

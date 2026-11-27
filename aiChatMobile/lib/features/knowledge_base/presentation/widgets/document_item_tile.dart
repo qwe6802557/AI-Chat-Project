@@ -27,6 +27,11 @@ class DocumentItemTile extends StatelessWidget {
       case 'md':
       case 'markdown':
         return const Color(0xFF0D9488); // 蓝绿
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'webp':
+        return const Color(0xFF7C3AED); // 紫罗兰
       case 'txt':
       default:
         return const Color(0xFF64748B); // 灰蓝
@@ -43,6 +48,11 @@ class DocumentItemTile extends StatelessWidget {
       case 'md':
       case 'markdown':
         return Icons.code_rounded;
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'webp':
+        return Icons.image_rounded;
       case 'txt':
       default:
         return Icons.description_rounded;

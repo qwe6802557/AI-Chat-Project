@@ -5,6 +5,7 @@ import { KnowledgeChunk } from '../entities/knowledge-chunk.entity';
 import { KnowledgeDocument } from '../entities/knowledge-document.entity';
 import { EmbeddingService } from './embedding.service';
 import { RerankService } from './rerank.service';
+import { KnowledgeAssetService } from './knowledge-asset.service';
 import {
   computeHighlightSpans,
   extractSearchTerms,
@@ -32,6 +33,12 @@ export interface RagSearchResult {
   rerankApplied?: boolean;
   matchedTerms: string[];
   highlights: HighlightSpan[];
+  chunkType?: 'text' | 'visual';
+  assetId?: string;
+  assetType?: string;
+  visualType?: string;
+  pageNumber?: number;
+  visualAssetUrl?: string;
   metadata?: Record<string, any>;
 }
 
@@ -90,6 +97,8 @@ export class HybridRagService {
     private readonly embeddingService: EmbeddingService,
     @Optional()
     private readonly rerankService?: RerankService,
+    @Optional()
+    private readonly assetService?: KnowledgeAssetService,
   ) {}
 
   /**
@@ -274,6 +283,15 @@ export class HybridRagService {
         item.chunk.content,
         searchTerms,
       );
+      const metadata = item.chunk.metadata || undefined;
+      const assetId =
+        typeof metadata?.assetId === 'string' && metadata.assetId
+          ? metadata.assetId
+          : undefined;
+      const visualAssetUrl =
+        assetId && this.assetService
+          ? this.assetService.buildSignedAssetUrl(assetId)
+          : undefined;
 
       return {
         chunkId: item.chunk.id,
@@ -292,7 +310,23 @@ export class HybridRagService {
         rerankApplied: item.rerankApplied,
         matchedTerms,
         highlights,
-        metadata: item.chunk.metadata || undefined,
+        chunkType:
+          metadata?.chunkType === 'visual' || assetId ? 'visual' : 'text',
+        assetId,
+        assetType:
+          typeof metadata?.assetType === 'string'
+            ? metadata.assetType
+            : undefined,
+        visualType:
+          typeof metadata?.visualType === 'string'
+            ? metadata.visualType
+            : undefined,
+        pageNumber:
+          typeof metadata?.pageNumber === 'number'
+            ? metadata.pageNumber
+            : undefined,
+        visualAssetUrl,
+        metadata,
       };
     });
   }

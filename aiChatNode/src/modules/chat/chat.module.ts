@@ -41,7 +41,7 @@ import { MemoryModule } from '../memory/memory.module';
     RedisModule,
     WebSearchModule,
     ToolsModule,
-    KnowledgeBaseModule,
+    forwardRef(() => KnowledgeBaseModule),
     forwardRef(() => MemoryModule),
   ],
   controllers: [ChatController, ChatSessionController],

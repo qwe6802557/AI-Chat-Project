@@ -19,6 +19,19 @@ export interface SearchSource {
   rerankScore?: number;
   matchedTerms?: string[];
   highlights?: Array<{ start: number; end: number; term: string }>;
+  chunkType?: 'text' | 'visual';
+  assetId?: string;
+  assetType?: 'standalone_image' | 'pdf_page' | 'docx_image';
+  visualType?:
+    | 'chart'
+    | 'table'
+    | 'diagram'
+    | 'screenshot'
+    | 'document_page'
+    | 'photo';
+  pageNumber?: number;
+  visualAssetUrl?: string;
+  visualInjected?: boolean;
 }
 
 /**

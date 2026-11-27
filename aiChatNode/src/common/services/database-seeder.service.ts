@@ -225,6 +225,7 @@ export class DatabaseSeederService implements OnModuleInit {
         sortOrder: model.sortOrder,
         isActive: model.isActive,
         category: 'chat',
+        supportsVision: true,
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
@@ -412,6 +413,15 @@ export class DatabaseSeederService implements OnModuleInit {
         description: '智谱 AI 官方永久免费通用大模型，毫秒级快速响应与日常通用问答',
         sortOrder: 8,
         isActive: true,
+        supportsVision: false,
+      },
+      {
+        modelId: 'glm-4v-flash',
+        modelName: 'GLM-4V-Flash 视觉理解',
+        description: '智谱 AI 官方永久免费多模态视觉大模型，支持图表识别、文档看图与知识库视觉检索',
+        sortOrder: 8,
+        isActive: true,
+        supportsVision: true,
       },
     ];
 
@@ -432,6 +442,7 @@ export class DatabaseSeederService implements OnModuleInit {
         sortOrder: model.sortOrder,
         isActive: model.isActive,
         category: 'chat',
+        supportsVision: model.supportsVision,
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
@@ -453,6 +464,7 @@ export class DatabaseSeederService implements OnModuleInit {
         description: '硅基流动 DeepSeek-R1 蒸馏模型，具备强大深度思考与思维链推导能力',
         sortOrder: 9,
         isActive: true,
+        supportsVision: false,
       },
       {
         modelId: 'Qwen/Qwen2.5-Coder-7B-Instruct',
@@ -460,6 +472,15 @@ export class DatabaseSeederService implements OnModuleInit {
         description: '硅基流动通义千问代码特化模型，专注算法编写、架构设计与工程调试',
         sortOrder: 10,
         isActive: true,
+        supportsVision: false,
+      },
+      {
+        modelId: 'Qwen/Qwen2.5-VL-72B-Instruct',
+        modelName: 'Qwen2.5-VL (72B 视觉)',
+        description: '硅基流动通义千问高精度多模态视觉模型，擅长复杂报表、图表与图文混排文档深度理解',
+        sortOrder: 11,
+        isActive: false,
+        supportsVision: true,
       },
     ];
 
@@ -480,6 +501,7 @@ export class DatabaseSeederService implements OnModuleInit {
         sortOrder: model.sortOrder,
         isActive: model.isActive,
         category: 'chat',
+        supportsVision: model.supportsVision,
       });
       summary[result === 'created' ? 'createdModels' : 'skippedModels'] += 1;
     }
@@ -785,13 +807,14 @@ export class DatabaseSeederService implements OnModuleInit {
     sortOrder?: number;
     isActive?: boolean;
     category?: 'chat' | 'image' | 'video' | 'voice';
+    supportsVision?: boolean;
   }): Promise<'created' | 'skipped'> {
     const existingModel = await this.aiModelService.findByModelIdOrNull(
       payload.modelId,
     );
 
     if (existingModel) {
-      // 保留管理员在模型管理控制台手动切换的 isActive 启停状态，启动时不强制回写覆盖
+      // 保留管理员在模型管理控制台手动切换的 isActive 与 supportsVision 状态，启动时不强制回写覆盖
       const needsSortUpdate =
         payload.sortOrder !== undefined &&
         existingModel.sortOrder !== payload.sortOrder;
@@ -850,6 +873,7 @@ export class DatabaseSeederService implements OnModuleInit {
       creditCost: payload.creditCost ?? DEFAULT_MODEL_CREDIT_COST,
       sortOrder: payload.sortOrder ?? 0,
       category: payload.category ?? 'chat',
+      supportsVision: payload.supportsVision ?? false,
     });
 
     this.logger.log(`模型创建成功: ${payload.modelId}`);

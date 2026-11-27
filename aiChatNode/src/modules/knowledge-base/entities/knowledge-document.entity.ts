@@ -21,6 +21,7 @@ export type DocumentParseStatus =
 export type DocumentParseStage =
   | 'queued'
   | 'parsing'
+  | 'vision_extracting'
   | 'chunking'
   | 'embedding'
   | 'saving'

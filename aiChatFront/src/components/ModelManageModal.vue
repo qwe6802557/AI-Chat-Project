@@ -2,7 +2,7 @@
   <a-modal
     :open="open"
     title="AI 模型运行控制台"
-    width="1000px"
+    width="1060px"
     :footer="null"
     destroy-on-close
     @update:open="emit('update:open', $event)"
@@ -86,6 +86,18 @@
             <a-tag v-else-if="record.category === 'video'" color="orange">视频生成</a-tag>
             <a-tag v-else-if="record.category === 'voice'" color="green">语音交互</a-tag>
             <a-tag v-else color="cyan">对话补全</a-tag>
+          </template>
+
+          <!-- 视觉能力开关 -->
+          <template v-else-if="column.key === 'supportsVision'">
+            <a-switch
+              v-if="(record.category || 'chat') === 'chat'"
+              size="small"
+              :checked="Boolean(record.supportsVision)"
+              :loading="updatingIds.has(record.id)"
+              @change="(checked: boolean | string | number) => handleToggleVision(record, Boolean(checked))"
+            />
+            <span v-else class="untested-text">-</span>
           </template>
 
           <!-- 启用状态开关 -->
@@ -209,9 +221,15 @@ const columns = [
     width: 100,
   },
   {
+    title: '视觉',
+    key: 'supportsVision',
+    width: 78,
+    align: 'center' as const,
+  },
+  {
     title: '状态开关',
     key: 'isActive',
-    width: 110,
+    width: 105,
     align: 'center' as const,
   },
   {
@@ -319,6 +337,28 @@ const handleToggleActive = async (record: BackendAiModel, newActive: boolean) =>
   } catch (err: any) {
     record.isActive = previousStatus
     message.error(err?.message || '修改状态接口异常')
+  } finally {
+    updatingIds.delete(record.id)
+  }
+}
+
+const handleToggleVision = async (record: BackendAiModel, nextVision: boolean) => {
+  updatingIds.add(record.id)
+  const previousVision = Boolean(record.supportsVision)
+  record.supportsVision = nextVision
+
+  try {
+    const res = await updateModel(record.id, { supportsVision: nextVision })
+    if (res && res.code === 0) {
+      message.success(`已${nextVision ? '开启' : '关闭'}视觉理解: ${record.modelName}`)
+      window.dispatchEvent(new CustomEvent('aichat:models-updated'))
+    } else {
+      record.supportsVision = previousVision
+      message.error(res?.message || '修改视觉能力失败')
+    }
+  } catch (err: any) {
+    record.supportsVision = previousVision
+    message.error(err?.message || '修改视觉能力接口异常')
   } finally {
     updatingIds.delete(record.id)
   }

@@ -78,6 +78,13 @@
               </div>
             </div>
             <div v-else class="chunk-content-body font-mono">
+              <ChunkVisualPreview
+                v-if="chunk.visualAssetUrl"
+                :image-url="chunk.visualAssetUrl"
+                :visual-type="chunk.visualType"
+                :page-number="chunk.pageNumber"
+                variant="full"
+              />
               <ChunkHighlightText :content="chunk.content" :keyword="searchQuery" />
             </div>
           </div>
@@ -124,6 +131,13 @@
               </div>
             </div>
             <div v-else class="chunk-content-body font-mono">
+              <ChunkVisualPreview
+                v-if="contextData.targetChunk.visualAssetUrl"
+                :image-url="contextData.targetChunk.visualAssetUrl"
+                :visual-type="contextData.targetChunk.visualType"
+                :page-number="contextData.targetChunk.pageNumber"
+                variant="full"
+              />
               <ChunkHighlightText
                 :content="contextData.targetChunk.content"
                 :highlights="highlights"
@@ -169,6 +183,13 @@
               </div>
             </div>
             <div v-else class="chunk-content-body font-mono">
+              <ChunkVisualPreview
+                v-if="chunk.visualAssetUrl"
+                :image-url="chunk.visualAssetUrl"
+                :visual-type="chunk.visualType"
+                :page-number="chunk.pageNumber"
+                variant="full"
+              />
               <ChunkHighlightText :content="chunk.content" :keyword="searchQuery" />
             </div>
           </div>
@@ -287,6 +308,13 @@
           </div>
 
           <div v-else class="chunk-content-body font-mono">
+            <ChunkVisualPreview
+              v-if="chunk.visualAssetUrl"
+              :image-url="chunk.visualAssetUrl"
+              :visual-type="chunk.visualType"
+              :page-number="chunk.pageNumber"
+              variant="full"
+            />
             <ChunkHighlightText
               :content="chunk.content"
               :highlights="chunk.id === chunkId ? highlights : undefined"
@@ -334,6 +362,7 @@ import type {
   KnowledgeDocumentItem,
 } from '@/interface/knowledge'
 import ChunkHighlightText from './ChunkHighlightText.vue'
+import ChunkVisualPreview from './ChunkVisualPreview.vue'
 
 defineOptions({
   name: 'ChunkContextDrawer',

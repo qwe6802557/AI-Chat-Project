@@ -4,6 +4,7 @@ import '../../../../core/theme/stitch_tokens.dart';
 import '../../domain/chunk_model.dart';
 import '../../providers/knowledge_base_providers.dart';
 import 'chunk_detail_drawer.dart';
+import 'chunk_visual_preview_card.dart';
 import 'highlighted_chunk_text.dart';
 
 /// 移动端知识库检索演练测试沙箱弹窗
@@ -381,6 +382,13 @@ class _RetrievalTestModalState extends ConsumerState<RetrievalTestModal> {
                     ),
                   ],
                   const SizedBox(height: 6.0),
+                  if (item.resolvedVisualAssetUrl != null)
+                    ChunkVisualPreviewCard(
+                      imageUrl: item.resolvedVisualAssetUrl!,
+                      visualType: item.visualType,
+                      pageNumber: item.pageNumber,
+                      height: 112.0,
+                    ),
                   HighlightedChunkText(
                     content: item.content,
                     highlights: item.highlights,

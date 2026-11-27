@@ -22,6 +22,7 @@ import {
 import { DocumentParserService } from './document-parser.service';
 import { EmbeddingService } from './embedding.service';
 import { KnowledgeProgressService } from './knowledge-progress.service';
+import { KnowledgeAssetService } from './knowledge-asset.service';
 import {
   KNOWLEDGE_INGEST_JOB,
   KNOWLEDGE_INGEST_QUEUE,
@@ -29,6 +30,7 @@ import {
   resolveKnowledgeUploadDir,
 } from '../constants/knowledge-queue.constants';
 import { toPgVectorLiteral } from '../utils/pg-vector.util';
+import { Optional } from '@nestjs/common';
 
 export interface KnowledgeChunkSummary {
   id: string;
@@ -39,6 +41,12 @@ export interface KnowledgeChunkSummary {
   charCount: number;
   isEnabled: boolean;
   metadata: Record<string, any> | null;
+  chunkType?: 'text' | 'visual';
+  assetId?: string;
+  assetType?: string;
+  visualType?: string;
+  pageNumber?: number;
+  visualAssetUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,12 +85,24 @@ export class KnowledgeBaseService {
     private readonly progressService: KnowledgeProgressService,
     @InjectQueue(KNOWLEDGE_INGEST_QUEUE)
     private readonly ingestQueue: Queue<KnowledgeIngestJobData>,
+    @Optional()
+    private readonly assetService?: KnowledgeAssetService,
   ) {}
 
   /**
-   * 构造切片摘要视图（KnowledgeChunk 已隔离向量列，仅保持契约映射）
+   * 构造切片摘要视图（动态签发视觉资产 URL，不落库短期签名）
    */
   private toChunkSummary(chunk: KnowledgeChunk): KnowledgeChunkSummary {
+    const metadata = chunk.metadata || null;
+    const assetId =
+      typeof metadata?.assetId === 'string' && metadata.assetId
+        ? metadata.assetId
+        : undefined;
+    const visualAssetUrl =
+      assetId && this.assetService
+        ? this.assetService.buildSignedAssetUrl(assetId)
+        : undefined;
+
     return {
       id: chunk.id,
       knowledgeBaseId: chunk.knowledgeBaseId,
@@ -91,7 +111,21 @@ export class KnowledgeBaseService {
       content: chunk.content,
       charCount: chunk.charCount,
       isEnabled: chunk.isEnabled !== false,
-      metadata: chunk.metadata || null,
+      metadata,
+      chunkType:
+        metadata?.chunkType === 'visual' || assetId ? 'visual' : 'text',
+      assetId,
+      assetType:
+        typeof metadata?.assetType === 'string' ? metadata.assetType : undefined,
+      visualType:
+        typeof metadata?.visualType === 'string'
+          ? metadata.visualType
+          : undefined,
+      pageNumber:
+        typeof metadata?.pageNumber === 'number'
+          ? metadata.pageNumber
+          : undefined,
+      visualAssetUrl,
       createdAt: chunk.createdAt,
       updatedAt: chunk.updatedAt,
     };
@@ -165,7 +199,9 @@ export class KnowledgeBaseService {
       select: ['id', 'filePath'],
     });
     await Promise.all(
-      docs.map((doc) => this.cleanupDocumentArtifacts(doc.id, doc.filePath)),
+      docs.map((doc) =>
+        this.cleanupDocumentArtifacts(userId, doc.id, doc.filePath),
+      ),
     );
     await this.kbRepo.remove(kb);
   }
@@ -185,7 +221,7 @@ export class KnowledgeBaseService {
     const ext = dotIndex >= 0 ? originalName.slice(dotIndex).toLowerCase() : '';
     if (!DocumentParserService.isSupportedFile(originalName, file.mimetype)) {
       throw new BadRequestException(
-        `暂不支持的文件格式: ${ext || '未知'}，仅支持 .pdf, .docx, .md, .txt 等格式`,
+        `暂不支持的文件格式: ${ext || '未知'}，支持 .pdf, .docx, .md, .txt 与 .png/.jpg/.webp 图片格式`,
       );
     }
 
@@ -337,7 +373,7 @@ export class KnowledgeBaseService {
       throw new NotFoundException('文档不存在或无权访问');
     }
     const kbId = doc.knowledgeBaseId;
-    await this.cleanupDocumentArtifacts(doc.id, doc.filePath);
+    await this.cleanupDocumentArtifacts(userId, doc.id, doc.filePath);
     await this.docRepo.remove(doc);
     await this.recalculateStats(kbId);
   }
@@ -531,11 +567,13 @@ export class KnowledgeBaseService {
   }
 
   private async cleanupDocumentArtifacts(
+    userId: string,
     documentId: string,
     filePath: string | null,
   ): Promise<void> {
     await this.removeQueueJob(documentId);
     await this.removeTempFile(filePath);
+    await this.assetService?.cleanupDocumentAssetFiles(userId, documentId);
   }
 
   private async removeQueueJob(documentId: string): Promise<void> {

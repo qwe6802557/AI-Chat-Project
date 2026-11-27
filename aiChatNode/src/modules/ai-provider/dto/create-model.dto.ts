@@ -207,6 +207,19 @@ export class CreateModelDto {
   category?: 'chat' | 'image' | 'video' | 'voice';
 
   /**
+   * 是否支持视觉理解
+   */
+  @ApiProperty({
+    description: '是否支持多模态视觉理解',
+    example: false,
+    default: false,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'supportsVision必须是布尔值' })
+  supportsVision?: boolean;
+
+  /**
    * 供应商ID
    */
   @ApiProperty({

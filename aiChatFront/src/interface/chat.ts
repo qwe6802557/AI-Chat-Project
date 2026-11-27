@@ -78,6 +78,13 @@ export interface SearchSource {
   rerankScore?: number
   matchedTerms?: string[]
   highlights?: Array<{ start: number; end: number; term: string }>
+  chunkType?: 'text' | 'visual'
+  assetId?: string
+  assetType?: string
+  visualType?: string
+  pageNumber?: number
+  visualAssetUrl?: string
+  visualInjected?: boolean
 }
 
 /**
