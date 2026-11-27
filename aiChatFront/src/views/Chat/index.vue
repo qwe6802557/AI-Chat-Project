@@ -344,7 +344,9 @@ const loadModelOptions = async () => {
         reasoningCapability: model.reasoningCapability || 'none',
         reasoningStrategy: model.reasoningStrategy,
         reasoningBadgeLabel: model.reasoningBadgeLabel,
-        supportsVision: Boolean(model.supportsVision),
+        supportsVision:
+          model.visionCapability !== 'unsupported' &&
+          Boolean(model.supportsVision),
       }))
 
     if (activeModels.length > 0) {

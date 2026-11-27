@@ -17,6 +17,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../user/entities/user.entity';
 import type { AiModel } from './entities/ai-model.entity';
 import { resolveModelReasoningProfile } from '../chat/utils/reasoning-profile.util';
+import {
+  resolveEffectiveSupportsVision,
+  resolveModelVisionProfile,
+} from '../chat/utils/vision-profile.util';
 
 @ApiTags('AI模型管理')
 @ApiBearerAuth() // Swagger中显示需要Bearer Token
@@ -34,13 +38,26 @@ export class AiModelController {
       providerName: model.provider?.name,
       modelId: model.modelId,
     });
+    const visionProfile = resolveModelVisionProfile({
+      providerName: model.provider?.name,
+      modelId: model.modelId,
+      category: model.category,
+    });
 
     return {
       ...model,
+      supportsVision: resolveEffectiveSupportsVision({
+        providerName: model.provider?.name,
+        modelId: model.modelId,
+        category: model.category,
+        supportsVision: model.supportsVision,
+      }),
       reasoningCapability: reasoningProfile.capability,
       reasoningStrategy: reasoningProfile.strategy,
       reasoningIntegration: reasoningProfile.integration,
       reasoningBadgeLabel: reasoningProfile.badgeLabel,
+      visionCapability: visionProfile.capability,
+      visionUnsupportedReason: visionProfile.reason,
     };
   }
 

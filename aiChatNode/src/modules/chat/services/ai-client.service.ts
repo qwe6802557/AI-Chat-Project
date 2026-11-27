@@ -30,6 +30,7 @@ import {
   resolveReasoningPanelTitle,
   type ModelReasoningProfile,
 } from '../utils/reasoning-profile.util';
+import { resolveEffectiveSupportsVision } from '../utils/vision-profile.util';
 
 export interface CircuitBreakerState {
   failureCount: number;
@@ -198,7 +199,13 @@ export class AIClientService {
           m.provider &&
           m.provider.isActive &&
           m.provider.name.toLowerCase() !== primaryProviderName.toLowerCase() &&
-          (!options?.requireVision || Boolean(m.supportsVision)) &&
+          (!options?.requireVision ||
+            resolveEffectiveSupportsVision({
+              providerName: m.provider.name,
+              modelId: m.modelId,
+              category: m.category,
+              supportsVision: m.supportsVision,
+            })) &&
           this.isProviderAdapterConfigured(m.provider.name) &&
           !this.isProviderCircuitOpen(m.provider.name),
       );

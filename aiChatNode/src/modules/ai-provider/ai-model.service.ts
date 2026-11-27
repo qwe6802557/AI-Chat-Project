@@ -11,6 +11,7 @@ import { AiModel } from './entities/ai-model.entity';
 import { CreateModelDto } from './dto/create-model.dto';
 import { UpdateModelDto } from './dto/update-model.dto';
 import { AiProviderService } from './ai-provider.service';
+import { resolveModelVisionProfile } from '../chat/utils/vision-profile.util';
 
 @Injectable()
 export class AiModelService {
@@ -23,11 +24,45 @@ export class AiModelService {
   ) {}
 
   /**
+   * 校验模型视觉能力配置，禁止对不支持视觉的纯文本或非对话模型开启视觉开关
+   */
+  private assertVisionSettingAllowed(params: {
+    providerName?: string | null;
+    modelId: string;
+    category?: string | null;
+    requestedSupportsVision?: boolean;
+  }) {
+    const visionProfile = resolveModelVisionProfile({
+      providerName: params.providerName,
+      modelId: params.modelId,
+      category: params.category,
+    });
+
+    if (
+      params.requestedSupportsVision === true &&
+      visionProfile.capability === 'unsupported'
+    ) {
+      throw new BadRequestException(
+        visionProfile.reason || '当前模型不支持视觉图像输入，无法开启视觉开关',
+      );
+    }
+
+    return visionProfile;
+  }
+
+  /**
    * 创建模型
    */
   async create(createModelDto: CreateModelDto): Promise<AiModel> {
     // 供应商是否存在
-    await this.providerService.findOne(createModelDto.providerId);
+    const provider = await this.providerService.findOne(createModelDto.providerId);
+
+    this.assertVisionSettingAllowed({
+      providerName: provider.name,
+      modelId: createModelDto.modelId,
+      category: createModelDto.category ?? 'chat',
+      requestedSupportsVision: createModelDto.supportsVision,
+    });
 
     // 检查模型ID是否已存在
     const existingModel = await this.modelRepository.findOne({
@@ -47,8 +82,12 @@ export class AiModelService {
     }
 
     // 创建模型
-    const model = this.modelRepository.create(createModelDto);
+    const model = this.modelRepository.create({
+      ...createModelDto,
+      supportsVision: Boolean(createModelDto.supportsVision),
+    });
     const savedModel = await this.modelRepository.save(model);
+    savedModel.provider = provider;
 
     this.logger.log(`模型创建成功: ${savedModel.modelName} (${savedModel.id})`);
 
@@ -154,13 +193,24 @@ export class AiModelService {
    * 更新模型
    */
   async update(id: string, updateModelDto: UpdateModelDto): Promise<AiModel> {
-    // 检查模型是否存在
-    const model = await this.findOne(id);
+    // 检查模型是否存在并加载所属供应商用于能力校验
+    const model = await this.findOne(id, true);
 
+    let targetProviderName = model.provider?.name;
     // 如果要更新供应商ID，检查新供应商是否存在
     if (updateModelDto.providerId) {
-      await this.providerService.findOne(updateModelDto.providerId);
+      const targetProvider = await this.providerService.findOne(
+        updateModelDto.providerId,
+      );
+      targetProviderName = targetProvider.name;
     }
+
+    const visionProfile = this.assertVisionSettingAllowed({
+      providerName: targetProviderName,
+      modelId: updateModelDto.modelId ?? model.modelId,
+      category: updateModelDto.category ?? model.category,
+      requestedSupportsVision: updateModelDto.supportsVision,
+    });
 
     // 如果要更新模型ID，检查新模型ID是否已被其他模型使用
     if (updateModelDto.modelId && updateModelDto.modelId !== model.modelId) {
@@ -181,12 +231,17 @@ export class AiModelService {
       throw new BadRequestException('可用性必须在0-100之间');
     }
 
+    const payload: UpdateModelDto =
+      visionProfile.capability === 'unsupported' && model.supportsVision
+        ? { ...updateModelDto, supportsVision: false }
+        : updateModelDto;
+
     // 更新模型
-    await this.modelRepository.update(id, updateModelDto);
+    await this.modelRepository.update(id, payload);
 
     this.logger.log(`模型更新成功: ${id}`);
 
-    return this.findOne(id);
+    return this.findOne(id, true);
   }
 
   /**
