@@ -41,21 +41,20 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.3.0',
-      latestVersionCode: 14,
+      latestVersion: '1.3.1',
+      latestVersionCode: 15,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
       packageSize: '21.7 MB',
       releaseNotes: [
-        '全新上线移动端“记忆工坊”，支持长期核心画像审阅、语义关键词检索、相关度展示与手动记一条记忆',
-        '对话底部输入栏新增“记忆工坊”快捷胶囊入口，一键直达个人记忆中心',
-        '知识库全链路升级：支持检索高亮匹配、Rerank 精排上下文预览与异步解析实时进度',
-        '按服务端启用状态动态同步可用模型列表，自动隐藏停用分组并优化 arm64 原生包体性能',
+        '下架官方即将淘汰的 Gemini 3.8 Flash 与 Gemini 4 Argon 模型，默认对话模型平滑切换为 Spark-X2.6-4B，并保留通用 Gemini 动态分组能力',
+        '知识库升级支持多模态图文分片预览、PDF 图表异步视觉解析进度展示与点击灯箱放大查看',
+        '加固知识库视觉资产相对路径解析、图片加载失败降级与 320px 窄屏防溢出排版体验',
       ],
       forceUpdate: false,
-      publishedAt: '2026-11-26T10:15:00.000Z',
+      publishedAt: '2026-11-27T16:55:00.000Z',
     };
   }
 
