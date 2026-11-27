@@ -84,14 +84,8 @@ class ChunkModel {
   });
 
   /// 解析可供原生网络组件直接加载的视觉资产绝对 URL
-  String? get resolvedVisualAssetUrl {
-    final raw = visualAssetUrl;
-    if (raw == null || raw.isEmpty) return null;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return raw;
-    }
-    return '${ApiConstants.baseUrl}$raw';
-  }
+  String? get resolvedVisualAssetUrl =>
+      ApiConstants.resolveUrl(visualAssetUrl);
 
   ChunkModel copyWith({
     String? content,

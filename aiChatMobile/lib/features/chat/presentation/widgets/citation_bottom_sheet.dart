@@ -56,6 +56,9 @@ class CitationBottomSheet extends StatelessWidget {
     final hasUrl = source.url.isNotEmpty;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(
@@ -231,40 +234,45 @@ class CitationBottomSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14.0),
-          if (source.resolvedVisualAssetUrl != null) ...[
-            ChunkVisualPreviewCard(
-              imageUrl: source.resolvedVisualAssetUrl!,
-              visualType: source.visualType,
-              pageNumber: source.pageNumber,
-              visualInjected: source.visualInjected,
-              height: 156.0,
-            ),
-            const SizedBox(height: 6.0),
-          ],
+          Flexible(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (source.resolvedVisualAssetUrl != null) ...[
+                    ChunkVisualPreviewCard(
+                      imageUrl: source.resolvedVisualAssetUrl!,
+                      visualType: source.visualType,
+                      pageNumber: source.pageNumber,
+                      visualInjected: source.visualInjected,
+                      height: 156.0,
+                    ),
+                    const SizedBox(height: 6.0),
+                  ],
 
-          // 切片正文展示区
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 380.0),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14.0),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: HighlightedChunkText(
-                  content: source.snippet.isNotEmpty ? source.snippet : '（无预览内容）',
-                  highlights: source.highlights,
-                  style: const TextStyle(
-                    fontSize: 13.5,
-                    height: 1.65,
-                    color: Color(0xFF1E293B),
-                    letterSpacing: -0.1,
+                  // 切片正文展示区
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14.0),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(StitchTokens.radiusLg),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: HighlightedChunkText(
+                      content: source.snippet.isNotEmpty ? source.snippet : '（无预览内容）',
+                      highlights: source.highlights,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        height: 1.65,
+                        color: Color(0xFF1E293B),
+                        letterSpacing: -0.1,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

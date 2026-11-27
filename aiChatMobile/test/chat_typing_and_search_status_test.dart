@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:ai_chat_mobile/features/chat/domain/chat_message_model.dart';
 import 'package:ai_chat_mobile/features/chat/presentation/widgets/chat_typing_indicator.dart';
 import 'package:ai_chat_mobile/features/chat/presentation/widgets/chat_search_source_gallery.dart';
 

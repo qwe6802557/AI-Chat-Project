@@ -454,6 +454,37 @@ void main() {
         chunk.resolvedVisualAssetUrl,
         endsWith('/knowledge-bases/assets/asset-1?expires=999&signature=sig'),
       );
+
+      final noSlashChunk = ChunkModel.fromJson({
+        'id': 'chk-vis-2',
+        'knowledgeBaseId': 'kb-1',
+        'documentId': 'doc-v',
+        'chunkIndex': 2,
+        'content': '无前导斜杠路径测试',
+        'visualAssetUrl': 'knowledge-bases/assets/asset-2?expires=999&signature=sig',
+      });
+      expect(
+        noSlashChunk.resolvedVisualAssetUrl,
+        endsWith('/knowledge-bases/assets/asset-2?expires=999&signature=sig'),
+      );
+      expect(
+        noSlashChunk.resolvedVisualAssetUrl,
+        startsWith('https://'),
+      );
+      expect(
+        noSlashChunk.resolvedVisualAssetUrl!.contains('siteknowledge-bases'),
+        isFalse,
+      );
+
+      const blankChunk = ChunkModel(
+        id: 'chk-vis-3',
+        knowledgeBaseId: 'kb-1',
+        documentId: 'doc-v',
+        chunkIndex: 3,
+        content: '空白地址测试',
+        visualAssetUrl: '   ',
+      );
+      expect(blankChunk.resolvedVisualAssetUrl, isNull);
     });
 
     testWidgets('ChunkVisualPreviewCard 渲染类型标签、页码徽章与视觉直连状态', (tester) async {
@@ -474,6 +505,61 @@ void main() {
       expect(find.text('P.7'), findsOneWidget);
       expect(find.text('已直连视觉模型'), findsOneWidget);
       expect(find.text('放大'), findsOneWidget);
+    });
+
+    testWidgets('ChunkVisualPreviewCard 图片加载失败时展示中文兜底提示并隐藏放大入口', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: ChunkVisualPreviewCard(
+              imageUrl: 'https://invalid.example.com/broken.webp',
+              visualType: 'diagram',
+              pageNumber: 2,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+      expect(find.text('视觉原图暂不可用'), findsOneWidget);
+      expect(find.text('放大'), findsNothing);
+    });
+
+    testWidgets('DocumentItemTile 在窄屏下正确渲染 SSE vision_extracting 阶段且无溢出', (tester) async {
+      const visionDoc = DocumentModel(
+        id: 'doc-vision-sse',
+        knowledgeBaseId: 'kb-1',
+        title: '2026年第四季度全固态电池测试与分析报告.pdf',
+        fileName: 'report.pdf',
+        fileType: 'pdf',
+        fileSize: 204800,
+        status: 'processing',
+        stage: 'vision_extracting',
+        progress: 35,
+        processedVisuals: 12,
+        totalVisuals: 25,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 320.0,
+              child: DocumentItemTile(
+                document: visionDoc,
+                onTap: () {},
+                onDelete: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('视觉解析 12/25 35%'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

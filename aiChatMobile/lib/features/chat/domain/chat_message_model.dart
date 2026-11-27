@@ -59,14 +59,9 @@ class SearchSourceModel {
     this.visualInjected = false,
   });
 
-  String? get resolvedVisualAssetUrl {
-    final raw = visualAssetUrl;
-    if (raw == null || raw.isEmpty) return null;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return raw;
-    }
-    return '${ApiConstants.baseUrl}$raw';
-  }
+  /// 解析可供原生网络组件直接加载的视觉资产绝对 URL
+  String? get resolvedVisualAssetUrl =>
+      ApiConstants.resolveUrl(visualAssetUrl);
 
   factory SearchSourceModel.fromJson(Map<String, dynamic> json) {
     final rawHighlights = json['highlights'] as List? ?? [];

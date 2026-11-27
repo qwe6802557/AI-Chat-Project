@@ -230,5 +230,51 @@ def hello():
       expect(find.text('P.4'), findsOneWidget);
       expect(find.text('已直连视觉模型'), findsOneWidget);
     });
+
+    testWidgets('SearchSourceModel 正确补全无前导斜杠资产路径，CitationBottomSheet 长图文无溢出', (tester) async {
+      const source = SearchSourceModel(
+        id: 3,
+        title: '长文档视觉切片',
+        url: '',
+        snippet: '第一段分析内容\n\n第二段分析内容\n\n第三段分析内容\n\n第四段分析内容\n\n第五段分析内容\n\n第六段分析内容\n\n第七段分析内容\n\n第八段分析内容\n\n第九段分析内容\n\n第十段分析内容\n\n第十一段分析内容\n\n第十二段分析内容',
+        isKnowledgeBase: true,
+        score: 0.91,
+        chunkIndex: 2,
+        chunkType: 'visual',
+        assetId: 'asset-9',
+        visualType: 'table',
+        pageNumber: 9,
+        visualAssetUrl: 'knowledge-bases/assets/asset-9?expires=999&signature=sig',
+      );
+
+      expect(
+        source.resolvedVisualAssetUrl,
+        endsWith('/knowledge-bases/assets/asset-9?expires=999&signature=sig'),
+      );
+      expect(
+        source.resolvedVisualAssetUrl!.contains('siteknowledge-bases'),
+        isFalse,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => CitationBottomSheet.show(ctx, source: source, index: 3),
+                child: const Text('Open Long Visual Sheet'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Long Visual Sheet'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('结构表格'), findsOneWidget);
+      expect(find.text('P.9'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

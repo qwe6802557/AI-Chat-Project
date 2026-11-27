@@ -12,6 +12,22 @@ class ApiConstants {
     return 'https://aichat.yanggenbwebsite.site';
   }
 
+  /// 将服务端返回的相对资产路径安全拼接为完整绝对 URL
+  static String? resolveUrl(String? rawUrl) {
+    final trimmed = rawUrl?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    if (trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        trimmed.startsWith('data:')) {
+      return trimmed;
+    }
+    final normalizedBase = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final normalizedPath = trimmed.startsWith('/') ? trimmed : '/$trimmed';
+    return '$normalizedBase$normalizedPath';
+  }
+
   // 认证链路端点
   static const String authLogin = '/auth/login';
   static const String authRegister = '/auth/register';

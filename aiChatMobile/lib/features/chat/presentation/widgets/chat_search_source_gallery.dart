@@ -159,7 +159,8 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
               children: [
                 if (isKb)
                   Icon(
-                    source.assetId != null || source.visualAssetUrl != null
+                    (source.assetId?.isNotEmpty ?? false) ||
+                            source.resolvedVisualAssetUrl != null
                         ? Icons.image_outlined
                         : Icons.menu_book_rounded,
                     size: 14.0,
