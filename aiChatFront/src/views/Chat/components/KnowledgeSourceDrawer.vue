@@ -71,9 +71,26 @@
             class="neighbor-card"
           >
             <div class="neighbor-head font-mono">上文 · 切片 #{{ prev.chunkIndex + 1 }}</div>
+            <ChunkVisualPreview
+              v-if="prev.visualAssetUrl"
+              :image-url="prev.visualAssetUrl"
+              :visual-type="prev.visualType"
+              :page-number="prev.pageNumber"
+              variant="compact"
+            />
             <div class="neighbor-text font-mono">{{ prev.content }}</div>
           </div>
         </div>
+
+        <ChunkVisualPreview
+          v-if="source.visualAssetUrl"
+          :image-url="source.visualAssetUrl"
+          :visual-type="source.visualType"
+          :page-number="source.pageNumber"
+          :visual-injected="source.visualInjected"
+          :caption="source.title"
+          variant="full"
+        />
 
         <div class="snippet-text-card font-mono">
           <ChunkHighlightText :content="source.snippet" :highlights="source.highlights" />
@@ -86,6 +103,13 @@
             class="neighbor-card"
           >
             <div class="neighbor-head font-mono">下文 · 切片 #{{ next.chunkIndex + 1 }}</div>
+            <ChunkVisualPreview
+              v-if="next.visualAssetUrl"
+              :image-url="next.visualAssetUrl"
+              :visual-type="next.visualType"
+              :page-number="next.pageNumber"
+              variant="compact"
+            />
             <div class="neighbor-text font-mono">{{ next.content }}</div>
           </div>
         </div>
@@ -108,6 +132,7 @@ import type { SearchSource } from '@/interface/chat'
 import type { ChunkContextResponse } from '@/interface/knowledge'
 import { getKnowledgeChunkContext } from '@/api/knowledge'
 import ChunkHighlightText from '@/views/KnowledgeBase/components/ChunkHighlightText.vue'
+import ChunkVisualPreview from '@/views/KnowledgeBase/components/ChunkVisualPreview.vue'
 
 defineOptions({
   name: 'KnowledgeSourceDrawer',

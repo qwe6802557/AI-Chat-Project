@@ -213,6 +213,18 @@ export class UpdateModelDto {
   providerId?: string;
 
   /**
+   * 是否支持视觉理解
+   */
+  @ApiProperty({
+    description: '是否支持多模态视觉理解',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'supportsVision必须是布尔值' })
+  supportsVision?: boolean;
+
+  /**
    * 是否设为默认模型
    */
   @ApiProperty({

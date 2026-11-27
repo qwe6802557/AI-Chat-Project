@@ -39,6 +39,13 @@
               <span class="source-index-badge">#{{ source.id ?? (index + 1) }}</span>
             </div>
             <div class="card-title">{{ source.title }}</div>
+            <img
+              v-if="source.visualAssetUrl"
+              :src="source.visualAssetUrl"
+              :alt="source.title"
+              class="kb-card-thumb"
+              loading="lazy"
+            />
             <div v-if="source.score" class="kb-score-pill">
               <span>置信度 {{ (source.score * 100).toFixed(0) }}%</span>
             </div>
@@ -400,6 +407,15 @@ const getDisplayDomain = (url: string, sitename?: string): string => {
     padding: 2px 4px;
     border-radius: 4px;
     align-self: flex-start;
+  }
+
+  .kb-card-thumb {
+    width: 100%;
+    height: 62px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
   }
 }
 </style>

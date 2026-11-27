@@ -130,7 +130,7 @@
                 ref="docFileInputRef"
                 type="file"
                 class="hidden-file-input"
-                accept=".pdf,.docx,.md,.txt"
+                accept=".pdf,.docx,.md,.txt,.png,.jpg,.jpeg,.webp"
                 @change="handleFileInputChange"
               />
               <CloudUploadOutlined class="upload-icon" />
@@ -139,7 +139,7 @@
                   {{ isUploading ? '正在上传文件并加入后台解析队列...' : '点击或拖拽文件至此上传解析' }}
                 </span>
                 <span class="secondary-text">
-                  支持 PDF、DOCX、Markdown、TXT 格式，后台异步完成 500 字分块与 BGE-M3 向量化（支持连续上传）
+                  支持 PDF（含图表智能识别）、DOCX、Markdown、TXT 及 PNG/JPG/WEBP 图片，异步完成视觉提取与 BGE-M3 向量化
                 </span>
               </div>
             </div>
@@ -171,7 +171,8 @@
                   class="table-data-row"
                 >
                   <div class="col-cell col-name" :title="doc.title">
-                    <FileTextOutlined class="doc-icon" />
+                    <PictureOutlined v-if="isImageDoc(doc)" class="doc-icon" />
+                    <FileTextOutlined v-else class="doc-icon" />
                     <span class="doc-title-text">{{ doc.title }}</span>
                   </div>
                   <div class="col-cell col-type">
@@ -320,6 +321,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   FileTextOutlined,
+  PictureOutlined,
   ApartmentOutlined,
   DeleteOutlined,
   CloudUploadOutlined,
@@ -426,6 +428,8 @@ const applyDocumentEvent = (event: DocumentProgressStreamEvent) => {
         progress: event.progress,
         processedChunks: event.processedChunks,
         totalChunks: event.totalChunks,
+        processedVisuals: event.processedVisuals,
+        totalVisuals: event.totalVisuals,
         chunkCount: event.chunkCount ?? existing.chunkCount,
         charCount: event.charCount ?? existing.charCount,
         errorMessage: event.errorMessage ?? undefined,
@@ -658,25 +662,34 @@ const formatFileSize = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+const isImageDoc = (doc: KnowledgeDocumentItem): boolean => {
+  return ['png', 'jpg', 'jpeg', 'webp'].includes((doc.fileType || '').toLowerCase())
+}
+
 const getStatusText = (doc: KnowledgeDocumentItem): string => {
   if (doc.status === 'completed') return '已完成'
   if (doc.status === 'failed') return '失败'
   const pct = Math.min(100, Math.max(0, doc.progress ?? 0))
   switch (doc.stage) {
     case 'parsing':
-      return `提取文本 · ${pct}%`
+      return `提取内容 ${pct}%`
+    case 'vision_extracting':
+      if (doc.totalVisuals) {
+        return `视觉解析 ${doc.processedVisuals ?? 0}/${doc.totalVisuals} (${pct}%)`
+      }
+      return `视觉解析 ${pct}%`
     case 'chunking':
-      return `语义切片 · ${pct}%`
+      return `语义切片 ${pct}%`
     case 'embedding':
       if (doc.totalChunks) {
-        return `向量化 ${doc.processedChunks ?? 0}/${doc.totalChunks} · ${pct}%`
+        return `向量化 ${doc.processedChunks ?? 0}/${doc.totalChunks} (${pct}%)`
       }
-      return `向量化 · ${pct}%`
+      return `向量化 ${pct}%`
     case 'saving':
-      return `写入索引 · ${pct}%`
+      return `写入索引 ${pct}%`
     case 'queued':
     default:
-      return doc.status === 'processing' ? `解析中 · ${pct}%` : '排队中'
+      return doc.status === 'processing' ? `解析中 ${pct}%` : '排队中'
   }
 }
 

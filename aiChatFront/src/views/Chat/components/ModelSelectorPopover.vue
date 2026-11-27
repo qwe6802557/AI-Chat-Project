@@ -113,6 +113,9 @@
             >
               <div class="other-item-info">
                 <span class="other-item-name" :title="model.label">{{ model.label }}</span>
+                <span v-if="model.supportsVision" class="vision-item-tag">
+                  视觉
+                </span>
                 <span v-if="model.reasoningBadgeLabel" class="other-item-tag">
                   {{ model.reasoningBadgeLabel }}
                 </span>
@@ -160,6 +163,7 @@ export interface ModelOptionItem {
   reserveCredits?: number
   reasoningCapability?: string
   reasoningBadgeLabel?: string
+  supportsVision?: boolean
 }
 
 interface Props {
@@ -593,6 +597,17 @@ const selectOtherModel = (modelId: string) => {
           color: #0284c7;
           background-color: #e0f2fe;
           padding: 1px 4px;
+          border-radius: 4px;
+          flex-shrink: 0;
+          white-space: nowrap;
+        }
+
+        .vision-item-tag {
+          font-size: 10px;
+          color: #2563eb;
+          background-color: #eff6ff;
+          border: 1px solid #bfdbfe;
+          padding: 0 4px;
           border-radius: 4px;
           flex-shrink: 0;
           white-space: nowrap;

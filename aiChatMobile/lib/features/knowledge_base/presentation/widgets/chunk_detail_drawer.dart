@@ -6,6 +6,7 @@ import '../../../../core/theme/stitch_tokens.dart';
 import '../../data/knowledge_base_repository.dart';
 import '../../domain/chunk_model.dart';
 import '../../domain/document_model.dart';
+import 'chunk_visual_preview_card.dart';
 import 'highlighted_chunk_text.dart';
 
 /// 知识库切片明细审阅与命中上下文抽屉
@@ -729,6 +730,13 @@ class _ChunkDetailDrawerState extends ConsumerState<ChunkDetailDrawer> {
               ],
             ),
             const SizedBox(height: 8.0),
+            if (chunk.resolvedVisualAssetUrl != null)
+              ChunkVisualPreviewCard(
+                imageUrl: chunk.resolvedVisualAssetUrl!,
+                visualType: chunk.visualType,
+                pageNumber: chunk.pageNumber,
+                height: 148.0,
+              ),
             HighlightedChunkText(
               content: chunk.content,
               highlights: highlights,

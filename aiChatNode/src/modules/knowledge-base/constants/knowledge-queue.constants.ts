@@ -23,6 +23,8 @@ export interface DocumentProgressEvent {
   progress: number;
   processedChunks?: number;
   totalChunks?: number;
+  processedVisuals?: number;
+  totalVisuals?: number;
   chunkCount?: number;
   charCount?: number;
   errorMessage?: string | null;

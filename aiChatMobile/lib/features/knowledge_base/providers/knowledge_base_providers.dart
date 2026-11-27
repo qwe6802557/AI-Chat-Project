@@ -231,6 +231,8 @@ class KbDocumentsNotifier extends FamilyAsyncNotifier<List<DocumentModel>, Strin
         progress: event.progress ?? doc.progress,
         processedChunks: event.processedChunks,
         totalChunks: event.totalChunks,
+        processedVisuals: event.processedVisuals,
+        totalVisuals: event.totalVisuals,
         chunkCount: event.chunkCount ?? doc.chunkCount,
         charCount: event.charCount ?? doc.charCount,
         errorMessage: event.errorMessage,

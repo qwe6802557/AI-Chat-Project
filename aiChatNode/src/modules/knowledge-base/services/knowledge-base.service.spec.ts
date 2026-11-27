@@ -97,6 +97,17 @@ describe('KnowledgeBaseService', () => {
       }),
     );
 
+    mockKbRepo.findOne.mockResolvedValue({ id: 'kb-1', userId: 'u1' });
+
+    const imgDoc = await service.uploadAndProcessDocument('u1', 'kb-1', {
+      originalname: 'arch.png',
+      mimetype: 'image/png',
+      size: 64,
+      buffer: Buffer.from('fake-png'),
+    } as any);
+    expect(imgDoc.fileType).toBe('png');
+    expect(imgDoc.stage).toBe('queued');
+
     await expect(
       service.uploadAndProcessDocument('u1', 'kb-1', {
         originalname: 'archive.zip',

@@ -122,6 +122,14 @@
           </div>
 
           <div class="res-content-box">
+            <ChunkVisualPreview
+              v-if="res.visualAssetUrl"
+              :image-url="res.visualAssetUrl"
+              :visual-type="res.visualType"
+              :page-number="res.pageNumber"
+              :caption="res.documentTitle"
+              variant="full"
+            />
             <p class="res-text">
               <ChunkHighlightText
                 :content="res.content"
@@ -183,6 +191,7 @@ import type {
   RetrievalMode,
 } from '@/interface/knowledge'
 import ChunkHighlightText from './ChunkHighlightText.vue'
+import ChunkVisualPreview from './ChunkVisualPreview.vue'
 
 defineOptions({
   name: 'RetrievalPlayground',

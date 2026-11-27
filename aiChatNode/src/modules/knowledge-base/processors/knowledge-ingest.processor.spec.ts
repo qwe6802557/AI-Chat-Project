@@ -118,7 +118,7 @@ describe('KnowledgeIngestProcessor', () => {
       (c: any[]) => `${c[0].type}:${c[0].stage}:${c[0].progress}`,
     );
     expect(publishedStages).toContain('progress:parsing:10');
-    expect(publishedStages).toContain('progress:chunking:25');
+    expect(publishedStages).toContain('progress:chunking:50');
     expect(publishedStages).toContain('progress:embedding:85');
     expect(publishedStages).toContain('progress:saving:90');
     expect(publishedStages).toContain('completed:completed:100');
@@ -181,5 +181,134 @@ describe('KnowledgeIngestProcessor', () => {
     ).resolves.toBeUndefined();
 
     await expect(fs.access(filePath)).rejects.toThrow();
+  });
+
+  it('支持独立图片与混合 PDF 视觉路由入库，并在中途失败时自动清理未提交视觉资产', async () => {
+    const mockAssetService = {
+      writeNormalizedAssetFile: jest.fn().mockResolvedValue({
+        assetId: 'asset-img-1',
+        storagePath: 'assets/u1/doc-mm/asset-img-1.webp',
+        absolutePath: path.join(tempDir, 'asset-img-1.webp'),
+        buffer: Buffer.from('webp'),
+        mimeType: 'image/webp',
+        width: 800,
+        height: 600,
+        sizeBytes: 2048,
+      }),
+      removeAssetFiles: jest.fn().mockResolvedValue(undefined),
+      cleanupDocumentAssetFiles: jest.fn().mockResolvedValue(undefined),
+    };
+    const mockVisionService = {
+      extractVisualContent: jest.fn().mockResolvedValue({
+        visualType: 'diagram',
+        title: '系统拓扑图',
+        summary: '展示双路检索引擎数据流',
+        ocrText: 'pgvector HNSW',
+        tableMarkdown: '',
+        searchableText: '[独立图像 · 视觉内容(diagram)] 系统拓扑图\n\n核心摘要：展示双路检索引擎数据流',
+        modelId: 'glm-4v-flash',
+      }),
+    };
+    const mockPdfVisualRouter = {
+      inspectAndRenderPages: jest.fn().mockResolvedValue({
+        totalPages: 2,
+        visualPagesDetected: 1,
+        visualPagesRendered: 1,
+        visualPagesSkippedByCap: 0,
+        pages: [
+          {
+            pageNumber: 1,
+            text: 'A'.repeat(120),
+            isVisualPage: false,
+            metrics: { textLength: 120, imageOpCount: 0, vectorDrawOpCount: 0 },
+          },
+          {
+            pageNumber: 2,
+            text: 'Chart 2',
+            isVisualPage: true,
+            metrics: { textLength: 7, imageOpCount: 1, vectorDrawOpCount: 0 },
+            renderedPngBuffer: Buffer.from('png-page-2'),
+          },
+        ],
+      }),
+    };
+
+    const multimodalProcessor = new KnowledgeIngestProcessor(
+      mockKbRepo,
+      mockDocRepo,
+      mockChunkRepo,
+      mockParserService,
+      mockChunkerService,
+      mockEmbeddingService,
+      mockProgressService,
+      mockAssetService as any,
+      mockVisionService as any,
+      mockPdfVisualRouter as any,
+    );
+
+    const pdfPath = path.join(tempDir, 'mixed.pdf');
+    await fs.writeFile(pdfPath, 'fake-pdf');
+    const docRecord = {
+      id: 'doc-mm',
+      knowledgeBaseId: 'kb-1',
+      userId: 'u1',
+      title: 'mixed',
+      fileName: 'mixed.pdf',
+      fileType: 'pdf',
+      filePath: pdfPath,
+      progress: 0,
+    };
+    mockDocRepo.findOne.mockResolvedValue(docRecord);
+    mockTxManager.findOne.mockResolvedValue(docRecord);
+    mockTxManager.query.mockResolvedValue([]);
+    mockChunkerService.splitText.mockReturnValue([
+      { chunkIndex: 0, content: 'A'.repeat(120), charCount: 120 },
+    ]);
+    mockEmbeddingService.embedDocuments.mockResolvedValue([
+      [0.1, 0.2],
+      [0.3, 0.4],
+    ]);
+
+    await multimodalProcessor.process({
+      data: { documentId: 'doc-mm', knowledgeBaseId: 'kb-1', userId: 'u1' },
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+    } as any);
+
+    expect(mockVisionService.extractVisualContent).toHaveBeenCalledTimes(1);
+    const stages = mockProgressService.publish.mock.calls.map(
+      (c: any[]) => c[0].stage,
+    );
+    expect(stages).toContain('vision_extracting');
+    expect(mockTxManager.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO "knowledge_assets"'),
+      expect.any(Array),
+    );
+
+    mockEmbeddingService.embedDocuments.mockRejectedValueOnce(new Error('embed failed'));
+    const failPath = path.join(tempDir, 'fail.png');
+    await fs.writeFile(failPath, 'fake-png');
+    mockDocRepo.findOne.mockResolvedValue({
+      id: 'doc-fail-img',
+      knowledgeBaseId: 'kb-1',
+      userId: 'u1',
+      title: 'fail',
+      fileName: 'fail.png',
+      fileType: 'png',
+      filePath: failPath,
+      progress: 0,
+    });
+
+    await expect(
+      multimodalProcessor.process({
+        data: { documentId: 'doc-fail-img', knowledgeBaseId: 'kb-1', userId: 'u1' },
+        attemptsMade: 0,
+        opts: { attempts: 3 },
+      } as any),
+    ).rejects.toThrow('embed failed');
+
+    expect(mockAssetService.removeAssetFiles).toHaveBeenCalledWith([
+      'assets/u1/doc-mm/asset-img-1.webp',
+    ]);
   });
 });

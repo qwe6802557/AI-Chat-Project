@@ -78,6 +78,7 @@ interface ChatModelOption {
   reasoningCapability?: 'none' | 'summary' | 'raw'
   reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
   reasoningBadgeLabel?: string
+  supportsVision?: boolean
 }
 
 const PREFERRED_MODEL_ORDER: string[] = [
@@ -342,6 +343,7 @@ const loadModelOptions = async () => {
         reasoningCapability: model.reasoningCapability || 'none',
         reasoningStrategy: model.reasoningStrategy,
         reasoningBadgeLabel: model.reasoningBadgeLabel,
+        supportsVision: Boolean(model.supportsVision),
       }))
 
     if (activeModels.length > 0) {

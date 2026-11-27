@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/stitch_tokens.dart';
+import '../../../knowledge_base/presentation/widgets/chunk_visual_preview_card.dart';
 import '../../../knowledge_base/presentation/widgets/highlighted_chunk_text.dart';
 import '../../domain/chat_message_model.dart';
 
@@ -230,6 +231,16 @@ class CitationBottomSheet extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14.0),
+          if (source.resolvedVisualAssetUrl != null) ...[
+            ChunkVisualPreviewCard(
+              imageUrl: source.resolvedVisualAssetUrl!,
+              visualType: source.visualType,
+              pageNumber: source.pageNumber,
+              visualInjected: source.visualInjected,
+              height: 156.0,
+            ),
+            const SizedBox(height: 6.0),
+          ],
 
           // 切片正文展示区
           ConstrainedBox(

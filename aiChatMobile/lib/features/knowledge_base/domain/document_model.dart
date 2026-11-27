@@ -11,6 +11,8 @@ class DocumentModel {
   final int progress;
   final int? processedChunks;
   final int? totalChunks;
+  final int? processedVisuals;
+  final int? totalVisuals;
   final String? errorMessage;
   final int chunkCount;
   final int charCount;
@@ -29,6 +31,8 @@ class DocumentModel {
     this.progress = 0,
     this.processedChunks,
     this.totalChunks,
+    this.processedVisuals,
+    this.totalVisuals,
     this.errorMessage,
     this.chunkCount = 0,
     this.charCount = 0,
@@ -46,7 +50,12 @@ class DocumentModel {
     if (isFailed) return '失败';
     switch (stage) {
       case 'parsing':
-        return '提取文本';
+        return '提取内容';
+      case 'vision_extracting':
+        if (totalVisuals != null && totalVisuals! > 0) {
+          return '视觉解析 ${processedVisuals ?? 0}/$totalVisuals';
+        }
+        return '视觉解析';
       case 'chunking':
         return '语义切片';
       case 'embedding':
@@ -83,6 +92,8 @@ class DocumentModel {
     int? progress,
     int? processedChunks,
     int? totalChunks,
+    int? processedVisuals,
+    int? totalVisuals,
     String? errorMessage,
     bool clearErrorMessage = false,
     int? chunkCount,
@@ -102,6 +113,8 @@ class DocumentModel {
       progress: progress ?? this.progress,
       processedChunks: processedChunks ?? this.processedChunks,
       totalChunks: totalChunks ?? this.totalChunks,
+      processedVisuals: processedVisuals ?? this.processedVisuals,
+      totalVisuals: totalVisuals ?? this.totalVisuals,
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       chunkCount: chunkCount ?? this.chunkCount,
       charCount: charCount ?? this.charCount,
@@ -137,6 +150,8 @@ class DocumentModel {
           (statusVal == 'completed' ? 100 : 0),
       processedChunks: (json['processedChunks'] as num?)?.toInt(),
       totalChunks: (json['totalChunks'] as num?)?.toInt(),
+      processedVisuals: (json['processedVisuals'] as num?)?.toInt(),
+      totalVisuals: (json['totalVisuals'] as num?)?.toInt(),
       errorMessage: json['errorMessage'] as String?,
       chunkCount: (json['chunkCount'] as num?)?.toInt() ?? 0,
       charCount: (json['charCount'] as num?)?.toInt() ?? 0,
@@ -158,6 +173,8 @@ class DocumentModel {
       'progress': progress,
       if (processedChunks != null) 'processedChunks': processedChunks,
       if (totalChunks != null) 'totalChunks': totalChunks,
+      if (processedVisuals != null) 'processedVisuals': processedVisuals,
+      if (totalVisuals != null) 'totalVisuals': totalVisuals,
       if (errorMessage != null) 'errorMessage': errorMessage,
       'chunkCount': chunkCount,
       'charCount': charCount,
@@ -213,6 +230,8 @@ class DocumentProgressEvent {
   final int? progress;
   final int? processedChunks;
   final int? totalChunks;
+  final int? processedVisuals;
+  final int? totalVisuals;
   final int? chunkCount;
   final int? charCount;
   final String? errorMessage;
@@ -227,6 +246,8 @@ class DocumentProgressEvent {
     this.progress,
     this.processedChunks,
     this.totalChunks,
+    this.processedVisuals,
+    this.totalVisuals,
     this.chunkCount,
     this.charCount,
     this.errorMessage,
@@ -244,6 +265,8 @@ class DocumentProgressEvent {
       progress: (json['progress'] as num?)?.toInt(),
       processedChunks: (json['processedChunks'] as num?)?.toInt(),
       totalChunks: (json['totalChunks'] as num?)?.toInt(),
+      processedVisuals: (json['processedVisuals'] as num?)?.toInt(),
+      totalVisuals: (json['totalVisuals'] as num?)?.toInt(),
       chunkCount: (json['chunkCount'] as num?)?.toInt(),
       charCount: (json['charCount'] as num?)?.toInt(),
       errorMessage: json['errorMessage'] as String?,

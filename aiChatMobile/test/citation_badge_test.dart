@@ -191,5 +191,44 @@ def hello():
       expect(find.text('复制'), findsOneWidget);
       expect(find.byType(HighlightView), findsOneWidget);
     });
+
+    testWidgets('CitationBottomSheet 兼容渲染视觉切片页码与直连视觉模型标签', (tester) async {
+      const source = SearchSourceModel(
+        id: 2,
+        title: '2026 Q3 性能对比报告',
+        url: '',
+        snippet: '[第 4 页 · 视觉内容(chart)] 吞吐量提升 3 倍',
+        isKnowledgeBase: true,
+        score: 0.93,
+        chunkIndex: 1,
+        chunkType: 'visual',
+        assetId: 'asset-4',
+        visualType: 'chart',
+        pageNumber: 4,
+        visualAssetUrl: 'https://example.com/asset-4.webp',
+        visualInjected: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (ctx) => ElevatedButton(
+                onPressed: () => CitationBottomSheet.show(ctx, source: source, index: 2),
+                child: const Text('Open Visual Sheet'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Visual Sheet'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('数据图表'), findsOneWidget);
+      expect(find.text('P.4'), findsOneWidget);
+      expect(find.text('已直连视觉模型'), findsOneWidget);
+    });
   });
 }

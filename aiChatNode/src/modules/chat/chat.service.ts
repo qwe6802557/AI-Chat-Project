@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -47,6 +48,7 @@ import { ApprovalManagerService } from './services/approval-manager.service';
 import { AgentStreamExecutorService } from './services/agent-stream-executor.service';
 import type { ToolExecutionRecord } from '../tools/types/tools.types';
 import { HybridRagService, type RagSearchResult } from '../knowledge-base/services/hybrid-rag.service';
+import { KnowledgeAssetService } from '../knowledge-base/services/knowledge-asset.service';
 
 export interface SessionMessageAttachmentDto {
   id: string;
@@ -101,6 +103,7 @@ interface ResolvedChatModelConfig {
   outputPrice: number;
   maxOutput: number;
   providerName?: string | null;
+  supportsVision: boolean;
 }
 
 @Injectable()
@@ -136,6 +139,8 @@ export class ChatService {
     private readonly ragService: HybridRagService,
     private readonly approvalManagerService: ApprovalManagerService,
     private readonly agentStreamExecutorService: AgentStreamExecutorService,
+    @Optional()
+    private readonly knowledgeAssetService?: KnowledgeAssetService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -160,6 +165,7 @@ export class ChatService {
       outputPrice: Number(model.outputPrice || 0),
       maxOutput: Number(model.maxOutput || 0),
       providerName: model.provider?.name || null,
+      supportsVision: Boolean(model.supportsVision),
     };
   }
 
@@ -334,7 +340,7 @@ export class ChatService {
         model: params.model,
         usage: params.usage || null,
         durationMs: params.durationMs || null,
-        sources: params.sources || null,
+        sources: this.sanitizeSourcesForStorage(params.sources),
         toolCalls: params.toolCalls || null,
       });
 
@@ -598,10 +604,17 @@ export class ChatService {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
+    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
+    const existingImageCount = fileDataForAI.filter((f) =>
+      this.SUPPORTED_IMAGE_TYPES.includes(f.type),
+    ).length;
+
     const ragContext = await this.resolveKnowledgeBaseContext({
       userId,
       message: createChatDto.message,
       knowledgeBaseIds: effectiveKnowledgeBaseIds,
+      supportsVision: chargeModel.supportsVision,
+      existingImageCount,
     });
 
     if (ragContext.sources.length > 0) {
@@ -621,28 +634,11 @@ export class ChatService {
       fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
-    let finalUserContent: string | MultimodalContent[] = userContent;
-    if (ragContext.promptText) {
-      if (typeof finalUserContent === 'string') {
-        finalUserContent = `${ragContext.promptText}\n\n${finalUserContent}`;
-      } else {
-        finalUserContent = [
-          { type: 'text', text: `${ragContext.promptText}\n\n` },
-          ...finalUserContent,
-        ];
-      }
-    }
-
-    if (searchResult?.contextPrompt) {
-      if (typeof finalUserContent === 'string') {
-        finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
-      } else {
-        finalUserContent = [
-          { type: 'text', text: `${searchResult.contextPrompt}\n\n【用户提问】：` },
-          ...finalUserContent,
-        ];
-      }
-    }
+    const finalUserContent = this.assembleFinalUserContent({
+      userContent,
+      ragContext,
+      webSearchContextPrompt: searchResult?.contextPrompt,
+    });
 
     messages.push({
       role: 'user',
@@ -655,7 +651,6 @@ export class ChatService {
       );
     }
 
-    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
     const reserveCredits = this.estimateReserveCredits({
       messages,
       model: chargeModel,
@@ -921,6 +916,7 @@ export class ChatService {
         };
       })(),
       charge: chargeMap.get(msg.id) || null,
+      sources: this.hydrateSourcesWithSignedUrls(msg.sources),
       toolCalls: msg.toolCalls || null,
       attachments: (msg.attachments || []).map((att) => ({
         id: att.id,
@@ -1035,10 +1031,17 @@ export class ChatService {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
+    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
+    const existingImageCount = fileDataForAI.filter((f) =>
+      this.SUPPORTED_IMAGE_TYPES.includes(f.type),
+    ).length;
+
     const ragContext = await this.resolveKnowledgeBaseContext({
       userId,
       message: createChatDto.message,
       knowledgeBaseIds: effectiveKnowledgeBaseIds,
+      supportsVision: chargeModel.supportsVision,
+      existingImageCount,
     });
 
     if (ragContext.sources.length > 0) {
@@ -1058,28 +1061,11 @@ export class ChatService {
       fileDataForAI.length > 0 ? fileDataForAI : undefined,
     );
 
-    let finalUserContent: string | MultimodalContent[] = userContent;
-    if (ragContext.promptText) {
-      if (typeof finalUserContent === 'string') {
-        finalUserContent = `${ragContext.promptText}\n\n${finalUserContent}`;
-      } else {
-        finalUserContent = [
-          { type: 'text', text: `${ragContext.promptText}\n\n` },
-          ...finalUserContent,
-        ];
-      }
-    }
-
-    if (searchResult?.contextPrompt) {
-      if (typeof finalUserContent === 'string') {
-        finalUserContent = `${searchResult.contextPrompt}\n\n【用户提问】：\n${finalUserContent}`;
-      } else {
-        finalUserContent = [
-          { type: 'text', text: `${searchResult.contextPrompt}\n\n【用户提问】：` },
-          ...finalUserContent,
-        ];
-      }
-    }
+    const finalUserContent = this.assembleFinalUserContent({
+      userContent,
+      ragContext,
+      webSearchContextPrompt: searchResult?.contextPrompt,
+    });
 
     // 添加当前用户消息
     messages.push({
@@ -1094,7 +1080,6 @@ export class ChatService {
       );
     }
 
-    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
     const reserveCredits = this.estimateReserveCredits({
       messages,
       model: chargeModel,
@@ -1247,16 +1232,108 @@ export class ChatService {
     };
   }
 
+  private sanitizeSourcesForStorage(
+    sources?: SearchSource[] | null,
+  ): SearchSource[] | null {
+    if (!sources || sources.length === 0) return null;
+    // 剥离带过期时间的短期签名 URL，历史回放时基于稳定的 assetId 重新签发
+    return sources.map((source) => {
+      if (!source.visualAssetUrl) return source;
+      const cloned = { ...source };
+      delete cloned.visualAssetUrl;
+      return cloned;
+    });
+  }
+
+  private hydrateSourcesWithSignedUrls(
+    sources?: SearchSource[] | null,
+  ): SearchSource[] | null {
+    const assetService = this.knowledgeAssetService;
+    if (!sources || sources.length === 0) return sources ?? null;
+    if (!assetService) return sources;
+
+    return sources.map((source) => {
+      if (!source.assetId) return source;
+      return {
+        ...source,
+        visualAssetUrl: assetService.buildSignedAssetUrl(source.assetId),
+      };
+    });
+  }
+
+  private resolveRagChatImageLimit(): number {
+    const raw =
+      this.configService.get<string>('KNOWLEDGE_CHAT_MAX_IMAGES') ||
+      process.env.KNOWLEDGE_CHAT_MAX_IMAGES;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return Math.min(6, Math.floor(parsed));
+    }
+    return 3;
+  }
+
+  private assembleFinalUserContent(params: {
+    userContent: string | MultimodalContent[];
+    ragContext: {
+      promptText: string;
+      visualParts: MultimodalContent[];
+    };
+    webSearchContextPrompt?: string;
+  }): string | MultimodalContent[] {
+    const { userContent, ragContext, webSearchContextPrompt } = params;
+    const hasRagVisuals = ragContext.visualParts.length > 0;
+
+    if (!hasRagVisuals && typeof userContent === 'string') {
+      let text = userContent;
+      if (ragContext.promptText) {
+        text = `${ragContext.promptText}\n\n${text}`;
+      }
+      if (webSearchContextPrompt) {
+        text = `${webSearchContextPrompt}\n\n【用户提问】：\n${text}`;
+      }
+      return text;
+    }
+
+    const parts: MultimodalContent[] = [];
+    if (webSearchContextPrompt) {
+      parts.push({
+        type: 'text',
+        text: `${webSearchContextPrompt}\n\n【用户提问】：`,
+      });
+    }
+    if (ragContext.promptText) {
+      parts.push({ type: 'text', text: `${ragContext.promptText}\n\n` });
+    }
+    if (hasRagVisuals) {
+      parts.push(...ragContext.visualParts);
+    }
+    if (typeof userContent === 'string') {
+      if (userContent) {
+        parts.push({ type: 'text', text: userContent });
+      }
+    } else {
+      parts.push(...userContent);
+    }
+
+    return parts;
+  }
+
   /**
-   * 检索知识库并生成 RAG 增强提示词与证据溯源
+   * 检索知识库并生成 RAG 增强提示词、多模态附图与证据溯源
    */
   private async resolveKnowledgeBaseContext(params: {
     userId: string;
     message: string;
     knowledgeBaseIds?: string[];
-  }): Promise<{ promptText: string; sources: SearchSource[] }> {
+    supportsVision?: boolean;
+    existingImageCount?: number;
+  }): Promise<{
+    promptText: string;
+    sources: SearchSource[];
+    visualParts: MultimodalContent[];
+  }> {
     if (!params.knowledgeBaseIds?.length) {
-      return { promptText: '', sources: [] };
+      return { promptText: '', sources: [], visualParts: [] };
     }
 
     try {
@@ -1268,10 +1345,50 @@ export class ChatService {
       });
 
       if (ragResults.length === 0) {
-        return { promptText: '', sources: [] };
+        return { promptText: '', sources: [], visualParts: [] };
       }
 
-      const promptText = this.buildRagContextPrompt(ragResults);
+      const maxRagImages = this.resolveRagChatImageLimit();
+      const maxSlots = params.supportsVision
+        ? Math.max(0, Math.min(maxRagImages, 6 - (params.existingImageCount ?? 0)))
+        : 0;
+
+      const visualParts: MultimodalContent[] = [];
+      const injectedAssetIds = new Set<string>();
+      const injectedSourceIndexes = new Set<number>();
+
+      if (maxSlots > 0 && this.knowledgeAssetService) {
+        for (let idx = 0; idx < ragResults.length; idx++) {
+          if (injectedAssetIds.size >= maxSlots) break;
+          const item = ragResults[idx];
+          if (!item.assetId || injectedAssetIds.has(item.assetId)) {
+            continue;
+          }
+
+          const dataUrl = await this.knowledgeAssetService.readAssetAsDataUrl(
+            item.assetId,
+            params.userId,
+          );
+          if (!dataUrl) {
+            continue;
+          }
+
+          injectedAssetIds.add(item.assetId);
+          injectedSourceIndexes.add(idx);
+          const figureOrder = injectedAssetIds.size;
+          const pageSuffix = item.pageNumber ? ` 第 ${item.pageNumber} 页` : '';
+
+          visualParts.push({
+            type: 'text',
+            text: `[知识库参考附图 ${figureOrder}，对应引用 [${idx + 1}] 《${item.documentTitle}》${pageSuffix}]`,
+          });
+          visualParts.push({
+            type: 'image_url',
+            image_url: { url: dataUrl, detail: 'auto' },
+          });
+        }
+      }
+
       const sources: SearchSource[] = ragResults.map((r, idx) => ({
         id: idx + 1,
         title: r.documentTitle,
@@ -1288,19 +1405,36 @@ export class ChatService {
         rerankScore: r.rerankScore,
         matchedTerms: r.matchedTerms,
         highlights: r.highlights,
+        chunkType: r.chunkType,
+        assetId: r.assetId,
+        assetType: r.assetType as SearchSource['assetType'],
+        visualType: r.visualType as SearchSource['visualType'],
+        pageNumber: r.pageNumber,
+        visualAssetUrl: r.visualAssetUrl,
+        visualInjected: Boolean(
+          r.assetId &&
+            (injectedSourceIndexes.has(idx) || injectedAssetIds.has(r.assetId)),
+        ),
       }));
 
-      return { promptText, sources };
+      const promptText = this.buildRagContextPrompt(
+        ragResults,
+        visualParts.length > 0,
+      );
+      return { promptText, sources, visualParts };
     } catch (err: any) {
       this.logger.warn(`知识库检索执行失败: ${err.message}`);
-      return { promptText: '', sources: [] };
+      return { promptText: '', sources: [], visualParts: [] };
     }
   }
 
   /**
    * 构造 RAG 结构化上下文与防幻觉指令
    */
-  private buildRagContextPrompt(results: RagSearchResult[]): string {
+  private buildRagContextPrompt(
+    results: RagSearchResult[],
+    hasVisualAttachments = false,
+  ): string {
     const docChunks = results
       .map(
         (r, i) =>
@@ -1308,12 +1442,16 @@ export class ChatService {
       )
       .join('\n\n');
 
+    const visualGuideline = hasVisualAttachments
+      ? '\n3. 随附的知识库参考附图已按引用编号标注，请结合原图细节与文字切片中的精确数值综合分析作答。'
+      : '';
+
     return `【关联知识库资料】：
 以下是从您关联的知识库中检索出的真实参考切片：
 ${docChunks}
 
 【回答指引】：
 1. 优先依据上述知识库资料回答问题，并在引用的论断或信息末尾使用引用角标标注来源，如 [1] 或 [2]；
-2. 若参考资料未包含回答所需的内容，请明确指出“在当前知识库中未检索到相关内容”，切勿编造虚假信息。`;
+2. 若参考资料未包含回答所需的内容，请明确指出“在当前知识库中未检索到相关内容”，切勿编造虚假信息。${visualGuideline}`;
   }
 }

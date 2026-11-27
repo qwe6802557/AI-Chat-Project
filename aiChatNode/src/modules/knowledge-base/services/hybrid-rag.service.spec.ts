@@ -316,4 +316,59 @@ describe('HybridRagService', () => {
     expect(matchedTerms).toContain('PostgreSQL');
     expect(matchedTerms).not.toContain('Postgres');
   });
+
+  it('should enrich visual chunks with chunkType, pageNumber and signed visualAssetUrl', async () => {
+    const mockAssetService = {
+      buildSignedAssetUrl: jest.fn(
+        (id: string) => `/knowledge-bases/assets/${id}?expires=123&signature=sig`,
+      ),
+    };
+    const visualRagService = new HybridRagService(
+      mockChunkRepo,
+      mockDocRepo,
+      mockEmbeddingService,
+      undefined,
+      mockAssetService as any,
+    );
+
+    mockEmbeddingService.embedQuery.mockResolvedValue([1, 0, 0]);
+    mockEntityManager.query
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([
+        {
+          id: 'chunk-visual-1',
+          documentId: 'doc-pdf-1',
+          knowledgeBaseId: 'kb-1',
+          content: '[第 4 页 · 视觉内容(chart)] 营收趋势图',
+          chunkIndex: 3,
+          charCount: 25,
+          metadata: {
+            chunkType: 'visual',
+            assetId: 'asset-44',
+            assetType: 'pdf_page',
+            visualType: 'chart',
+            pageNumber: 4,
+          },
+          documentTitle: '2026财报',
+          denseScore: 0.91,
+        },
+      ]);
+    mockChunkRepo.manager.query.mockResolvedValueOnce([]);
+
+    const res = await visualRagService.search({
+      userId: 'u1',
+      query: '营收趋势',
+      limit: 3,
+    });
+
+    expect(res).toHaveLength(1);
+    expect(res[0].chunkType).toBe('visual');
+    expect(res[0].assetId).toBe('asset-44');
+    expect(res[0].visualType).toBe('chart');
+    expect(res[0].pageNumber).toBe(4);
+    expect(res[0].visualAssetUrl).toBe(
+      '/knowledge-bases/assets/asset-44?expires=123&signature=sig',
+    );
+  });
 });

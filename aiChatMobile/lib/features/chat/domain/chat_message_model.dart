@@ -1,3 +1,4 @@
+import '../../../core/constants/api_constants.dart';
 import '../../knowledge_base/domain/chunk_model.dart';
 import 'file_attachment_model.dart';
 import 'tool_model.dart';
@@ -23,6 +24,13 @@ class SearchSourceModel {
   final double? rerankScore;
   final List<String> matchedTerms;
   final List<HighlightSpan> highlights;
+  final String? chunkType;
+  final String? assetId;
+  final String? assetType;
+  final String? visualType;
+  final int? pageNumber;
+  final String? visualAssetUrl;
+  final bool visualInjected;
 
   const SearchSourceModel({
     required this.id,
@@ -42,7 +50,23 @@ class SearchSourceModel {
     this.rerankScore,
     this.matchedTerms = const [],
     this.highlights = const [],
+    this.chunkType,
+    this.assetId,
+    this.assetType,
+    this.visualType,
+    this.pageNumber,
+    this.visualAssetUrl,
+    this.visualInjected = false,
   });
+
+  String? get resolvedVisualAssetUrl {
+    final raw = visualAssetUrl;
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    return '${ApiConstants.baseUrl}$raw';
+  }
 
   factory SearchSourceModel.fromJson(Map<String, dynamic> json) {
     final rawHighlights = json['highlights'] as List? ?? [];
@@ -69,6 +93,13 @@ class SearchSourceModel {
           .whereType<Map<String, dynamic>>()
           .map(HighlightSpan.fromJson)
           .toList(),
+      chunkType: json['chunkType'] as String?,
+      assetId: json['assetId'] as String?,
+      assetType: json['assetType'] as String?,
+      visualType: json['visualType'] as String?,
+      pageNumber: (json['pageNumber'] as num?)?.toInt(),
+      visualAssetUrl: json['visualAssetUrl'] as String?,
+      visualInjected: json['visualInjected'] as bool? ?? false,
     );
   }
 
@@ -90,6 +121,13 @@ class SearchSourceModel {
     if (rerankScore != null) 'rerankScore': rerankScore,
     if (matchedTerms.isNotEmpty) 'matchedTerms': matchedTerms,
     if (highlights.isNotEmpty) 'highlights': highlights.map((h) => h.toJson()).toList(),
+    if (chunkType != null) 'chunkType': chunkType,
+    if (assetId != null) 'assetId': assetId,
+    if (assetType != null) 'assetType': assetType,
+    if (visualType != null) 'visualType': visualType,
+    if (pageNumber != null) 'pageNumber': pageNumber,
+    if (visualAssetUrl != null) 'visualAssetUrl': visualAssetUrl,
+    if (visualInjected) 'visualInjected': visualInjected,
   };
 }
 

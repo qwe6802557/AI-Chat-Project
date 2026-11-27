@@ -39,6 +39,15 @@
           </div>
 
           <!-- 切片内容摘要 -->
+          <ChunkVisualPreview
+            v-if="source?.isKnowledgeBase && source?.visualAssetUrl"
+            :image-url="source.visualAssetUrl"
+            :visual-type="source.visualType"
+            :page-number="source.pageNumber"
+            :visual-injected="source.visualInjected"
+            :caption="source.title"
+            variant="compact"
+          />
           <div class="popover-snippet font-mono">
             <ChunkHighlightText
               :content="source?.snippet || '暂无切片预览内容'"
@@ -86,6 +95,7 @@ import {
 } from '@ant-design/icons-vue'
 import type { SearchSource } from '@/interface/chat'
 import ChunkHighlightText from '@/views/KnowledgeBase/components/ChunkHighlightText.vue'
+import ChunkVisualPreview from '@/views/KnowledgeBase/components/ChunkVisualPreview.vue'
 
 defineOptions({
   name: 'CitationPopover',

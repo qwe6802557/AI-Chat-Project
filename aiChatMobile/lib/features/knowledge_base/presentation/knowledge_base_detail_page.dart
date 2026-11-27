@@ -30,7 +30,17 @@ class _KnowledgeBaseDetailPageState extends ConsumerState<KnowledgeBaseDetailPag
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'docx', 'doc', 'md', 'txt'],
+        allowedExtensions: [
+          'pdf',
+          'docx',
+          'doc',
+          'md',
+          'txt',
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+        ],
         withData: true, // 保障 Web 和内存环境可直接获取 bytes
       );
 

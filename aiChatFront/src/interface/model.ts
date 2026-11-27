@@ -27,6 +27,7 @@ export interface BackendAiModel {
   reasoningStrategy?: 'provider_preferred' | 'summary_preferred'
   reasoningIntegration?: 'responses_summary' | 'anthropic_blocks' | 'inline_tag' | 'none'
   reasoningBadgeLabel?: string
+  supportsVision?: boolean
   providerId: string
   provider?: BackendAiProvider
 }
@@ -67,5 +68,6 @@ export interface UpdateModelDto {
   category?: 'chat' | 'image' | 'video' | 'voice'
   creditCost?: number
   sortOrder?: number
+  supportsVision?: boolean
   providerId?: string
 }

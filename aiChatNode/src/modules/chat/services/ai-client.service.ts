@@ -174,12 +174,21 @@ export class AIClientService {
     }
   }
 
+  private hasImageContent(messages: ChatMessage[]): boolean {
+    return messages.some(
+      (msg) =>
+        Array.isArray(msg.content) &&
+        msg.content.some((part) => part.type === 'image_url'),
+    );
+  }
+
   /**
-   * 查找同级别且已配置、健康的备用模型
+   * 查找同级别且已配置、健康的备用模型（携带图片时仅限支持视觉能力的模型）
    */
   async findFallbackModel(
     primaryModelId: string,
     primaryProviderName: string,
+    options?: { requireVision?: boolean },
   ): Promise<AiModel | null> {
     try {
       const activeModels = await this.aiModelService.findActiveModels(true, 'chat');
@@ -189,6 +198,7 @@ export class AIClientService {
           m.provider &&
           m.provider.isActive &&
           m.provider.name.toLowerCase() !== primaryProviderName.toLowerCase() &&
+          (!options?.requireVision || Boolean(m.supportsVision)) &&
           this.isProviderAdapterConfigured(m.provider.name) &&
           !this.isProviderCircuitOpen(m.provider.name),
       );
@@ -558,7 +568,9 @@ export class AIClientService {
 
     if (this.isProviderCircuitOpen(providerName)) {
       this.logger.warn(`供应商 ${providerName} 处于熔断冷却中，自动调度备用通道`);
-      const fallback = await this.findFallbackModel(modelId, providerName);
+      const fallback = await this.findFallbackModel(modelId, providerName, {
+        requireVision: this.hasImageContent(messages),
+      });
       if (fallback) {
         return this.executeChatCompletionWithFailover(
           fallback,
@@ -603,7 +615,9 @@ export class AIClientService {
     } catch (error: any) {
       if (this.isTransientProviderError(error)) {
         this.recordProviderFailure(providerName);
-        const fallback = await this.findFallbackModel(modelId, providerName);
+        const fallback = await this.findFallbackModel(modelId, providerName, {
+          requireVision: this.hasImageContent(messages),
+        });
         if (fallback) {
           this.logger.warn(
             `主模型 ${modelId} (${providerName}) 异常: ${error.message}，启动热切换降级至 ${fallback.modelName} (${fallback.modelId})`,
@@ -693,7 +707,9 @@ export class AIClientService {
 
     if (this.isProviderCircuitOpen(providerName)) {
       this.logger.warn(`供应商 ${providerName} 处于熔断冷却中，流式自动调度备用通道`);
-      const fallback = await this.findFallbackModel(modelId, providerName);
+      const fallback = await this.findFallbackModel(modelId, providerName, {
+        requireVision: this.hasImageContent(messages),
+      });
       if (fallback) {
         return this.executeStreamChatCompletionWithFailover(
           fallback,
@@ -739,7 +755,9 @@ export class AIClientService {
     } catch (error: any) {
       if (this.isTransientProviderError(error)) {
         this.recordProviderFailure(providerName);
-        const fallback = await this.findFallbackModel(modelId, providerName);
+        const fallback = await this.findFallbackModel(modelId, providerName, {
+          requireVision: this.hasImageContent(messages),
+        });
         if (fallback) {
           this.logger.warn(
             `主模型 ${modelId} (${providerName}) 流式调用异常: ${error.message}，启动热切换降级至 ${fallback.modelName} (${fallback.modelId})`,

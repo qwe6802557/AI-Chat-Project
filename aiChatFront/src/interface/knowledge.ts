@@ -29,6 +29,7 @@ export interface KnowledgeBaseItem {
 export type DocumentParseStage =
   | 'queued'
   | 'parsing'
+  | 'vision_extracting'
   | 'chunking'
   | 'embedding'
   | 'saving'
@@ -41,7 +42,7 @@ export interface KnowledgeDocumentItem {
   userId: string
   title: string
   fileName?: string
-  fileType: 'pdf' | 'docx' | 'md' | 'txt'
+  fileType: 'pdf' | 'docx' | 'md' | 'txt' | 'png' | 'jpg' | 'jpeg' | 'webp'
   fileSize: number
   charCount: number
   chunkCount: number
@@ -50,6 +51,8 @@ export interface KnowledgeDocumentItem {
   progress?: number
   processedChunks?: number
   totalChunks?: number
+  processedVisuals?: number
+  totalVisuals?: number
   errorMessage?: string
   createdAt: string
   updatedAt: string
@@ -83,6 +86,8 @@ export type DocumentProgressStreamEvent =
       progress: number
       processedChunks?: number
       totalChunks?: number
+      processedVisuals?: number
+      totalVisuals?: number
       chunkCount?: number
       charCount?: number
       errorMessage?: string | null
@@ -101,6 +106,12 @@ export interface KnowledgeChunkItem {
   content: string
   charCount: number
   isEnabled?: boolean
+  chunkType?: 'text' | 'visual'
+  assetId?: string
+  assetType?: string
+  visualType?: string
+  pageNumber?: number
+  visualAssetUrl?: string
   metadata?: Record<string, any> | null
   createdAt: string
   updatedAt?: string
@@ -123,6 +134,12 @@ export interface RagSearchResultItem {
   rerankApplied?: boolean
   matchedTerms?: string[]
   highlights?: HighlightSpan[]
+  chunkType?: 'text' | 'visual'
+  assetId?: string
+  assetType?: string
+  visualType?: string
+  pageNumber?: number
+  visualAssetUrl?: string
   metadata?: Record<string, any>
 }
 

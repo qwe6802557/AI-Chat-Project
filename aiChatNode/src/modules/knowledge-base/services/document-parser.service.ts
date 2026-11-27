@@ -2,32 +2,77 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import pdfParse from 'pdf-parse';
 import * as mammoth from 'mammoth';
 
+export type DocumentFileKind = 'image' | 'pdf' | 'docx' | 'text';
+
 export interface ParsedDocumentResult {
   text: string;
   charCount: number;
 }
 
+const SUPPORTED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
+const SUPPORTED_IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp'];
+const SUPPORTED_TEXT_EXTENSIONS = [
+  '.txt',
+  '.md',
+  '.markdown',
+  '.json',
+  '.js',
+  '.ts',
+  '.py',
+];
+
 /**
- * 多格式文档文本解析服务
+ * 多格式文档与图像类型识别、文本解析服务
  */
 @Injectable()
 export class DocumentParserService {
   private readonly logger = new Logger(DocumentParserService.name);
 
   /**
+   * 解析上传文件归属的处理管线类别
+   */
+  static resolveDocumentKind(
+    fileName: string,
+    mimeType?: string,
+  ): DocumentFileKind | null {
+    const dotIndex = fileName.lastIndexOf('.');
+    const ext = dotIndex >= 0 ? fileName.toLowerCase().slice(dotIndex) : '';
+    const normalizedMime = (mimeType || '').toLowerCase().trim();
+
+    if (
+      SUPPORTED_IMAGE_EXTENSIONS.includes(ext) ||
+      SUPPORTED_IMAGE_MIMES.includes(normalizedMime)
+    ) {
+      return 'image';
+    }
+
+    if (ext === '.pdf' || normalizedMime === 'application/pdf') {
+      return 'pdf';
+    }
+
+    if (
+      ext === '.docx' ||
+      normalizedMime ===
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ) {
+      return 'docx';
+    }
+
+    if (
+      SUPPORTED_TEXT_EXTENSIONS.includes(ext) ||
+      Boolean(normalizedMime.startsWith('text/'))
+    ) {
+      return 'text';
+    }
+
+    return null;
+  }
+
+  /**
    * 校验文件扩展名与 MIME 类型是否受支持
    */
   static isSupportedFile(fileName: string, mimeType?: string): boolean {
-    const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
-    return (
-      ext === '.pdf' ||
-      mimeType === 'application/pdf' ||
-      ext === '.docx' ||
-      mimeType ===
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-      ['.txt', '.md', '.markdown', '.json', '.js', '.ts', '.py'].includes(ext) ||
-      Boolean(mimeType?.startsWith('text/'))
-    );
+    return DocumentParserService.resolveDocumentKind(fileName, mimeType) !== null;
   }
 
   /**
@@ -38,10 +83,12 @@ export class DocumentParserService {
     fileName: string,
     mimeType?: string,
   ): Promise<ParsedDocumentResult> {
-    const ext = fileName.toLowerCase().slice(fileName.lastIndexOf('.'));
-    if (!DocumentParserService.isSupportedFile(fileName, mimeType)) {
+    const dotIndex = fileName.lastIndexOf('.');
+    const ext = dotIndex >= 0 ? fileName.toLowerCase().slice(dotIndex) : '';
+    const kind = DocumentParserService.resolveDocumentKind(fileName, mimeType);
+    if (!kind || kind === 'image') {
       throw new BadRequestException(
-        `暂不支持的文件格式: ${ext}，仅支持 .pdf, .docx, .md, .txt 等格式`,
+        `暂不支持的纯文本解析格式: ${ext || '未知'}`,
       );
     }
 

@@ -158,8 +158,10 @@ class _ChatSearchSourceGalleryState extends State<ChatSearchSourceGallery>
             Row(
               children: [
                 if (isKb)
-                  const Icon(
-                    Icons.menu_book_rounded,
+                  Icon(
+                    source.assetId != null || source.visualAssetUrl != null
+                        ? Icons.image_outlined
+                        : Icons.menu_book_rounded,
                     size: 14.0,
                     color: StitchTokens.primary,
                   )
