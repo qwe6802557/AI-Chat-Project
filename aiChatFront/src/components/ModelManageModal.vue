@@ -123,7 +123,7 @@
                   :color="getLatencyTagColor(latencyMap[record.id])"
                   class="latency-tag"
                 >
-                  <ThunderboltFilled v-if="latencyMap[record.id].status === 'healthy'" />
+                  <ThunderboltFilled v-if="latencyMap[record.id]?.status === 'healthy'" />
                   {{ formatLatencyTag(latencyMap[record.id]) }}
                 </a-tag>
               </template>
@@ -300,6 +300,10 @@ const filteredModels = computed(() => {
   })
 })
 
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  return (err instanceof Error && err.message) ? err.message : fallback
+}
+
 // 获取模型全量数据
 const fetchModels = async () => {
   loading.value = true
@@ -311,8 +315,8 @@ const fetchModels = async () => {
     } else {
       message.error(res?.message || '获取模型列表失败')
     }
-  } catch (err: any) {
-    message.error(err?.message || '获取模型列表网络异常')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '获取模型列表网络异常'))
   } finally {
     loading.value = false
   }
@@ -334,9 +338,9 @@ const handleToggleActive = async (record: BackendAiModel, newActive: boolean) =>
       record.isActive = previousStatus
       message.error(res?.message || '修改状态失败')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     record.isActive = previousStatus
-    message.error(err?.message || '修改状态接口异常')
+    message.error(getErrorMessage(err, '修改状态接口异常'))
   } finally {
     updatingIds.delete(record.id)
   }
@@ -356,9 +360,9 @@ const handleToggleVision = async (record: BackendAiModel, nextVision: boolean) =
       record.supportsVision = previousVision
       message.error(res?.message || '修改视觉能力失败')
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     record.supportsVision = previousVision
-    message.error(err?.message || '修改视觉能力接口异常')
+    message.error(getErrorMessage(err, '修改视觉能力接口异常'))
   } finally {
     updatingIds.delete(record.id)
   }
@@ -386,8 +390,8 @@ const handleSetDefault = async (record: BackendAiModel) => {
     } else {
       message.error(res?.message || '设置默认模型失败')
     }
-  } catch (err: any) {
-    message.error(err?.message || '设置默认模型接口异常')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '设置默认模型接口异常'))
   } finally {
     settingDefaultId.value = null
   }
@@ -403,8 +407,8 @@ const handleTestSingle = async (record: BackendAiModel) => {
     } else {
       message.warning(res?.message || '测速未返回有效数据')
     }
-  } catch (err: any) {
-    message.error(err?.message || '测速请求异常')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '测速请求异常'))
   } finally {
     testingIds.delete(record.id)
   }
@@ -451,7 +455,8 @@ const handleViewDetail = (record: BackendAiModel) => {
 }
 
 // 格式化测速结果标签
-const formatLatencyTag = (result: ModelLatencyResult): string => {
+const formatLatencyTag = (result?: ModelLatencyResult): string => {
+  if (!result) return ''
   if (result.status === 'timeout') return '超时 15s'
   if (result.status === 'error') return `错误 ${result.httpStatus || ''}`
   if (result.totalTimeMs < 1000) return `${result.totalTimeMs}ms`
@@ -459,7 +464,8 @@ const formatLatencyTag = (result: ModelLatencyResult): string => {
 }
 
 // 获取测速标签颜色
-const getLatencyTagColor = (result: ModelLatencyResult): string => {
+const getLatencyTagColor = (result?: ModelLatencyResult): string => {
+  if (!result) return 'default'
   if (result.status === 'healthy') return 'success'
   if (result.status === 'slow') return 'warning'
   return 'error'

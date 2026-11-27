@@ -40,11 +40,12 @@
             </div>
             <div class="card-title">{{ source.title }}</div>
             <img
-              v-if="source.visualAssetUrl"
-              :src="source.visualAssetUrl"
+              v-if="source.visualAssetUrl && !failedVisualAssets.has(source.id ?? index)"
+              :src="resolveApiAssetUrl(source.visualAssetUrl)"
               :alt="source.title"
               class="kb-card-thumb"
               loading="lazy"
+              @error="markVisualAssetFailed(source.id ?? index)"
             />
             <div v-if="source.score" class="kb-score-pill">
               <span>置信度 {{ (source.score * 100).toFixed(0) }}%</span>
@@ -92,6 +93,7 @@
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { GlobalOutlined, DatabaseOutlined, LoadingOutlined } from '@ant-design/icons-vue'
 import type { SearchSource } from '@/interface/chat'
+import { resolveApiAssetUrl } from '@/utils/common'
 import KnowledgeSourceDrawer from './KnowledgeSourceDrawer.vue'
 
 defineOptions({
@@ -115,12 +117,18 @@ const emit = defineEmits<{
 }>()
 
 const failedIcons = ref<Set<number>>(new Set())
+const failedVisualAssets = ref<Set<number>>(new Set())
 const drawerOpen = ref(false)
 const selectedKbSource = ref<SearchSource | null>(null)
 const highlightedSourceId = ref<number | null>(null)
 
 const markIconFailed = (id: number) => {
   failedIcons.value.add(id)
+}
+
+/** 记录加载失败的视觉资产缩略图，避免展示破损图占位 */
+const markVisualAssetFailed = (id: number) => {
+  failedVisualAssets.value.add(id)
 }
 
 const handleOpenKbDrawer = (source: SearchSource) => {

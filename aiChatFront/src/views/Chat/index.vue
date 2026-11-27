@@ -184,7 +184,7 @@ const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>
   DEFAULT_CHAT_MODEL
 )
 
-// 自动迁移旧版本模型至当前默认模型 grok-chat-fast
+// 自动迁移旧版本模型至当前默认模型
 if (localStorage.getItem(MODEL_VERSION_KEY) !== CURRENT_MODEL_VERSION) {
   if (DEPRECATED_CHAT_MODELS.includes(selectedModel.value) || !isChatModel({ modelId: selectedModel.value })) {
     selectedModel.value = DEFAULT_CHAT_MODEL
@@ -238,6 +238,7 @@ const handleSendMessage = async (
     fileIds?: string[]
     serverFiles?: ServerFileInfo[]
     webSearch?: boolean
+    knowledgeBaseIds?: string[]
   }
 ) => {
   const userId = getUserId()

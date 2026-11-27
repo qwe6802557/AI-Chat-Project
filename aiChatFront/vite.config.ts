@@ -27,7 +27,7 @@ export default defineConfig(() => ({
   },
   // 构建配置
   build: {
-    target: false,
+    target: false as const,
     outDir: 'dist',
     emptyOutDir: true,
   },

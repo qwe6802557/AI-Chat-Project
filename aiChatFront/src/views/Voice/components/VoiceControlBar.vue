@@ -526,7 +526,9 @@ const loadActiveVoiceModels = async () => {
         }))
         if (!voiceModelOptions.value.some(opt => opt.value === ttsModel.value)) {
           const defaultOpt = voiceModelOptions.value.find(opt => opt.isDefault) || voiceModelOptions.value[0]
-          ttsModel.value = defaultOpt.value
+          if (defaultOpt) {
+            ttsModel.value = defaultOpt.value
+          }
         }
       }
 
@@ -544,12 +546,13 @@ const loadActiveVoiceModels = async () => {
           value: m.modelId,
           creditCost: m.creditCost,
         }))
-        if (!sttModelOptions.value.some(opt => opt.value === sttModel.value)) {
-          sttModel.value = sttModelOptions.value[0].value
+        const firstStt = sttModelOptions.value[0]
+        if (firstStt && !sttModelOptions.value.some(opt => opt.value === sttModel.value)) {
+          sttModel.value = firstStt.value
         }
       }
     }
-  } catch (err) {
+  } catch {
     // 保持默认列表平稳运行
   }
 }

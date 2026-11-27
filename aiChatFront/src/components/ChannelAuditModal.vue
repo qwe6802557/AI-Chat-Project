@@ -432,7 +432,11 @@ const toggleTrajectoryExpanded = (msgId: string) => {
   }
 }
 
-const formatJsonArgs = (args: any): string => {
+const getErrorMessage = (err: unknown, fallback: string): string => {
+  return (err instanceof Error && err.message) ? err.message : fallback
+}
+
+const formatJsonArgs = (args: unknown): string => {
   if (!args) return '{}'
   try {
     return typeof args === 'string' ? args : JSON.stringify(args, null, 2)
@@ -458,8 +462,8 @@ const fetchMessages = async () => {
     })
     messages.value = res.data?.list || []
     scrollToBottom()
-  } catch (err: any) {
-    message.error(err.message || '获取对话历史失败')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '获取对话历史失败'))
   } finally {
     loadingMessages.value = false
   }
@@ -486,11 +490,12 @@ const fetchSessions = async () => {
     loadingSessions.value = true
     const res = await getInstanceSessions(props.instance.id)
     sessions.value = res.data || []
-    if (sessions.value.length > 0 && !activeSession.value) {
-      selectSession(sessions.value[0])
+    const firstSession = sessions.value[0]
+    if (firstSession && !activeSession.value) {
+      selectSession(firstSession)
     }
-  } catch (err: any) {
-    message.error(err.message || '获取会话列表失败')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '获取会话列表失败'))
   } finally {
     loadingSessions.value = false
   }
@@ -506,8 +511,8 @@ const handleClearMemory = async () => {
     clearingMemory.value = true
     await clearSessionMemory(props.instance.id, activeSession.value.fromId)
     message.success('已清空当前联系人的上下文记忆缓存 (历史审计流水已保留)')
-  } catch (err: any) {
-    message.error(err.message || '清空会话记忆失败')
+  } catch (err: unknown) {
+    message.error(getErrorMessage(err, '清空会话记忆失败'))
   } finally {
     clearingMemory.value = false
   }
@@ -522,8 +527,9 @@ const handleSearchChange = () => {
     activeSession.value &&
     !filteredSessions.value.some((s) => s.fromId === activeSession.value?.fromId)
   ) {
-    if (filteredSessions.value.length > 0) {
-      selectSession(filteredSessions.value[0])
+    const firstFiltered = filteredSessions.value[0]
+    if (firstFiltered) {
+      selectSession(firstFiltered)
     } else {
       activeSession.value = null
       messages.value = []

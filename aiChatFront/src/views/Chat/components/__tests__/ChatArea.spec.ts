@@ -1,12 +1,13 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import type { Ref } from 'vue'
 import ChatArea from '../ChatArea.vue'
 
 const uploadMockState = vi.hoisted(() => ({
-  files: undefined as any,
-  isProcessing: undefined as any,
-  canSendFiles: undefined as any,
+  files: undefined as unknown as Ref<Array<{ id: string; name: string }>>,
+  isProcessing: undefined as unknown as Ref<boolean>,
+  canSendFiles: undefined as unknown as Ref<boolean>,
   addFiles: vi.fn(),
   removeFile: vi.fn(),
   clearFiles: vi.fn(),
@@ -256,5 +257,26 @@ describe('ChatArea', () => {
     expect(uploadBtn.attributes('aria-label')).toBe('上传文件')
     expect(uploadBtn.find('.upload-label').text()).toBe('上传文件')
     expect(wrapper.find('.a-tooltip-stub[data-title="上传文件 (支持图片与文档)"]').exists()).toBe(true)
+  })
+
+  it('emits steer-message and clears input when clicking steer button during streaming', async () => {
+    const wrapper = mount(ChatArea, {
+      props: {
+        messages: [],
+        loading: true,
+        selectedModel: 'GLM-5',
+        modelOptions: [{ label: 'GLM-5', value: 'GLM-5', inputPrice: 1.83, outputPrice: 7.32, reserveCredits: 100 }],
+      },
+      global: {
+        stubs: globalStubs,
+      },
+    })
+
+    const textarea = wrapper.find('textarea')
+    await textarea.setValue('改为用 TypeScript 示例回答')
+    await wrapper.find('button.steer-mode').trigger('click')
+
+    expect(wrapper.emitted('steer-message')?.[0]).toEqual(['改为用 TypeScript 示例回答'])
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('')
   })
 })

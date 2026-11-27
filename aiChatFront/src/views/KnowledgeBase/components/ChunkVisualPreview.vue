@@ -1,8 +1,8 @@
 <template>
-  <div v-if="imageUrl" :class="['chunk-visual-preview', `variant-${variant}`]">
+  <div v-if="resolvedImageUrl" :class="['chunk-visual-preview', `variant-${variant}`]">
     <div class="visual-thumb-wrap">
       <a-image
-        :src="imageUrl"
+        :src="resolvedImageUrl"
         :alt="caption || '知识库视觉切片原图'"
         :preview="{ mask: '放大查看原图' }"
         class="visual-thumb-image"
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { PictureOutlined } from '@ant-design/icons-vue'
+import { resolveApiAssetUrl } from '@/utils/common'
 
 defineOptions({
   name: 'ChunkVisualPreview',
@@ -52,6 +53,9 @@ const props = withDefaults(
     caption: '',
   },
 )
+
+/** 解析视觉切片原图地址，兼容同域相对路径、/api 前缀与跨端口开发环境 */
+const resolvedImageUrl = computed(() => resolveApiAssetUrl(props.imageUrl))
 
 const VISUAL_TYPE_LABELS: Record<string, string> = {
   chart: '数据图表',

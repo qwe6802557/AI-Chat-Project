@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import VoiceAudioPlayer from '../components/VoiceAudioPlayer.vue'
 import VoiceControlBar from '../components/VoiceControlBar.vue'
 import VoiceTaskStream from '../components/VoiceTaskStream.vue'
@@ -118,7 +118,7 @@ describe('VoiceControlBar', () => {
       voiceId: 'eve',
       speed: 1.0,
       language: 'zh',
-      model: 'grok-voice-think-fast-1.0',
+      model: 'edge-tts',
     })
     expect((textarea.element as HTMLTextAreaElement).value).toBe('')
   })

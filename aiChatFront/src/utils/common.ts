@@ -63,6 +63,28 @@ export function getApiBaseUrl(): string {
 }
 
 /**
+ * 解析后端返回的相对资产/媒体路径
+ * - 保留完整 http(s)/data/blob URL
+ * - 兼容生产同域反代（VITE_API_BASE_URL=""）、/api 前缀及本地开发地址
+ */
+export function resolveApiAssetUrl(url?: string | null): string {
+  if (!url) return ''
+  if (/^(https?:)?\/\/|^(data|blob):/i.test(url)) {
+    return url
+  }
+  const normalizedPath = url.startsWith('/') ? url : `/${url}`
+  const baseURL = getApiBaseUrl().trim()
+  if (!baseURL) {
+    return normalizedPath
+  }
+  const cleanBase = baseURL.replace(/\/+$/, '')
+  if (normalizedPath === cleanBase || normalizedPath.startsWith(`${cleanBase}/`)) {
+    return normalizedPath
+  }
+  return `${cleanBase}${normalizedPath}`
+}
+
+/**
  * 生成符合 RFC4122 v4 标准的 UUID
  * - 优先使用浏览器原生 crypto.randomUUID()（安全上下文）
  * - 在非安全上下文（如纯 HTTP IP 访问）下，使用 Math.random 回退生成标准 v4 格式：xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx

@@ -149,9 +149,10 @@ const toggleCollapse = () => {
   }
 }
 
-const visibleItems = computed(() => {
+const visibleItems = computed<QueuedMessage[]>(() => {
   if (isCollapsed.value && props.queuedMessages.length > 1) {
-    return [props.queuedMessages[0]]
+    const firstItem = props.queuedMessages[0]
+    return firstItem ? [firstItem] : []
   }
   return props.queuedMessages
 })

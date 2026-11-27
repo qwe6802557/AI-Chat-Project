@@ -236,6 +236,7 @@ interface Props {
     reserveCredits?: number
     reasoningCapability?: 'none' | 'summary' | 'raw'
     reasoningBadgeLabel?: string
+    supportsVision?: boolean
   }>
   modelsLoading?: boolean
   currentSessionId?: string
@@ -288,7 +289,7 @@ const inputMessage = ref('')
 const webSearchEnabled = ref(false)
 const selectedKnowledgeBaseIds = ref<string[]>([])
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const messageTextareaRef = ref<any>(null)
+const messageTextareaRef = ref<{ $el?: HTMLElement } | HTMLElement | null>(null)
 const scrollSignal = ref(0)
 const isMemoryVaultOpen = ref(false)
 const paramsRowRef = ref<HTMLElement | null>(null)
@@ -301,6 +302,23 @@ const conversationStore = useConversationStore()
 const artifactStore = useArtifactStore()
 const { currentConversation } = storeToRefs(conversationStore)
 
+/**
+ * 聚焦聊天输入框并将光标移至末尾
+ */
+const focusMessageTextarea = () => {
+  nextTick(() => {
+    const rawEl = messageTextareaRef.value
+    const el = rawEl && '$el' in rawEl ? rawEl.$el : (rawEl as HTMLElement | null)
+    const textarea = el?.tagName === 'TEXTAREA'
+      ? (el as HTMLTextAreaElement)
+      : el?.querySelector<HTMLTextAreaElement>('textarea')
+    if (textarea) {
+      textarea.focus()
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    }
+  })
+}
+
 // 监听跨轮次产物修改请求，预填输入框并自动聚焦
 watch(
   () => artifactStore.pendingPrompt,
@@ -308,14 +326,7 @@ watch(
     if (prompt) {
       inputMessage.value = prompt
       artifactStore.consumePendingPrompt()
-      nextTick(() => {
-        const el = messageTextareaRef.value?.$el || messageTextareaRef.value
-        const textarea = el?.tagName === 'TEXTAREA' ? el : el?.querySelector?.('textarea')
-        if (textarea) {
-          textarea.focus()
-          textarea.setSelectionRange(textarea.value.length, textarea.value.length)
-        }
-      })
+      focusMessageTextarea()
     }
   },
 )
@@ -468,6 +479,16 @@ const handleStopClick = () => {
   emit('stop-generation')
 }
 
+/**
+ * 触发流式生成中的即时干预并清空输入框
+ */
+const handleSteerClick = () => {
+  const content = inputMessage.value.trim()
+  if (!content || !props.loading) return
+  emit('steer-message', content)
+  inputMessage.value = ''
+}
+
 const handleButtonClick = () => {
   if (props.loading) {
     if (canQueue.value) {
@@ -491,14 +512,7 @@ const handleEditQueued = (item: QueuedMessage) => {
   if (item.knowledgeBaseIds) {
     selectedKnowledgeBaseIds.value = [...item.knowledgeBaseIds]
   }
-  nextTick(() => {
-    const el = messageTextareaRef.value?.$el || messageTextareaRef.value
-    const textarea = el?.tagName === 'TEXTAREA' ? el : el?.querySelector?.('textarea')
-    if (textarea) {
-      textarea.focus()
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
-    }
-  })
+  focusMessageTextarea()
 }
 
 const handleRemoveQueued = (item: QueuedMessage) => {
@@ -564,7 +578,10 @@ const handleSend = () => {
     if (convId) {
       conversationStore.enqueueMessage(convId, {
         prompt: content,
-        options: sendOptions,
+        fileIds: sendOptions?.fileIds,
+        serverFiles: sendOptions?.serverFiles,
+        webSearch: sendOptions?.webSearch,
+        knowledgeBaseIds: sendOptions?.knowledgeBaseIds,
         model: props.selectedModel,
       })
       inputMessage.value = ''

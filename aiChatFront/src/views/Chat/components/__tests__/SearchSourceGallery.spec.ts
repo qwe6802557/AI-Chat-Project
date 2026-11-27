@@ -1,8 +1,11 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import SearchSourceGallery from '../SearchSourceGallery.vue'
 
 describe('SearchSourceGallery', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
   it('does not render when sources are empty and not searching', () => {
     const wrapper = mount(SearchSourceGallery, {
       props: {
@@ -91,5 +94,36 @@ describe('SearchSourceGallery', () => {
     await img.trigger('error')
     expect(wrapper.find('.site-icon').exists()).toBe(false)
     expect(wrapper.find('.site-icon-fallback').exists()).toBe(true)
+  })
+
+  it('resolves knowledge base visualAssetUrl with VITE_API_BASE_URL and hides broken thumb on error', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '/api')
+
+    const wrapper = mount(SearchSourceGallery, {
+      props: {
+        sources: [
+          {
+            id: 1,
+            title: '系统拓扑图',
+            url: '',
+            snippet: '架构图切片',
+            isKnowledgeBase: true,
+            visualAssetUrl: '/knowledge-bases/assets/asset-9?expires=999&signature=sig',
+          },
+        ],
+      },
+      global: {
+        stubs: {
+          KnowledgeSourceDrawer: true,
+        },
+      },
+    })
+
+    const thumb = wrapper.find('.kb-card-thumb')
+    expect(thumb.exists()).toBe(true)
+    expect(thumb.attributes('src')).toBe('/api/knowledge-bases/assets/asset-9?expires=999&signature=sig')
+
+    await thumb.trigger('error')
+    expect(wrapper.find('.kb-card-thumb').exists()).toBe(false)
   })
 })
