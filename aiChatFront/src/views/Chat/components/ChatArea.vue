@@ -159,7 +159,7 @@
             />
 
             <span
-              v-if="selectedModelReasoningBadgeLabel && !selectedModel.startsWith('gemini-')"
+              v-if="selectedModelReasoningBadgeLabel"
               class="reasoning-badge"
             >
               {{ selectedModelReasoningBadgeLabel }}

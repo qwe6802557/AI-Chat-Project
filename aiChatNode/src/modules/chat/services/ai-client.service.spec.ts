@@ -680,7 +680,7 @@ describe('AIClientService', () => {
       findActiveModelsMock.mockResolvedValueOnce([
         {
           id: 'model-gemini-unconfigured',
-          modelId: 'gemini-3.8-flash-medium',
+          modelId: 'gemini-2.5-flash',
           modelName: 'Gemini Flash',
           isActive: true,
           inputPrice: 0,
@@ -738,7 +738,7 @@ describe('AIClientService', () => {
       ]);
 
       const visionFallback = await service.findFallbackModel(
-        'gemini-3.8-flash',
+        'gemini-2.5-flash',
         'Gemini',
         { requireVision: true },
       );
@@ -756,7 +756,7 @@ describe('AIClientService', () => {
       ]);
 
       const noVisionFallback = await service.findFallbackModel(
-        'gemini-3.8-flash',
+        'gemini-2.5-flash',
         'Gemini',
         { requireVision: true },
       );

@@ -438,8 +438,8 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 gemini-3.8-flash-medium')
-    expect(wrapper.find('.model-probe').text()).toBe('gemini-3.8-flash-medium')
+    expect(mockMessageWarning).toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 spark-x2.6-4b')
+    expect(wrapper.find('.model-probe').text()).toBe('spark-x2.6-4b')
   })
 
   it('does not show model fallback warning when model request fails because auth expired', async () => {
@@ -447,8 +447,8 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 gemini-3.8-flash-medium')
-    expect(wrapper.find('.model-probe').text()).toBe('gemini-3.8-flash-medium')
+    expect(mockMessageWarning).not.toHaveBeenCalledWith('模型列表加载失败，已使用默认模型 spark-x2.6-4b')
+    expect(wrapper.find('.model-probe').text()).toBe('spark-x2.6-4b')
   })
 
   it('handles stop-generation by cancelling active stream and showing message.info', async () => {
@@ -604,26 +604,26 @@ describe('ChatPage integration', () => {
     expect(localStorage.getItem('selectedChatModel')).toBe('"glm-4-flash"')
   })
 
-  it('automatically migrates legacy default model grok-4.5 to gemini-3.8-flash-medium on load', async () => {
-    localStorage.setItem('selectedChatModel', JSON.stringify('grok-4.5'))
+  it('automatically migrates deprecated legacy model to spark-x2.6-4b on load', async () => {
+    localStorage.setItem('selectedChatModel', JSON.stringify('gemini-3.8-flash-medium'))
 
     mockGetActiveModels.mockResolvedValueOnce({
       code: 0,
       data: [
         {
-          modelId: 'gemini-3.8-flash-medium',
+          modelId: 'spark-x2.6-4b',
           category: 'chat',
           isDefault: true,
-          inputPrice: 0.5,
-          outputPrice: 1.0,
-          creditCost: 100,
+          inputPrice: 0,
+          outputPrice: 0,
+          creditCost: 0,
         },
         {
-          modelId: 'grok-4.5',
+          modelId: 'grok-chat-fast',
           category: 'chat',
-          inputPrice: 1.0,
-          outputPrice: 2.0,
-          creditCost: 100,
+          inputPrice: 0,
+          outputPrice: 0,
+          creditCost: 10,
         },
       ],
       message: 'ok',
@@ -631,9 +631,9 @@ describe('ChatPage integration', () => {
 
     const { wrapper } = await mountChatPage()
 
-    expect(wrapper.find('.model-probe').text()).toBe('gemini-3.8-flash-medium')
-    expect(localStorage.getItem('selectedChatModel')).toBe('"gemini-3.8-flash-medium"')
-    expect(localStorage.getItem('chat_model_default_version')).toBe('2026-11-06-gemini-flash-medium')
+    expect(wrapper.find('.model-probe').text()).toBe('spark-x2.6-4b')
+    expect(localStorage.getItem('selectedChatModel')).toBe('"spark-x2.6-4b"')
+    expect(localStorage.getItem('chat_model_default_version')).toBe('2026-11-28-remove-legacy-gemini')
   })
 
   it('blocks sending when current credits are lower than selected model cost', async () => {

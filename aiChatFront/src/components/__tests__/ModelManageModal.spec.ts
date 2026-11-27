@@ -48,8 +48,8 @@ const sampleModels: BackendAiModel[] = [
   },
   {
     id: 'm-gemini',
-    modelName: 'Gemini 3.8 Flash (Medium 思考)',
-    modelId: 'gemini-3.8-flash-medium',
+    modelName: 'Gemini 2.5 Flash',
+    modelId: 'gemini-2.5-flash',
     inputPrice: 0,
     outputPrice: 0,
     contextLength: 1048576,
@@ -161,7 +161,7 @@ describe('ModelManageModal 视觉能力列展示', () => {
     expect(sparkVisionCell.text()).toBe('-')
     expect(sparkVisionCell.find('.untested-text').attributes('title')).toContain('纯文本语言通道')
 
-    const geminiVisionCell = wrapper.find('[data-model-id="gemini-3.8-flash-medium"] [data-col="supportsVision"]')
+    const geminiVisionCell = wrapper.find('[data-model-id="gemini-2.5-flash"] [data-col="supportsVision"]')
     const geminiSwitch = geminiVisionCell.find('.a-switch-stub')
     expect(geminiSwitch.exists()).toBe(true)
     expect(geminiSwitch.attributes('data-checked')).toBe('true')

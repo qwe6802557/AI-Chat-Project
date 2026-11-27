@@ -69,8 +69,8 @@ void main() {
 
     testWidgets('启用 Gemini 模型时展示分组 Tab，并在动态停用后即时隐藏', (tester) async {
       const geminiModel = ModelInfo(
-        id: 'gemini-3.8-flash-medium',
-        name: 'Gemini 3.8 Flash (Medium 思考)',
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
         category: '通用全能',
         tag: '在线可用',
         description: 'Gemini Flash',
@@ -96,7 +96,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: ModelSwitcherBottomSheet(
-              currentModel: 'gemini-3.8-flash-medium',
+              currentModel: 'gemini-2.5-flash',
               availableModels: const [geminiModel, grokModel],
               onModelSelected: (_) {},
             ),
@@ -105,6 +105,7 @@ void main() {
       );
 
       expect(find.text('Gemini 系列'), findsOneWidget);
+      expect(find.text('Gemini 2.5 Flash'), findsOneWidget);
       expect(find.text('其它模型'), findsOneWidget);
 
       await tester.pumpWidget(

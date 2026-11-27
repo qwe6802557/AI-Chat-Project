@@ -167,9 +167,9 @@ const isChatModel = (model: { modelId?: string; category?: string } | null | und
 }
 
 // 模型选择
-const DEFAULT_CHAT_MODEL = 'gemini-3.8-flash-medium'
+const DEFAULT_CHAT_MODEL = 'spark-x2.6-4b'
 const MODEL_VERSION_KEY = 'chat_model_default_version'
-const CURRENT_MODEL_VERSION = '2026-11-06-gemini-flash-medium'
+const CURRENT_MODEL_VERSION = '2026-11-28-remove-legacy-gemini'
 const DEPRECATED_CHAT_MODELS = [
   'grok-4.3',
   'grok-build-0.1',
@@ -177,6 +177,12 @@ const DEPRECATED_CHAT_MODELS = [
   'grok-4.6',
   'grok-4.7',
   'grok-composer-2.5-fast',
+  'gemini-3.8-flash-low',
+  'gemini-3.8-flash-medium',
+  'gemini-3.8-flash-high',
+  'gemini-4-argon-low',
+  'gemini-4-argon-medium',
+  'gemini-4-argon-high',
 ]
 
 const { data: selectedModel, save: saveSelectedModel } = useLocalStorage<string>(
