@@ -146,4 +146,36 @@ describe('AgentCollaborationTimeline', () => {
     await liveWrapper.find('.timeline-header').trigger('click')
     expect(liveWrapper.find('.timeline-body').exists()).toBe(true)
   })
+
+  it('toggles expanded class and aria-expanded without unmounting card root', async () => {
+    const timeline: SwarmTimelineEvent[] = [
+      {
+        id: 'swarm_width',
+        type: 'dag_node',
+        timestamp: Date.now(),
+        fromAgent: 'DAG 引擎',
+        toAgent: '主分析智能体',
+        durationMs: 1200,
+        status: 'completed',
+      },
+    ]
+
+    const wrapper = mount(AgentCollaborationTimeline, {
+      props: {
+        timeline,
+        defaultExpanded: true,
+      },
+    })
+
+    const card = wrapper.find('.swarm-timeline-card')
+    const header = wrapper.find('.timeline-header')
+    expect(card.classes()).toContain('expanded')
+    expect(header.attributes('aria-expanded')).toBe('true')
+
+    await header.trigger('click')
+    expect(wrapper.find('.swarm-timeline-card').exists()).toBe(true)
+    expect(card.classes()).not.toContain('expanded')
+    expect(header.attributes('aria-expanded')).toBe('false')
+    expect(wrapper.find('.timeline-body').exists()).toBe(false)
+  })
 })

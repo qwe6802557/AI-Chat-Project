@@ -29,7 +29,17 @@
       </div>
     </button>
 
-    <transition name="collapse">
+    <transition
+      name="collapse"
+      @before-enter="onCollapseBeforeEnter"
+      @enter="onCollapseEnter"
+      @after-enter="onCollapseAfterEnter"
+      @enter-cancelled="resetCollapseStyles"
+      @before-leave="onCollapseBeforeLeave"
+      @leave="onCollapseLeave"
+      @after-leave="onCollapseAfterLeave"
+      @leave-cancelled="resetCollapseStyles"
+    >
       <div v-if="isExpanded" class="timeline-body">
         <div class="timeline-track">
           <div
@@ -156,6 +166,48 @@ const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
 }
 
+const resetCollapseStyles = (el: Element) => {
+  const htmlEl = el as HTMLElement
+  htmlEl.style.height = ''
+  htmlEl.style.opacity = ''
+}
+
+const onCollapseBeforeEnter = (el: Element) => {
+  const htmlEl = el as HTMLElement
+  htmlEl.style.height = '0px'
+  htmlEl.style.opacity = '0'
+}
+
+const onCollapseEnter = (el: Element) => {
+  const htmlEl = el as HTMLElement
+  // 强制触发重排，确保浏览器从 0px 起点平滑过渡到实际高度
+  void htmlEl.offsetHeight
+  htmlEl.style.height = `${htmlEl.scrollHeight}px`
+  htmlEl.style.opacity = '1'
+}
+
+const onCollapseAfterEnter = (el: Element) => {
+  resetCollapseStyles(el)
+}
+
+const onCollapseBeforeLeave = (el: Element) => {
+  const htmlEl = el as HTMLElement
+  const currentHeight = htmlEl.getBoundingClientRect().height || htmlEl.scrollHeight
+  htmlEl.style.height = `${currentHeight}px`
+  htmlEl.style.opacity = '1'
+}
+
+const onCollapseLeave = (el: Element) => {
+  const htmlEl = el as HTMLElement
+  void htmlEl.offsetHeight
+  htmlEl.style.height = '0px'
+  htmlEl.style.opacity = '0'
+}
+
+const onCollapseAfterLeave = (el: Element) => {
+  resetCollapseStyles(el)
+}
+
 const getStatusText = (status: SwarmTimelineEvent['status']) => {
   switch (status) {
     case 'running':
@@ -174,8 +226,9 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
 
 <style scoped>
 .swarm-timeline-card {
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
   margin: 6px 0 8px;
   background: rgba(248, 250, 252, 0.92);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -184,7 +237,6 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
-    border-radius 0.2s ease,
     box-shadow 0.2s ease;
 }
 
@@ -194,8 +246,6 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
 }
 
 .swarm-timeline-card.expanded {
-  width: 100%;
-  border-radius: 12px;
   background: #ffffff;
   border-color: #e2e8f0;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
@@ -208,23 +258,27 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
 
 .timeline-header {
   width: 100%;
-  min-height: 32px;
+  box-sizing: border-box;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 5px 11px;
+  padding: 7px 12px;
   background: transparent;
   border: none;
+  border-bottom: 1px solid transparent;
   cursor: pointer;
   user-select: none;
   text-align: left;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .swarm-timeline-card.expanded .timeline-header {
   background: #f8fafc;
-  border-bottom: 1px solid #f1f5f9;
-  padding: 8px 12px;
+  border-bottom-color: #f1f5f9;
 }
 
 .swarm-timeline-card.expanded .timeline-header:hover {
@@ -321,13 +375,15 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
 }
 
 .timeline-body {
-  padding: 12px 14px;
+  padding: 0;
   background: #ffffff;
+  box-sizing: border-box;
 }
 
 .timeline-track {
   display: flex;
   flex-direction: column;
+  padding: 12px 14px;
 }
 
 .timeline-node {
@@ -510,13 +566,10 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
 
 .collapse-enter-active,
 .collapse-leave-active {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    height 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
   overflow: hidden;
-}
-
-.collapse-enter-from,
-.collapse-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+  will-change: height, opacity;
 }
 </style>
