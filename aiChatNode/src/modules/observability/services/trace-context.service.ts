@@ -22,6 +22,9 @@ export interface ActiveTraceContext {
   userId: string;
   currentSpanId: string | null;
   usage: TraceUsageAccumulator;
+  statusOverride?: AgentTraceStatus | null;
+  errorSummaryOverride?: string | null;
+  creditsOverride?: number | null;
 }
 
 export interface StartRootTraceOptions {
@@ -127,6 +130,30 @@ export class TraceContextService {
   }
 
   /**
+   * 当上层工作流以返回值状态（而非抛出异常）收敛失败或中断时，显式覆盖根 Trace 终态
+   */
+  markCurrentTraceOutcome(
+    status: AgentTraceStatus,
+    errorSummary?: string | null,
+  ): void {
+    const store = this.als.getStore();
+    if (!store) return;
+    store.statusOverride = status;
+    if (errorSummary !== undefined) {
+      store.errorSummaryOverride = errorSummary;
+    }
+  }
+
+  /**
+   * 同步工作流最低计费积分下限至 Trace 消耗统计（防止零定价模型实扣 1 积分时观测面板显示 0）
+   */
+  ensureMinimumTraceCredits(minCredits: number): void {
+    const store = this.als.getStore();
+    if (!store || !Number.isFinite(minCredits) || minCredits <= 0) return;
+    store.creditsOverride = Math.max(store.creditsOverride ?? 0, minCredits);
+  }
+
+  /**
    * 开启根 Trace 上下文作用域并在结束时自动归档耗时、状态与消耗
    */
   async runWithTrace<T>(
@@ -173,14 +200,20 @@ export class TraceContextService {
         errorSummary = message;
         throw err;
       } finally {
+        const resolvedStatus = store.statusOverride ?? finalStatus;
+        const resolvedError = store.errorSummaryOverride ?? errorSummary;
+        const resolvedCredits = Math.max(
+          store.usage.estimatedCredits,
+          store.creditsOverride ?? 0,
+        );
         await this.traceStorage.finalizeTrace({
           traceId,
-          status: finalStatus,
+          status: resolvedStatus,
           durationMs: Date.now() - startMs,
           totalPromptTokens: store.usage.promptTokens,
           totalCompletionTokens: store.usage.completionTokens,
-          totalCredits: store.usage.estimatedCredits,
-          errorSummary,
+          totalCredits: resolvedCredits,
+          errorSummary: resolvedError,
         });
       }
     });

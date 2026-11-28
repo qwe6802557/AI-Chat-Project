@@ -15,36 +15,39 @@
           </router-link>
         </div>
 
-        <div
-          :class="['mode-option-item', { selected: !selectedWorkflowId && !selectedRoleId }]"
+        <button
+          type="button"
+          :class="['mode-option-item', { selected: !workflowId && !roleId }]"
           @click="selectDefault"
         >
           <div class="option-info">
             <span class="option-name">标准 ReAct 对话</span>
             <span class="option-desc">直连所选大模型、工具插件与知识库</span>
           </div>
-          <CheckOutlined v-if="!selectedWorkflowId && !selectedRoleId" class="check-icon" />
-        </div>
+          <CheckOutlined v-if="!workflowId && !roleId" class="check-icon" />
+        </button>
 
         <div v-if="publishedWorkflows.length > 0" class="group-label">已发布 DAG 工作流</div>
-        <div
+        <button
           v-for="wf in publishedWorkflows"
           :key="wf.id"
-          :class="['mode-option-item', { selected: selectedWorkflowId === wf.id }]"
+          type="button"
+          :class="['mode-option-item', { selected: workflowId === wf.id }]"
           @click="selectWorkflow(wf.id)"
         >
           <div class="option-info">
             <span class="option-name">{{ wf.name }}</span>
             <span class="option-desc">DAG v{{ wf.version }} · 多节点拓扑执行</span>
           </div>
-          <CheckOutlined v-if="selectedWorkflowId === wf.id" class="check-icon" />
-        </div>
+          <CheckOutlined v-if="workflowId === wf.id" class="check-icon" />
+        </button>
 
         <div v-if="roles.length > 0" class="group-label">智能体角色 / Swarm 团队</div>
-        <div
+        <button
           v-for="role in roles"
           :key="role.id"
-          :class="['mode-option-item', { selected: selectedRoleId === role.id }]"
+          type="button"
+          :class="['mode-option-item', { selected: roleId === role.id }]"
           @click="selectRole(role.id)"
         >
           <div class="option-info">
@@ -53,21 +56,21 @@
               {{ role.isTeam ? '多智能体 Swarm 协同团队' : (role.description || '定制人设与专属工具') }}
             </span>
           </div>
-          <CheckOutlined v-if="selectedRoleId === role.id" class="check-icon" />
-        </div>
+          <CheckOutlined v-if="roleId === role.id" class="check-icon" />
+        </button>
       </div>
     </template>
 
     <a-tooltip :title="activeTooltip" placement="top" :open="isOpen ? false : undefined">
       <button
         type="button"
-        :class="['orchestrator-capsule-btn', { active: Boolean(selectedWorkflowId || selectedRoleId), disabled }]"
+        :class="['orchestrator-capsule-btn', { active: Boolean(workflowId || roleId), disabled }]"
         :disabled="disabled"
         aria-label="编排模式"
       >
         <ApartmentOutlined class="capsule-icon" />
         <span class="capsule-label">{{ activeButtonLabel }}</span>
-        <span v-if="selectedWorkflowId || selectedRoleId" class="active-dot" />
+        <span v-if="workflowId || roleId" class="active-dot" />
       </button>
     </a-tooltip>
   </a-popover>
@@ -85,13 +88,13 @@ defineOptions({
 
 const props = withDefaults(
   defineProps<{
-    selectedWorkflowId?: string | null
-    selectedRoleId?: string | null
+    workflowId?: string | null
+    roleId?: string | null
     disabled?: boolean
   }>(),
   {
-    selectedWorkflowId: null,
-    selectedRoleId: null,
+    workflowId: null,
+    roleId: null,
     disabled: false,
   },
 )
@@ -129,20 +132,20 @@ onMounted(() => {
 })
 
 const activeButtonLabel = computed(() => {
-  if (props.selectedWorkflowId) {
-    const found = publishedWorkflows.value.find((w) => w.id === props.selectedWorkflowId)
+  if (props.workflowId) {
+    const found = publishedWorkflows.value.find((w) => w.id === props.workflowId)
     return found ? `流程: ${found.name}` : '工作流'
   }
-  if (props.selectedRoleId) {
-    const found = roles.value.find((r) => r.id === props.selectedRoleId)
+  if (props.roleId) {
+    const found = roles.value.find((r) => r.id === props.roleId)
     return found ? `角色: ${found.name}` : '智能体'
   }
   return '编排'
 })
 
 const activeTooltip = computed(() => {
-  if (props.selectedWorkflowId) return '当前使用已发布 DAG 工作流执行对话'
-  if (props.selectedRoleId) return '当前使用选定智能体角色或 Swarm 团队执行对话'
+  if (props.workflowId) return '当前使用已发布 DAG 工作流执行对话'
+  if (props.roleId) return '当前使用选定智能体角色或 Swarm 团队执行对话'
   return '切换 DAG 工作流或智能体团队协同模式'
 })
 
@@ -253,6 +256,9 @@ const selectRole = (id: string) => {
 }
 
 .mode-option-item {
+  width: 100%;
+  background: transparent;
+  text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;

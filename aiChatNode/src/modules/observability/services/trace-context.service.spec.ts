@@ -103,4 +103,36 @@ describe('TraceContextService & Sanitizer', () => {
     const rootSpan = appendedSpans.find((s) => s.spanType === 'workflow');
     expect(llmSpan?.parentSpanId).toBe(rootSpan?.spanId);
   });
+
+  it('honors outcome and minimum credit overrides when DAG terminates gracefully as failed', async () => {
+    const finalizedTraces: Parameters<
+      TraceStorageService['finalizeTrace']
+    >[0][] = [];
+    const mockStorage: Partial<TraceStorageService> = {
+      createTrace: jest.fn(() => Promise.resolve()),
+      finalizeTrace: jest.fn((input) => {
+        finalizedTraces.push(input);
+        return Promise.resolve();
+      }),
+      appendSpan: jest.fn(() => Promise.resolve()),
+    };
+
+    const service = new TraceContextService(mockStorage as TraceStorageService);
+    await service.runWithTrace(
+      { userId: 'u-1', source: 'workflow_debug', title: '失败收敛测试' },
+      async () => {
+        await Promise.resolve();
+        service.markCurrentTraceOutcome('failed', '模型通道异常');
+        service.ensureMinimumTraceCredits(1);
+        return { status: 'failed' };
+      },
+    );
+
+    expect(finalizedTraces).toHaveLength(1);
+    expect(finalizedTraces[0]).toMatchObject({
+      status: 'failed',
+      errorSummary: '模型通道异常',
+      totalCredits: 1,
+    });
+  });
 });

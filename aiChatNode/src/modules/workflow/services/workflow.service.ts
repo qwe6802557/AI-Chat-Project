@@ -238,12 +238,21 @@ export class WorkflowService {
         const next = await gen.next();
         if (next.done) {
           const result = next.value;
+          if (result.status === 'failed' || result.status === 'aborted') {
+            this.traceContext?.markCurrentTraceOutcome(
+              result.status,
+              result.error,
+            );
+          }
           const chargedCredits = await this.settleTraceCreditsSafely({
             userId: params.userId,
             workflowId: workflow.id,
             workflowName: workflow.name,
             traceId,
           });
+          if (chargedCredits > 0) {
+            this.traceContext?.ensureMinimumTraceCredits(chargedCredits);
+          }
           return {
             ...result,
             traceId,
@@ -302,7 +311,14 @@ export class WorkflowService {
     while (true) {
       const next = await gen.next();
       if (next.done) {
-        return next.value;
+        const result = next.value;
+        if (result.status === 'failed' || result.status === 'aborted') {
+          this.traceContext?.markCurrentTraceOutcome(
+            result.status,
+            result.error,
+          );
+        }
+        return result;
       }
       params.onEvent?.(next.value);
     }
