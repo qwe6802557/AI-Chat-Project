@@ -245,6 +245,8 @@ const handleSendMessage = async (
     serverFiles?: ServerFileInfo[]
     webSearch?: boolean
     knowledgeBaseIds?: string[]
+    roleId?: string | null
+    workflowId?: string | null
   }
 ) => {
   const userId = getUserId()

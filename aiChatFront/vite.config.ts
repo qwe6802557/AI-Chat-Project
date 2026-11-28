@@ -28,8 +28,31 @@ export default defineConfig(() => ({
   // 构建配置
   build: {
     target: false as const,
+    minify: 'terser' as const,
     outDir: 'dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@vue-flow')) return 'vue-flow-vendor'
+          if (id.includes('@ant-design/icons-vue')) return 'ant-icons-vendor'
+          if (id.includes('ant-design-vue')) return 'antdv-vendor'
+          if (id.includes('highlight.js')) return 'hljs-vendor'
+          if (id.includes('marked') || id.includes('dompurify')) return 'markdown-vendor'
+          if (
+            id.includes('node_modules/vue/') ||
+            id.includes('node_modules/@vue/') ||
+            id.includes('node_modules/pinia/') ||
+            id.includes('node_modules/vue-router/')
+          ) {
+            return 'vue-vendor'
+          }
+          return undefined
+        },
+      },
+    },
   },
   test: {
     globals: true,

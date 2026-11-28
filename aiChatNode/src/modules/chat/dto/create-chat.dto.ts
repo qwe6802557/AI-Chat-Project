@@ -264,5 +264,29 @@ export class CreateChatDto {
   @IsArray({ message: 'knowledgeBaseIds 必须是数组' })
   @IsUUID('4', { each: true, message: 'knowledgeBaseIds 元素必须是 UUID' })
   knowledgeBaseIds?: string[];
+
+  /**
+   * 指定对话使用的智能体角色 ID（含 Swarm 团队角色）
+   */
+  @ApiProperty({
+    description: '智能体角色 ID（可选）',
+    required: false,
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'roleId 必须是合法 UUID' })
+  roleId?: string;
+
+  /**
+   * 指定对话触发的已发布 DAG 工作流 ID
+   */
+  @ApiProperty({
+    description: '已发布 DAG 工作流 ID（可选）',
+    required: false,
+    format: 'uuid',
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'workflowId 必须是合法 UUID' })
+  workflowId?: string;
 }
 

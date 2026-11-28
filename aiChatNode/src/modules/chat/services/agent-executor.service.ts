@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AIClientService } from './ai-client.service';
 import { ToolRegistryService } from '../../tools/tools.registry.service';
 import type { ChatMessage } from '../types/completion.types';
+import { TraceContextService } from '../../observability/services/trace-context.service';
 
 export interface AgentTrajectoryStep {
   loopIndex: number;
@@ -48,12 +49,43 @@ export class AgentExecutorService {
   constructor(
     private readonly aiClientService: AIClientService,
     private readonly toolRegistryService: ToolRegistryService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
    * 执行 ReAct 智能体循环，返回最终答案与完整执行轨迹
    */
   async execute(options: AgentExecutionOptions): Promise<AgentExecutionResult> {
+    if (!this.traceContext) {
+      return this.executeReActLoop(options);
+    }
+    return this.traceContext.withSpan(
+      {
+        spanType: 'workflow',
+        name: `Agent ReAct · ${options.modelId}`,
+        modelId: options.modelId,
+        input: options.context?.userMessage || options.messages.slice(-1)[0]?.content,
+        metadata: {
+          maxLoops: options.maxLoops ?? 3,
+          tools: options.enabledTools || [],
+        },
+      },
+      async (recorder) => {
+        const res = await this.executeReActLoop(options);
+        recorder?.setOutput(res.content);
+        recorder?.setUsage({
+          promptTokens: res.totalUsage.promptTokens,
+          completionTokens: res.totalUsage.completionTokens,
+        });
+        return res;
+      },
+    );
+  }
+
+  private async executeReActLoop(
+    options: AgentExecutionOptions,
+  ): Promise<AgentExecutionResult> {
     const startTime = Date.now();
     const maxLoops = options.maxLoops ?? 3;
     const timeoutMs = options.timeoutMs ?? 12000;

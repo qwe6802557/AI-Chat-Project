@@ -90,6 +90,7 @@ export interface Message {
   searchStatus?: 'searching' | 'done'
   searchQuery?: string
   toolCalls?: ToolCallItem[]
+  traceId?: string | null
   agentTimeline?: import('@/interface/chat').SwarmTimelineEvent[]
   steers?: Array<{ id: string; message: string; loopIndex: number; timestamp: number }>
   memoryRecall?: {

@@ -53,6 +53,7 @@
             :channel="ch"
             :model-list="modelList"
             :role-list="roleList"
+            :workflow-list="workflowList"
             :can-delete="canDeleteInstance(ch)"
             @refresh="fetchChannels"
           />
@@ -131,6 +132,7 @@ import {
   type AgentRole,
 } from '@/api/channel'
 import { getActiveModels, type BackendAiModel } from '@/api/model'
+import { getPublishedWorkflows, type WorkflowItem } from '@/api/workflow'
 
 const props = defineProps<{
   open: boolean
@@ -144,6 +146,7 @@ const activeTab = ref<'channels' | 'roles'>('channels')
 const loading = ref(false)
 const channels = ref<ChannelInfo[]>([])
 const roleList = ref<AgentRole[]>([])
+const workflowList = ref<WorkflowItem[]>([])
 const modelList = ref<BackendAiModel[]>([])
 const roleManagerRef = ref<any>(null)
 
@@ -189,6 +192,17 @@ const fetchModels = async () => {
     const res = await getActiveModels({ category: 'chat' })
     if (res.data) {
       modelList.value = res.data
+    }
+  } catch {
+    // 忽略加载失败
+  }
+}
+
+const fetchWorkflows = async () => {
+  try {
+    const res = await getPublishedWorkflows()
+    if (res.data) {
+      workflowList.value = res.data
     }
   } catch {
     // 忽略加载失败
@@ -246,6 +260,7 @@ watch(
       fetchChannels()
       fetchRoles()
       fetchModels()
+      fetchWorkflows()
     }
   },
   { immediate: true },

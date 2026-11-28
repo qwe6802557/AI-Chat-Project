@@ -15,6 +15,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ChannelManagerService } from './channel-manager.service';
 import { ChannelType } from './entities/channel-config.entity';
+import type { AgentTeamConfig } from './entities/agent-role.entity';
 
 /**
  * 智能助理通道与角色控制器 (支持多实例与角色解耦、运行指标监控及对话审计)
@@ -48,6 +49,8 @@ export class ChannelController {
       knowledgeBaseIds?: string[] | null;
       enabledTools?: string[] | null;
       isDefault?: boolean;
+      isTeam?: boolean;
+      teamConfig?: AgentTeamConfig | null;
     },
   ) {
     return this.channelManager.createRole(req.user.id, body);
@@ -68,6 +71,8 @@ export class ChannelController {
       knowledgeBaseIds?: string[] | null;
       enabledTools?: string[] | null;
       isDefault?: boolean;
+      isTeam?: boolean;
+      teamConfig?: AgentTeamConfig | null;
     },
   ) {
     return this.channelManager.updateRole(req.user.id, id, body);
@@ -97,6 +102,7 @@ export class ChannelController {
       channelType: ChannelType;
       instanceName?: string;
       roleId?: string | null;
+      workflowId?: string | null;
       credentials?: Record<string, any>;
     },
   ) {
@@ -119,6 +125,7 @@ export class ChannelController {
     payload: {
       instanceName?: string;
       roleId?: string | null;
+      workflowId?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
       credentials?: Record<string, any>;

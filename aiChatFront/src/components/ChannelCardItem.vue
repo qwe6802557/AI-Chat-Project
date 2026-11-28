@@ -28,7 +28,10 @@
         <div class="channel-meta">
           <div class="name-row">
             <span class="channel-name">{{ channel.instanceName || channel.name }}</span>
-            <span v-if="channel.roleName" class="role-tag">
+            <span v-if="boundWorkflowName" class="role-tag">
+              工作流: {{ boundWorkflowName }}
+            </span>
+            <span v-else-if="channel.roleName" class="role-tag">
               角色: {{ channel.roleName }}
             </span>
             <span v-if="channel.boundModelId" class="bound-tag">
@@ -134,6 +137,22 @@
             </a-select>
           </div>
 
+          <!-- 可选绑定已发布 DAG 工作流（优先级高于角色） -->
+          <div class="config-item">
+            <label class="item-label">绑定已发布工作流 (Workflow，可选)</label>
+            <a-select
+              v-model:value="selectedWorkflowId"
+              placeholder="不绑定则走上方角色"
+              size="small"
+              style="width: 100%"
+              allow-clear
+            >
+              <a-select-option v-for="wf in workflowList" :key="wf.id" :value="wf.id">
+                {{ wf.name }} (v{{ wf.version }})
+              </a-select-option>
+            </a-select>
+          </div>
+
           <!-- QQ 凭据字段 -->
           <div v-if="channel.channelType === 'qq'" class="config-item-full">
             <div class="creds-row">
@@ -226,16 +245,19 @@ import {
   updateChannelSettings,
 } from '@/api/channel'
 import type { BackendAiModel } from '@/api/model'
+import type { WorkflowItem } from '@/api/workflow'
 
 const props = withDefaults(
   defineProps<{
     channel: ChannelInfo
     modelList: BackendAiModel[]
     roleList?: AgentRole[]
+    workflowList?: WorkflowItem[]
     canDelete?: boolean
   }>(),
   {
     roleList: () => [],
+    workflowList: () => [],
     canDelete: false,
   },
 )
@@ -254,6 +276,15 @@ const savingConfig = ref(false)
 
 const instanceName = ref(props.channel.instanceName || props.channel.name)
 const selectedRoleId = ref<string | undefined>(props.channel.roleId || undefined)
+const selectedWorkflowId = ref<string | undefined>(props.channel.workflowId || undefined)
+
+const boundWorkflowName = computed(() => {
+  if (!props.channel.workflowId) return ''
+  return (
+    props.workflowList?.find((w) => w.id === props.channel.workflowId)?.name ||
+    '已绑定工作流'
+  )
+})
 
 const qqAppId = ref('')
 const qqAppSecret = ref('')
@@ -278,6 +309,7 @@ watch(
     if (val) {
       instanceName.value = val.instanceName || val.name
       selectedRoleId.value = val.roleId || undefined
+      selectedWorkflowId.value = val.workflowId || undefined
       if (val.qrCodeUrl) qrCodeImg.value = val.qrCodeUrl
     }
   },
@@ -397,6 +429,7 @@ const handleSaveSettings = async () => {
     const payload: any = {
       instanceName: instanceName.value.trim(),
       roleId: selectedRoleId.value || null,
+      workflowId: selectedWorkflowId.value || null,
     }
 
     if (props.channel.channelType === 'qq' && (qqAppId.value || qqAppSecret.value)) {

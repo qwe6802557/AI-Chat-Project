@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ClaudeAdapter } from '../adapters/claude.adapter';
 import { ZaiwenAdapter } from '../adapters/zaiwen.adapter';
@@ -31,6 +31,7 @@ import {
   type ModelReasoningProfile,
 } from '../utils/reasoning-profile.util';
 import { resolveEffectiveSupportsVision } from '../utils/vision-profile.util';
+import { TraceContextService } from '../../observability/services/trace-context.service';
 
 export interface CircuitBreakerState {
   failureCount: number;
@@ -78,6 +79,8 @@ export class AIClientService {
     private readonly aiProviderService: AiProviderService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
@@ -561,6 +564,42 @@ export class AIClientService {
     messages: ChatMessage[],
     options?: CompletionOptions,
   ): Promise<CompletionResponse> {
+    if (!this.traceContext) {
+      return this.executeTracedChatCompletion(modelId, messages, options);
+    }
+    return this.traceContext.withSpan(
+      {
+        spanType: 'llm',
+        name: `LLM · ${modelId}`,
+        modelId,
+        input: messages.slice(-2),
+      },
+      async (recorder) => {
+        const res = await this.executeTracedChatCompletion(
+          modelId,
+          messages,
+          options,
+        );
+        recorder?.setModelId(res.model || modelId);
+        recorder?.setUsage({
+          promptTokens: res.usage?.promptTokens || 0,
+          completionTokens: res.usage?.completionTokens || 0,
+          estimatedCredits: res.usage?.estimatedTotalCost || 0,
+        });
+        recorder?.setOutput(res.content);
+        if (res.failover) {
+          recorder?.mergeMetadata({ failover: res.failover });
+        }
+        return res;
+      },
+    );
+  }
+
+  private async executeTracedChatCompletion(
+    modelId: string,
+    messages: ChatMessage[],
+    options?: CompletionOptions,
+  ): Promise<CompletionResponse> {
     const model = await this.aiModelService.findByModelId(modelId, true);
 
     if (!model.isActive) {
@@ -696,6 +735,30 @@ export class AIClientService {
    * @param options 可选配置
    */
   async createStreamChatCompletion(
+    modelId: string,
+    messages: ChatMessage[],
+    options?: CompletionOptions,
+  ): Promise<AsyncIterable<CompletionChunk>> {
+    const rawStream = await this.executeRawStreamChatCompletion(
+      modelId,
+      messages,
+      options,
+    );
+    if (!this.traceContext) {
+      return rawStream;
+    }
+    return this.traceContext.wrapAsyncIterableSpan(
+      {
+        spanType: 'llm',
+        name: `LLM Stream · ${modelId}`,
+        modelId,
+        input: messages.slice(-2),
+      },
+      rawStream as unknown as AsyncIterable<Record<string, any>>,
+    ) as unknown as AsyncIterable<CompletionChunk>;
+  }
+
+  private async executeRawStreamChatCompletion(
     modelId: string,
     messages: ChatMessage[],
     options?: CompletionOptions,

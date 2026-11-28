@@ -12,6 +12,7 @@ import { CreditsModule } from '../credits/credits.module';
 import { UserModule } from '../user/user.module';
 import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 import { RedisModule } from '../../common/redis/redis.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 /**
  * 智能助理通道模块 (支持多实例与角色解耦、运行指标监控、知识库RAG及会话记忆审计)
@@ -20,6 +21,7 @@ import { RedisModule } from '../../common/redis/redis.module';
   imports: [
     TypeOrmModule.forFeature([ChannelConfig, AgentRole, ChannelMessage]),
     forwardRef(() => ChatModule),
+    forwardRef(() => WorkflowModule),
     AiProviderModule,
     CreditsModule,
     UserModule,

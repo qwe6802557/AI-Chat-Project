@@ -149,6 +149,8 @@ const transformBackendMessages = (backendMessages: BackendChatMessage[]): Messag
         durationMs: msg.durationMs ?? undefined,
         sources: msg.sources || undefined,
         toolCalls: (msg.toolCalls && msg.toolCalls.length > 0) ? msg.toolCalls : undefined,
+        traceId: msg.traceId || undefined,
+        agentTimeline: (msg.agentTimeline && msg.agentTimeline.length > 0) ? msg.agentTimeline : undefined,
       })
     }
   })
@@ -222,6 +224,8 @@ export const useConversationStore = defineStore('conversation', () => {
               reasoning: m.reasoning,
               durationMs: m.durationMs,
               sources: m.sources,
+              traceId: m.traceId,
+              agentTimeline: m.agentTimeline,
               attachments: m.attachments?.map((att) => ({
                 type: att.type,
                 name: att.name,

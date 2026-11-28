@@ -80,6 +80,18 @@ export class ChatSession {
   knowledgeBaseIds: string[];
 
   /**
+   * 会话默认绑定的智能体角色 ID
+   */
+  @Column({ type: 'uuid', nullable: true })
+  activeRoleId?: string | null;
+
+  /**
+   * 会话默认绑定的工作流 ID
+   */
+  @Column({ type: 'uuid', nullable: true })
+  activeWorkflowId?: string | null;
+
+  /**
    * 创建时间
    */
   @CreateDateColumn()

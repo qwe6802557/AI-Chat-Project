@@ -4,9 +4,12 @@ import {
   OnModuleInit,
   NotFoundException,
   BadRequestException,
+  Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ChannelConfig, ChannelType } from './entities/channel-config.entity';
 import { AgentRole, AgentTeamConfig } from './entities/agent-role.entity';
 import { ChannelMessage, type ChannelRagSourceItem } from './entities/channel-message.entity';
@@ -20,6 +23,9 @@ import { FeishuDriver } from './drivers/feishu.driver';
 import { DingtalkDriver } from './drivers/dingtalk.driver';
 import { AIClientService } from '../chat/services/ai-client.service';
 import { AgentExecutorService } from '../chat/services/agent-executor.service';
+import { SwarmOrchestratorService } from '../chat/services/swarm-orchestrator.service';
+import { WorkflowService } from '../workflow/services/workflow.service';
+import { TraceContextService } from '../observability/services/trace-context.service';
 import { AiModelService } from '../ai-provider/ai-model.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditBusinessType } from '../credits/types/credits.types';
@@ -59,6 +65,13 @@ export class ChannelManagerService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly channelMetricsService: ChannelMetricsService,
     private readonly agentExecutorService: AgentExecutorService,
+    @Optional()
+    private readonly swarmOrchestratorService?: SwarmOrchestratorService,
+    @Optional()
+    @Inject(forwardRef(() => WorkflowService))
+    private readonly workflowService?: WorkflowService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   async onModuleInit() {
@@ -450,6 +463,7 @@ export class ChannelManagerService implements OnModuleInit {
           instanceName: conf.instanceName || conf.name,
           roleId: conf.roleId || null,
           roleName: conf.role?.name || null,
+          workflowId: conf.workflowId || null,
           isEnabled: conf.isEnabled,
           status: isConnected ? 'connected' : conf.isEnabled ? liveStatus.status : 'disconnected',
           boundModelId: effectiveModelId,
@@ -464,6 +478,7 @@ export class ChannelManagerService implements OnModuleInit {
           instanceName: conf.instanceName || conf.name,
           roleId: conf.roleId || null,
           roleName: conf.role?.name || null,
+          workflowId: conf.workflowId || null,
           isEnabled: conf.isEnabled,
           status: conf.isEnabled ? 'connecting' : 'disconnected',
           loginStatus: 'idle',
@@ -486,6 +501,7 @@ export class ChannelManagerService implements OnModuleInit {
       channelType: ChannelType;
       instanceName?: string;
       roleId?: string | null;
+      workflowId?: string | null;
       credentials?: Record<string, any>;
     },
   ): Promise<ChannelStatusInfo> {
@@ -499,6 +515,7 @@ export class ChannelManagerService implements OnModuleInit {
       name: channelName,
       instanceName,
       roleId: dto.roleId || null,
+      workflowId: dto.workflowId || null,
       isEnabled: false,
       status: 'disconnected',
       credentials: dto.credentials || {},
@@ -577,6 +594,7 @@ export class ChannelManagerService implements OnModuleInit {
     payload: {
       instanceName?: string;
       roleId?: string | null;
+      workflowId?: string | null;
       boundModelId?: string | null;
       systemPrompt?: string | null;
       credentials?: Record<string, any>;
@@ -590,6 +608,7 @@ export class ChannelManagerService implements OnModuleInit {
 
     if (payload.instanceName !== undefined) config.instanceName = payload.instanceName.trim();
     if (payload.roleId !== undefined) config.roleId = payload.roleId;
+    if (payload.workflowId !== undefined) config.workflowId = payload.workflowId;
     if (payload.boundModelId !== undefined) config.boundModelId = payload.boundModelId;
     if (payload.systemPrompt !== undefined) config.systemPrompt = payload.systemPrompt;
     if (payload.credentials !== undefined) {
@@ -754,6 +773,47 @@ export class ChannelManagerService implements OnModuleInit {
     });
     if (!config) return null;
 
+    if (!this.traceContext) {
+      return this.processInboundMessage(
+        config,
+        instanceId,
+        channelType,
+        fromId,
+        content,
+        contextToken,
+      );
+    }
+
+    return this.traceContext.runWithTrace(
+      {
+        userId: config.userId,
+        source: 'channel',
+        channelInstanceId: instanceId,
+        roleId: config.roleId || null,
+        workflowId: config.workflowId || null,
+        title: `[${channelType}] ${content.slice(0, 60)}`,
+      },
+      async () =>
+        this.processInboundMessage(
+          config,
+          instanceId,
+          channelType,
+          fromId,
+          content,
+          contextToken,
+        ),
+    );
+  }
+
+  private async processInboundMessage(
+    config: ChannelConfig,
+    instanceId: string,
+    channelType: string,
+    fromId: string,
+    content: string,
+    _contextToken?: string,
+  ): Promise<string | null> {
+
     const userId = config.userId;
     let targetModelId: string = config.role?.boundModelId || config.boundModelId || '';
     if (!targetModelId) {
@@ -851,19 +911,73 @@ export class ChannelManagerService implements OnModuleInit {
         ? config.role.enabledTools
         : [];
 
-      const agentResult = await this.agentExecutorService.execute({
-        modelId: targetModelId,
-        messages,
-        enabledTools,
-        maxLoops: 3,
-        timeoutMs: 12000,
-        context: {
+      let answer = '';
+      let trajectoryMeta: Record<string, any> | null = null;
+
+      if (config.workflowId && this.workflowService) {
+        const wfResult = await this.workflowService.executePublishedWorkflow({
           userId,
+          workflowId: config.workflowId,
+          input: content,
           sessionId: instanceId,
-          userMessage: content,
-        },
-      });
-      const answer = agentResult.content || '';
+          defaultModelId: targetModelId,
+        });
+        if (wfResult.status !== 'completed') {
+          throw new Error(wfResult.error || '工作流执行未完成');
+        }
+        answer = wfResult.content || '';
+        if (wfResult.timeline.length > 0) {
+          trajectoryMeta = { agentTimeline: wfResult.timeline };
+        }
+      } else if (
+        config.role?.isTeam &&
+        config.role.teamConfig?.subAgentRoleIds?.length &&
+        this.swarmOrchestratorService
+      ) {
+        const subRoles = await this.roleRepo.find({
+          where: {
+            id: In(config.role.teamConfig.subAgentRoleIds),
+            userId,
+          },
+        });
+        if (subRoles.length > 0) {
+          const swarmResult = await this.swarmOrchestratorService.execute({
+            teamRole: config.role,
+            subAgentRoles: subRoles,
+            userMessage: content,
+            messages,
+            defaultModelId: targetModelId,
+            context: {
+              userId,
+              sessionId: instanceId,
+              userMessage: content,
+            },
+          });
+          answer = swarmResult.content || '';
+          if (swarmResult.timeline.length > 0) {
+            trajectoryMeta = { agentTimeline: swarmResult.timeline };
+          }
+        }
+      }
+
+      if (!answer && !trajectoryMeta) {
+        const agentResult = await this.agentExecutorService.execute({
+          modelId: targetModelId,
+          messages,
+          enabledTools,
+          maxLoops: 3,
+          timeoutMs: 12000,
+          context: {
+            userId,
+            sessionId: instanceId,
+            userMessage: content,
+          },
+        });
+        answer = agentResult.content || '';
+        if (agentResult.trajectory.length > 0) {
+          trajectoryMeta = { trajectory: agentResult.trajectory };
+        }
+      }
 
       await this.messageRepo
         .save(
@@ -880,7 +994,7 @@ export class ChannelManagerService implements OnModuleInit {
             content: answer,
             costCredits,
             ragSources,
-            metadata: agentResult.trajectory.length > 0 ? { trajectory: agentResult.trajectory } : null,
+            metadata: trajectoryMeta,
           }),
         )
         .catch((err) => this.logger.warn(`归档助理回复消息异常: ${err.message}`));

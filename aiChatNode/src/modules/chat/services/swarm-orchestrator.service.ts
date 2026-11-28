@@ -1,20 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AIClientService } from './ai-client.service';
 import { AgentExecutorService } from './agent-executor.service';
 import { AgentRole } from '../../channel/entities/agent-role.entity';
 import { ChatMessage, CompletionUsageStats } from '../types/completion.types';
+import { TraceContextService } from '../../observability/services/trace-context.service';
 
 export interface SwarmTimelineEvent {
   id: string;
-  type: 'handoff' | 'subagent_execution' | 'conclude';
+  type: 'handoff' | 'subagent_execution' | 'conclude' | 'dag_node';
   timestamp: number;
   fromAgent: string;
   toAgent: string;
+  nodeId?: string;
   modelId?: string;
   task?: string;
   outputSnippet?: string;
   durationMs?: number;
-  status: 'running' | 'completed' | 'failed';
+  status: 'running' | 'completed' | 'failed' | 'skipped';
 }
 
 export interface SwarmOrchestrationOptions {
@@ -29,6 +31,7 @@ export interface SwarmOrchestrationOptions {
     userId?: string;
     sessionId?: string;
     channelType?: string;
+    userMessage?: string;
   };
   onTimelineEvent?: (event: SwarmTimelineEvent) => void;
 }
@@ -47,6 +50,8 @@ export class SwarmOrchestratorService {
   constructor(
     private readonly aiClientService: AIClientService,
     private readonly agentExecutorService: AgentExecutorService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
@@ -56,11 +61,39 @@ export class SwarmOrchestratorService {
     const startTime = Date.now();
     const routerStrategy = options.teamRole.teamConfig?.routerStrategy || 'supervisor';
 
-    if (routerStrategy === 'sequential') {
-      return this.executeSequentialPipeline(options, startTime);
+    const run = async () => {
+      if (routerStrategy === 'sequential') {
+        return this.executeSequentialPipeline(options, startTime);
+      }
+      return this.executeSupervisorSwarm(options, startTime);
+    };
+
+    if (!this.traceContext) {
+      return run();
     }
 
-    return this.executeSupervisorSwarm(options, startTime);
+    return this.traceContext.withSpan(
+      {
+        spanType: 'swarm_handoff',
+        name: `Swarm (${routerStrategy}) · ${options.teamRole.name}`,
+        modelId: options.teamRole.boundModelId || options.defaultModelId,
+        input: options.userMessage,
+        metadata: {
+          strategy: routerStrategy,
+          teamRoleId: options.teamRole.id,
+          subAgentCount: options.subAgentRoles.length,
+        },
+      },
+      async (recorder) => {
+        const res = await run();
+        recorder?.setOutput(res.content);
+        recorder?.setUsage({
+          promptTokens: res.usage?.promptTokens || 0,
+          completionTokens: res.usage?.completionTokens || 0,
+        });
+        return res;
+      },
+    );
   }
 
   /**
@@ -187,15 +220,31 @@ export class SwarmOrchestratorService {
       options.onTimelineEvent?.(timelineEvent);
 
       const subStartTime = Date.now();
-      const subResult = await this.agentExecutorService.execute({
-        modelId: targetRole.boundModelId || supervisorModelId,
-        systemInstruction: targetRole.systemPrompt || undefined,
-        messages: [{ role: 'user', content: taskDescription }],
-        enabledTools: targetRole.enabledTools || [],
-        maxLoops: 2,
-        timeoutMs: 15000,
-        context: options.context,
-      });
+      const executeSub = () =>
+        this.agentExecutorService.execute({
+          modelId: targetRole.boundModelId || supervisorModelId,
+          systemInstruction: targetRole.systemPrompt || undefined,
+          messages: [{ role: 'user', content: taskDescription }],
+          enabledTools: targetRole.enabledTools || [],
+          maxLoops: 2,
+          timeoutMs: 15000,
+          context: options.context,
+        });
+      const subResult = this.traceContext
+        ? await this.traceContext.withSpan(
+            {
+              spanType: 'swarm_handoff',
+              name: `Handoff · ${options.teamRole.name} -> ${targetRole.name}`,
+              modelId: targetRole.boundModelId || supervisorModelId,
+              input: taskDescription,
+            },
+            async (recorder) => {
+              const res = await executeSub();
+              recorder?.setOutput(res.content);
+              return res;
+            },
+          )
+        : await executeSub();
 
       timelineEvent.status = 'completed';
       timelineEvent.durationMs = Date.now() - subStartTime;
@@ -277,15 +326,31 @@ export class SwarmOrchestratorService {
       timeline.push(timelineEvent);
       options.onTimelineEvent?.(timelineEvent);
 
-      const subResult = await this.agentExecutorService.execute({
-        modelId: subRole.boundModelId || options.defaultModelId,
-        systemInstruction: subRole.systemPrompt || undefined,
-        messages: [{ role: 'user', content: currentInput }],
-        enabledTools: subRole.enabledTools || [],
-        maxLoops: 2,
-        timeoutMs: 15000,
-        context: options.context,
-      });
+      const executeStep = () =>
+        this.agentExecutorService.execute({
+          modelId: subRole.boundModelId || options.defaultModelId,
+          systemInstruction: subRole.systemPrompt || undefined,
+          messages: [{ role: 'user', content: currentInput }],
+          enabledTools: subRole.enabledTools || [],
+          maxLoops: 2,
+          timeoutMs: 15000,
+          context: options.context,
+        });
+      const subResult = this.traceContext
+        ? await this.traceContext.withSpan(
+            {
+              spanType: 'swarm_handoff',
+              name: `Pipeline · ${subRole.name}`,
+              modelId: subRole.boundModelId || options.defaultModelId,
+              input: currentInput,
+            },
+            async (recorder) => {
+              const res = await executeStep();
+              recorder?.setOutput(res.content);
+              return res;
+            },
+          )
+        : await executeStep();
 
       timelineEvent.status = 'completed';
       timelineEvent.durationMs = Date.now() - stepStartTime;

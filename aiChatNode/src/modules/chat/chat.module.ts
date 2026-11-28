@@ -21,6 +21,7 @@ import { GeminiAdapter } from './adapters/gemini.adapter';
 import { ChatMessage } from './entities/chat.entity';
 import { ChatSession } from './entities/chat-session.entity';
 import { ChatAttachment } from './entities/chat-attachment.entity';
+import { AgentRole } from '../channel/entities/agent-role.entity';
 import { RedisModule } from '../../common/redis/redis.module';
 import { UserModule } from '../user/user.module';
 import { AiProviderModule } from '../ai-provider/ai-provider.module';
@@ -30,10 +31,11 @@ import { WebSearchModule } from '../web-search/web-search.module';
 import { ToolsModule } from '../tools/tools.module';
 import { KnowledgeBaseModule } from '../knowledge-base/knowledge-base.module';
 import { MemoryModule } from '../memory/memory.module';
+import { WorkflowModule } from '../workflow/workflow.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChatMessage, ChatSession, ChatAttachment]),
+    TypeOrmModule.forFeature([ChatMessage, ChatSession, ChatAttachment, AgentRole]),
     UserModule,
     forwardRef(() => AiProviderModule),
     CreditsModule,
@@ -43,6 +45,7 @@ import { MemoryModule } from '../memory/memory.module';
     ToolsModule,
     forwardRef(() => KnowledgeBaseModule),
     forwardRef(() => MemoryModule),
+    forwardRef(() => WorkflowModule),
   ],
   controllers: [ChatController, ChatSessionController],
   providers: [

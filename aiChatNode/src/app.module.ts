@@ -19,6 +19,8 @@ import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.mod
 import { VideoModule } from './modules/video/video.module';
 import { ChannelModule } from './modules/channel/channel.module';
 import { MemoryModule } from './modules/memory/memory.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 import { DatabaseSeederService } from './common/services/database-seeder.service';
 import { RedisModule } from './common/redis/redis.module';
 import { buildBullRedisConnection } from './common/redis/redis-connection.util';
@@ -73,6 +75,8 @@ import { buildDatabaseCoreOptions } from './config/database-options';
     VideoModule,
     ChannelModule,
     MemoryModule,
+    ObservabilityModule,
+    WorkflowModule,
   ],
   controllers: [AppController],
   providers: [AppService, DatabaseSeederService],

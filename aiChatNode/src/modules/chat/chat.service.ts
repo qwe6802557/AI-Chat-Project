@@ -5,12 +5,19 @@ import {
   BadRequestException,
   ForbiddenException,
   Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import { AgentRole } from '../channel/entities/agent-role.entity';
-import { SwarmOrchestratorService } from './services/swarm-orchestrator.service';
+import {
+  SwarmOrchestratorService,
+  type SwarmTimelineEvent,
+} from './services/swarm-orchestrator.service';
+import { TraceContextService } from '../observability/services/trace-context.service';
+import { WorkflowService } from '../workflow/services/workflow.service';
 import { ConfigService } from '@nestjs/config';
 import { AIClientService } from './services/ai-client.service';
 import { CreateChatDto, FileDataDto } from './dto';
@@ -76,6 +83,8 @@ export type SessionMessageDto = Pick<
   | 'reasoning'
   | 'sources'
   | 'toolCalls'
+  | 'traceId'
+  | 'agentTimeline'
   | 'createdAt'
   | 'updatedAt'
 > & {
@@ -142,6 +151,16 @@ export class ChatService {
     private readonly agentStreamExecutorService: AgentStreamExecutorService,
     @Optional()
     private readonly knowledgeAssetService?: KnowledgeAssetService,
+    @Optional()
+    private readonly swarmOrchestratorService?: SwarmOrchestratorService,
+    @Optional()
+    @InjectRepository(AgentRole)
+    private readonly agentRoleRepo?: Repository<AgentRole>,
+    @Optional()
+    @Inject(forwardRef(() => WorkflowService))
+    private readonly workflowService?: WorkflowService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   private buildMessagePreview(message: string): string {
@@ -320,6 +339,8 @@ export class ChatService {
     durationMs?: number | null;
     sources?: SearchSource[] | null;
     toolCalls?: ToolExecutionRecord[] | null;
+    traceId?: string | null;
+    agentTimeline?: SwarmTimelineEvent[] | null;
     knowledgeBaseIds?: string[];
   }): Promise<PersistedChatMessageResult> {
     return this.dataSource.transaction(async (manager) => {
@@ -348,6 +369,8 @@ export class ChatService {
         durationMs: params.durationMs || null,
         sources: this.sanitizeSourcesForStorage(params.sources),
         toolCalls: params.toolCalls || null,
+        traceId: params.traceId ?? null,
+        agentTimeline: params.agentTimeline ?? null,
       });
 
       const savedMessage = await chatMessageRepository.save(chatMessage);
@@ -544,271 +567,392 @@ export class ChatService {
       throw new BadRequestException('用户ID不能为空');
     }
 
-    this.ensureNoInlineFiles(createChatDto.files);
+    const createInternal = async (activeTraceId: string | null) => {
+      this.ensureNoInlineFiles(createChatDto.files);
 
-    const user = await this.userService.findById(userId);
-    if (!user) {
-      throw new NotFoundException('用户不存在');
-    }
-
-    const sessionId = createChatDto.sessionId;
-    let boundSession: ChatSession | null = null;
-    if (sessionId) {
-      boundSession = await this.chatSessionService.findByIdForUser(sessionId, userId);
-      if (createChatDto.knowledgeBaseIds !== undefined) {
-        await this.chatSessionService.update(sessionId, {
-          knowledgeBaseIds: createChatDto.knowledgeBaseIds,
-        });
+      const user = await this.userService.findById(userId);
+      if (!user) {
+        throw new NotFoundException('用户不存在');
       }
-    }
 
-    const effectiveKnowledgeBaseIds = createChatDto.knowledgeBaseIds?.length
-      ? createChatDto.knowledgeBaseIds
-      : (boundSession?.knowledgeBaseIds || []);
-
-    const clientRequestId = this.createClientRequestId(
-      createChatDto.clientRequestId,
-    );
-
-    const { attachmentIds, fileDataForAI } =
-      await this.filesService.prepareChatAttachments({
-        userId,
-        fileIds: createChatDto.fileIds,
-      });
-
-    const messages: ChatMessage[] = [];
-
-    if (
-      sessionId &&
-      (!createChatDto.history || createChatDto.history.length === 0)
-    ) {
-      const historyMessages = await this.getSessionHistory(
-        userId,
-        sessionId,
-        10,
-      );
-      historyMessages.forEach((msg) => {
-        const assistantAnswer = msg.reasoning
-          ? msg.aiMessage
-          : extractAssistantContent(msg.aiMessage || '').answer;
-        messages.push(
-          { role: 'user', content: this.formatHistoryUserMessage(msg) },
-          { role: 'assistant', content: assistantAnswer },
-        );
-      });
-    } else if (createChatDto.history?.length) {
-      messages.push(...createChatDto.history);
-    }
-
-    const openAiTools = createChatDto.enabledTools?.length
-      ? this.toolRegistryService.toOpenAITools(createChatDto.enabledTools)
-      : [];
-
-    let toolExecutionRecords: ToolExecutionRecord[] = [];
-    let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch && !createChatDto.enabledTools?.includes('web_search_v2')) {
-      searchResult = await this.webSearchService.search(createChatDto.message);
-    }
-
-    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
-    const existingImageCount = fileDataForAI.filter((f) =>
-      this.SUPPORTED_IMAGE_TYPES.includes(f.type),
-    ).length;
-
-    const ragContext = await this.resolveKnowledgeBaseContext({
-      userId,
-      message: createChatDto.message,
-      knowledgeBaseIds: effectiveKnowledgeBaseIds,
-      supportsVision: chargeModel.supportsVision,
-      existingImageCount,
-    });
-
-    if (ragContext.sources.length > 0) {
-      if (!searchResult) {
-        searchResult = {
-          query: createChatDto.message,
-          sources: ragContext.sources,
-          contextPrompt: '',
-        };
-      } else {
-        searchResult.sources.unshift(...ragContext.sources);
-      }
-    }
-
-    const userContent = this.buildMultimodalContent(
-      createChatDto.message,
-      fileDataForAI.length > 0 ? fileDataForAI : undefined,
-    );
-
-    const finalUserContent = this.assembleFinalUserContent({
-      userContent,
-      ragContext,
-      webSearchContextPrompt: searchResult?.contextPrompt,
-    });
-
-    messages.push({
-      role: 'user',
-      content: finalUserContent,
-    });
-
-    if (fileDataForAI.length > 0) {
-      this.logger.log(
-        `包含 ${fileDataForAI.length} 个附件: ${fileDataForAI.map((f) => f.name).join(', ')}`,
-      );
-    }
-
-    const reserveCredits = this.estimateReserveCredits({
-      messages,
-      model: chargeModel,
-      maxTokens: createChatDto.maxTokens,
-    });
-    let reservedSessionId = sessionId;
-    let reservedCharge: ChatCreditChargeSummary | null = null;
-
-    try {
-      const reserveResult = await this.reserveChatCharge({
-        userId,
-        clientRequestId,
-        sessionId,
-        model: chargeModel,
-        reserveCredits,
-      });
-      reservedCharge = reserveResult.charge;
-
-      const requestStartTime = Date.now();
-      let loopCount = 0;
-      const MAX_REACT_LOOPS = 3;
-      let lastCompletion: CompletionResponse | null = null;
-      const accumulatedUsage: CompletionUsageStats = {
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-      };
-
-      while (loopCount <= MAX_REACT_LOOPS) {
-        const roundTools = loopCount < MAX_REACT_LOOPS && openAiTools.length > 0 ? openAiTools : undefined;
-        const completion = await this.aiClientService.createChatCompletion(
-          chargeModel.modelId,
-          messages,
-          {
-            temperature: createChatDto.temperature,
-            maxTokens: createChatDto.maxTokens,
-            tools: roundTools,
-          },
-        );
-
-        lastCompletion = completion;
-        accumulatedUsage.promptTokens += completion.usage?.promptTokens || 0;
-        accumulatedUsage.completionTokens += completion.usage?.completionTokens || 0;
-        accumulatedUsage.totalTokens =
-          accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
-
-        if (!completion.toolCalls || completion.toolCalls.length === 0) {
-          break;
+      const sessionId = createChatDto.sessionId;
+      let boundSession: ChatSession | null = null;
+      if (sessionId) {
+        boundSession = await this.chatSessionService.findByIdForUser(sessionId, userId);
+        const sessionPatch: Partial<ChatSession> = {};
+        if (createChatDto.knowledgeBaseIds !== undefined) {
+          sessionPatch.knowledgeBaseIds = createChatDto.knowledgeBaseIds;
         }
+        if (createChatDto.workflowId !== undefined) {
+          sessionPatch.activeWorkflowId = createChatDto.workflowId || null;
+          if (createChatDto.workflowId) sessionPatch.activeRoleId = null;
+        }
+        if (createChatDto.roleId !== undefined) {
+          sessionPatch.activeRoleId = createChatDto.roleId || null;
+          if (createChatDto.roleId) sessionPatch.activeWorkflowId = null;
+        }
+        if (Object.keys(sessionPatch).length > 0) {
+          await this.chatSessionService.update(sessionId, sessionPatch as any);
+        }
+      }
 
-        messages.push({
-          role: 'assistant',
-          content: completion.content || '',
-          tool_calls: completion.toolCalls,
+      const effectiveWorkflowId =
+        createChatDto.workflowId !== undefined
+          ? createChatDto.workflowId || null
+          : boundSession?.activeWorkflowId || null;
+      const effectiveRoleId =
+        !effectiveWorkflowId &&
+        (createChatDto.roleId !== undefined
+          ? createChatDto.roleId || null
+          : boundSession?.activeRoleId || null);
+      const selectedRole =
+        effectiveRoleId && this.agentRoleRepo
+          ? await this.agentRoleRepo.findOne({ where: { id: effectiveRoleId, userId } })
+          : null;
+
+      const mergedKbIds = Array.from(
+        new Set([
+          ...(createChatDto.knowledgeBaseIds?.length
+            ? createChatDto.knowledgeBaseIds
+            : boundSession?.knowledgeBaseIds || []),
+          ...(selectedRole?.knowledgeBaseIds || []),
+        ]),
+      );
+      const effectiveKnowledgeBaseIds = mergedKbIds;
+
+      const clientRequestId = this.createClientRequestId(
+        createChatDto.clientRequestId,
+      );
+
+      const { attachmentIds, fileDataForAI } =
+        await this.filesService.prepareChatAttachments({
+          userId,
+          fileIds: createChatDto.fileIds,
         });
 
-        for (const tc of completion.toolCalls) {
-          const fnName = tc.function?.name || '';
-          let parsedArgs: Record<string, any> = {};
-          try {
-            parsedArgs = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
-          } catch {
-            parsedArgs = { raw: tc.function?.arguments };
-          }
+      const messages: ChatMessage[] = [];
+      if (selectedRole?.systemPrompt && !selectedRole.isTeam) {
+        messages.push({ role: 'system', content: selectedRole.systemPrompt });
+      }
 
-          const execRecord = await this.toolRegistryService.executeTool(
-            fnName,
-            parsedArgs,
-            { userId, sessionId, userMessage: createChatDto.message },
+      if (
+        sessionId &&
+        (!createChatDto.history || createChatDto.history.length === 0)
+      ) {
+        const historyMessages = await this.getSessionHistory(
+          userId,
+          sessionId,
+          10,
+        );
+        historyMessages.forEach((msg) => {
+          const assistantAnswer = msg.reasoning
+            ? msg.aiMessage
+            : extractAssistantContent(msg.aiMessage || '').answer;
+          messages.push(
+            { role: 'user', content: this.formatHistoryUserMessage(msg) },
+            { role: 'assistant', content: assistantAnswer },
           );
-          execRecord.id = tc.id || execRecord.id;
-          execRecord.callType = 'model_function_call';
-          toolExecutionRecords.push(execRecord);
-
-          messages.push({
-            role: 'tool',
-            tool_call_id: tc.id,
-            name: fnName,
-            content:
-              execRecord.result.status === 'success'
-                ? typeof execRecord.result.output === 'string'
-                  ? execRecord.result.output
-                  : JSON.stringify(execRecord.result.output)
-                : `工具执行失败: ${execRecord.result.error}`,
-          });
-        }
-
-        loopCount++;
+        });
+      } else if (createChatDto.history?.length) {
+        messages.push(...createChatDto.history);
       }
 
-      const durationMs = Date.now() - requestStartTime;
-      const finalizedAssistant = this.finalizeAssistantPayload(lastCompletion!);
-      const assistantMessage = finalizedAssistant.content;
-      const actualCredits = this.estimateActualChargeCredits(
-        accumulatedUsage,
-        chargeModel,
+      const mergedTools = Array.from(
+        new Set([
+          ...(createChatDto.enabledTools || []),
+          ...(selectedRole?.enabledTools || []),
+        ]),
       );
+      const openAiTools = mergedTools.length
+        ? this.toolRegistryService.toOpenAITools(mergedTools)
+        : [];
 
-      this.logger.log(`AI 回复: ${assistantMessage.substring(0, 50)}...`);
+      let toolExecutionRecords: ToolExecutionRecord[] = [];
+      let searchResult: WebSearchResult | null = null;
+      if (createChatDto.webSearch && !mergedTools.includes('web_search_v2')) {
+        searchResult = await this.webSearchService.search(createChatDto.message);
+      }
 
-      const {
-        savedMessage,
-        sessionId: persistedSessionId,
-        charge,
-        creditsSnapshot,
-      } = await this.persistChatMessage({
+      const chargeModel = await this.resolveChatModelConfig(
+        createChatDto.model || selectedRole?.boundModelId || undefined,
+      );
+      const existingImageCount = fileDataForAI.filter((f) =>
+        this.SUPPORTED_IMAGE_TYPES.includes(f.type),
+      ).length;
+
+      const ragContext = await this.resolveKnowledgeBaseContext({
         userId,
-        sessionId,
-        clientRequestId,
-        userMessage: createChatDto.message,
-        aiMessage: assistantMessage,
-        reasoning: finalizedAssistant.reasoning,
-        model: lastCompletion!.model,
-        usage: accumulatedUsage,
-        actualCredits,
-        attachmentIds,
-        durationMs,
-        sources: searchResult?.sources || null,
-        toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
+        message: createChatDto.message,
         knowledgeBaseIds: effectiveKnowledgeBaseIds,
+        supportsVision: chargeModel.supportsVision,
+        existingImageCount,
       });
 
-      reservedSessionId = persistedSessionId;
-      this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
+      if (ragContext.sources.length > 0) {
+        if (!searchResult) {
+          searchResult = {
+            query: createChatDto.message,
+            sources: ragContext.sources,
+            contextPrompt: '',
+          };
+        } else {
+          searchResult.sources.unshift(...ragContext.sources);
+        }
+      }
 
-      return {
-        id: savedMessage.id,
-        sessionId: persistedSessionId,
-        message: assistantMessage,
-        reasoning: finalizedAssistant.reasoning,
-        model: lastCompletion!.model,
-        usage: accumulatedUsage,
-        durationMs,
-        charge,
-        creditsSnapshot,
-        toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
-        createdAt: savedMessage.createdAt,
-      };
-    } catch (error) {
-      if (reservedCharge) {
-        await this.releaseReservedChatChargeSafely({
+      const userContent = this.buildMultimodalContent(
+        createChatDto.message,
+        fileDataForAI.length > 0 ? fileDataForAI : undefined,
+      );
+
+      const finalUserContent = this.assembleFinalUserContent({
+        userContent,
+        ragContext,
+        webSearchContextPrompt: searchResult?.contextPrompt,
+      });
+
+      messages.push({
+        role: 'user',
+        content: finalUserContent,
+      });
+
+      if (fileDataForAI.length > 0) {
+        this.logger.log(
+          `包含 ${fileDataForAI.length} 个附件: ${fileDataForAI.map((f) => f.name).join(', ')}`,
+        );
+      }
+
+      const reserveCredits = this.estimateReserveCredits({
+        messages,
+        model: chargeModel,
+        maxTokens: createChatDto.maxTokens,
+      });
+      let reservedSessionId = sessionId;
+      let reservedCharge: ChatCreditChargeSummary | null = null;
+
+      try {
+        const reserveResult = await this.reserveChatCharge({
           userId,
           clientRequestId,
-          sessionId: reservedSessionId,
-          failureReason:
-            error instanceof Error
-              ? error.message
-              : '聊天请求失败，释放预占积分',
+          sessionId,
+          model: chargeModel,
+          reserveCredits,
         });
+        reservedCharge = reserveResult.charge;
+
+        const requestStartTime = Date.now();
+        let lastCompletion: CompletionResponse | null = null;
+        let accumulatedUsage: CompletionUsageStats = {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+        };
+        let collectedTimeline: SwarmTimelineEvent[] | null = null;
+
+        if (effectiveWorkflowId && this.workflowService) {
+          const wfRes = await this.workflowService.executePublishedWorkflow({
+            userId,
+            workflowId: effectiveWorkflowId,
+            input: createChatDto.message,
+            sessionId,
+            defaultModelId: chargeModel.modelId,
+          });
+          if (wfRes.status !== 'completed') {
+            throw new BadRequestException(wfRes.error || '工作流执行失败');
+          }
+          lastCompletion = {
+            content: wfRes.content,
+            model: chargeModel.modelId,
+            usage: wfRes.usage,
+          };
+          accumulatedUsage = wfRes.usage;
+          collectedTimeline = wfRes.timeline.length > 0 ? wfRes.timeline : null;
+        } else if (
+          selectedRole?.isTeam &&
+          selectedRole.teamConfig?.subAgentRoleIds?.length &&
+          this.swarmOrchestratorService &&
+          this.agentRoleRepo
+        ) {
+          const subRoles = await this.agentRoleRepo.find({
+            where: { id: In(selectedRole.teamConfig.subAgentRoleIds), userId },
+          });
+          if (subRoles.length > 0) {
+            const swarmRes = await this.swarmOrchestratorService.execute({
+              teamRole: selectedRole,
+              subAgentRoles: subRoles,
+              userMessage: createChatDto.message,
+              messages,
+              defaultModelId: chargeModel.modelId,
+              context: { userId, sessionId, userMessage: createChatDto.message },
+            });
+            lastCompletion = {
+              content: swarmRes.content,
+              model: chargeModel.modelId,
+              usage: swarmRes.usage,
+            };
+            accumulatedUsage = swarmRes.usage;
+            collectedTimeline =
+              swarmRes.timeline.length > 0 ? swarmRes.timeline : null;
+          }
+        }
+
+        if (!lastCompletion) {
+          let loopCount = 0;
+          const MAX_REACT_LOOPS = 3;
+
+          while (loopCount <= MAX_REACT_LOOPS) {
+            const roundTools =
+              loopCount < MAX_REACT_LOOPS && openAiTools.length > 0
+                ? openAiTools
+                : undefined;
+            const completion = await this.aiClientService.createChatCompletion(
+              chargeModel.modelId,
+              messages,
+              {
+                temperature: createChatDto.temperature,
+                maxTokens: createChatDto.maxTokens,
+                tools: roundTools,
+              },
+            );
+
+            lastCompletion = completion;
+            accumulatedUsage.promptTokens += completion.usage?.promptTokens || 0;
+            accumulatedUsage.completionTokens +=
+              completion.usage?.completionTokens || 0;
+            accumulatedUsage.totalTokens =
+              accumulatedUsage.promptTokens + accumulatedUsage.completionTokens;
+
+            if (!completion.toolCalls || completion.toolCalls.length === 0) {
+              break;
+            }
+
+            messages.push({
+              role: 'assistant',
+              content: completion.content || '',
+              tool_calls: completion.toolCalls,
+            });
+
+            for (const tc of completion.toolCalls) {
+              const fnName = tc.function?.name || '';
+              let parsedArgs: Record<string, any> = {};
+              try {
+                parsedArgs = tc.function?.arguments
+                  ? JSON.parse(tc.function.arguments)
+                  : {};
+              } catch {
+                parsedArgs = { raw: tc.function?.arguments };
+              }
+
+              const execRecord = await this.toolRegistryService.executeTool(
+                fnName,
+                parsedArgs,
+                { userId, sessionId, userMessage: createChatDto.message },
+              );
+              execRecord.id = tc.id || execRecord.id;
+              execRecord.callType = 'model_function_call';
+              toolExecutionRecords.push(execRecord);
+
+              messages.push({
+                role: 'tool',
+                tool_call_id: tc.id,
+                name: fnName,
+                content:
+                  execRecord.result.status === 'success'
+                    ? typeof execRecord.result.output === 'string'
+                      ? execRecord.result.output
+                      : JSON.stringify(execRecord.result.output)
+                    : `工具执行失败: ${execRecord.result.error}`,
+              });
+            }
+
+            loopCount++;
+          }
+        }
+
+        const durationMs = Date.now() - requestStartTime;
+        const finalizedAssistant = this.finalizeAssistantPayload(lastCompletion!);
+        const assistantMessage = finalizedAssistant.content;
+        const actualCredits = this.resolveTraceOrModelCredits({
+          usage: accumulatedUsage,
+          chargeModel,
+          isOrchestrated: Boolean(effectiveWorkflowId || selectedRole?.isTeam),
+        });
+
+        this.logger.log(`AI 回复: ${assistantMessage.substring(0, 50)}...`);
+
+        const {
+          savedMessage,
+          sessionId: persistedSessionId,
+          charge,
+          creditsSnapshot,
+        } = await this.persistChatMessage({
+          userId,
+          sessionId,
+          clientRequestId,
+          userMessage: createChatDto.message,
+          aiMessage: assistantMessage,
+          reasoning: finalizedAssistant.reasoning,
+          model: lastCompletion!.model,
+          usage: accumulatedUsage,
+          actualCredits,
+          attachmentIds,
+          durationMs,
+          sources: searchResult?.sources || null,
+          toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
+          traceId: activeTraceId,
+          agentTimeline: collectedTimeline,
+          knowledgeBaseIds: effectiveKnowledgeBaseIds,
+        });
+
+        reservedSessionId = persistedSessionId;
+        this.logger.log(`聊天记录已保存: ${savedMessage.id}`);
+
+        return {
+          id: savedMessage.id,
+          sessionId: persistedSessionId,
+          traceId: activeTraceId,
+          message: assistantMessage,
+          reasoning: finalizedAssistant.reasoning,
+          model: lastCompletion!.model,
+          usage: accumulatedUsage,
+          durationMs,
+          charge,
+          creditsSnapshot,
+          toolCalls: toolExecutionRecords.length > 0 ? toolExecutionRecords : null,
+          agentTimeline: collectedTimeline,
+          createdAt: savedMessage.createdAt,
+        };
+      } catch (error) {
+        if (reservedCharge) {
+          await this.releaseReservedChatChargeSafely({
+            userId,
+            clientRequestId,
+            sessionId: reservedSessionId,
+            failureReason:
+              error instanceof Error
+                ? error.message
+                : '聊天请求失败，释放预占积分',
+          });
+        }
+        throw error;
       }
-      throw error;
+    };
+
+    if (this.traceContext) {
+      return this.traceContext.runWithTrace(
+        {
+          userId,
+          source: createChatDto.workflowId ? 'workflow_chat' : 'web_chat',
+          workflowId: createChatDto.workflowId || null,
+          roleId: createChatDto.roleId || null,
+          sessionId: createChatDto.sessionId || null,
+          title: createChatDto.message?.slice(0, 80) || 'Web 对话',
+        },
+        async (traceId) => createInternal(traceId),
+      );
     }
+
+    return createInternal(null);
   }
 
   /**
@@ -980,21 +1124,52 @@ export class ChatService {
         userId,
         title: '新对话',
         knowledgeBaseIds: createChatDto.knowledgeBaseIds || [],
-      });
+        activeRoleId: createChatDto.roleId || null,
+        activeWorkflowId: createChatDto.workflowId || null,
+      } as any);
       sessionId = newSession.id;
       boundSession = newSession;
     } else {
       boundSession = await this.chatSessionService.findByIdForUser(sessionId, userId);
+      const sessionPatch: Partial<ChatSession> = {};
       if (createChatDto.knowledgeBaseIds !== undefined) {
-        await this.chatSessionService.update(sessionId, {
-          knowledgeBaseIds: createChatDto.knowledgeBaseIds,
-        });
+        sessionPatch.knowledgeBaseIds = createChatDto.knowledgeBaseIds;
+      }
+      if (createChatDto.workflowId !== undefined) {
+        sessionPatch.activeWorkflowId = createChatDto.workflowId || null;
+        if (createChatDto.workflowId) sessionPatch.activeRoleId = null;
+      }
+      if (createChatDto.roleId !== undefined) {
+        sessionPatch.activeRoleId = createChatDto.roleId || null;
+        if (createChatDto.roleId) sessionPatch.activeWorkflowId = null;
+      }
+      if (Object.keys(sessionPatch).length > 0) {
+        await this.chatSessionService.update(sessionId, sessionPatch as any);
       }
     }
 
-    const effectiveKnowledgeBaseIds = createChatDto.knowledgeBaseIds?.length
-      ? createChatDto.knowledgeBaseIds
-      : (boundSession?.knowledgeBaseIds || []);
+    const effectiveWorkflowId =
+      createChatDto.workflowId !== undefined
+        ? createChatDto.workflowId || null
+        : boundSession?.activeWorkflowId || null;
+    const effectiveRoleId =
+      !effectiveWorkflowId &&
+      (createChatDto.roleId !== undefined
+        ? createChatDto.roleId || null
+        : boundSession?.activeRoleId || null);
+    const selectedRole =
+      effectiveRoleId && this.agentRoleRepo
+        ? await this.agentRoleRepo.findOne({ where: { id: effectiveRoleId, userId } })
+        : null;
+
+    const effectiveKnowledgeBaseIds = Array.from(
+      new Set([
+        ...(createChatDto.knowledgeBaseIds?.length
+          ? createChatDto.knowledgeBaseIds
+          : boundSession?.knowledgeBaseIds || []),
+        ...(selectedRole?.knowledgeBaseIds || []),
+      ]),
+    );
 
     const clientRequestId = this.createClientRequestId(
       createChatDto.clientRequestId,
@@ -1007,6 +1182,9 @@ export class ChatService {
       });
 
     const messages: ChatMessage[] = [];
+    if (selectedRole?.systemPrompt && !selectedRole.isTeam) {
+      messages.push({ role: 'system', content: selectedRole.systemPrompt });
+    }
 
     if (!createChatDto.history || createChatDto.history.length === 0) {
       const historyMessages = await this.getSessionHistory(
@@ -1027,17 +1205,25 @@ export class ChatService {
       messages.push(...createChatDto.history);
     }
 
-    const openAiTools = createChatDto.enabledTools?.length
-      ? this.toolRegistryService.toOpenAITools(createChatDto.enabledTools)
+    const mergedTools = Array.from(
+      new Set([
+        ...(createChatDto.enabledTools || []),
+        ...(selectedRole?.enabledTools || []),
+      ]),
+    );
+    const openAiTools = mergedTools.length
+      ? this.toolRegistryService.toOpenAITools(mergedTools)
       : [];
 
     let toolExecutionRecords: ToolExecutionRecord[] = [];
     let searchResult: WebSearchResult | null = null;
-    if (createChatDto.webSearch && !createChatDto.enabledTools?.includes('web_search_v2')) {
+    if (createChatDto.webSearch && !mergedTools.includes('web_search_v2')) {
       searchResult = await this.webSearchService.search(createChatDto.message);
     }
 
-    const chargeModel = await this.resolveChatModelConfig(createChatDto.model);
+    const chargeModel = await this.resolveChatModelConfig(
+      createChatDto.model || selectedRole?.boundModelId || undefined,
+    );
     const existingImageCount = fileDataForAI.filter((f) =>
       this.SUPPORTED_IMAGE_TYPES.includes(f.type),
     ).length;
@@ -1103,18 +1289,80 @@ export class ChatService {
       });
       hasReservedCharge = true;
 
-      const stream = this.agentStreamExecutorService.executeStream({
-        modelId: chargeModel.modelId,
-        initialMessages: messages,
-        tools: openAiTools.length > 0 ? openAiTools : undefined,
-        options: {
-          temperature: createChatDto.temperature,
-          maxTokens: createChatDto.maxTokens,
-          abortSignal: options?.abortSignal,
-        },
-        context: { userId, sessionId, userMessage: createChatDto.message },
-        toolExecutionRecords,
-      });
+      let stream: AsyncIterable<CompletionChunk>;
+
+      if (effectiveWorkflowId && this.workflowService) {
+        const wfService = this.workflowService;
+        stream = this.createOrchestratedStream(async (emitTimeline) => {
+          const res = await wfService.executePublishedWorkflow({
+            userId,
+            workflowId: effectiveWorkflowId,
+            input: createChatDto.message,
+            sessionId,
+            defaultModelId: chargeModel.modelId,
+            abortSignal: options?.abortSignal,
+            onEvent: (evt) => {
+              if (evt.type === 'timeline') {
+                emitTimeline(evt.timelineEvent);
+              }
+            },
+          });
+          if (res.status !== 'completed') {
+            throw new BadRequestException(res.error || '工作流执行失败');
+          }
+          return { content: res.content, usage: res.usage };
+        });
+      } else if (
+        selectedRole?.isTeam &&
+        selectedRole.teamConfig?.subAgentRoleIds?.length &&
+        this.swarmOrchestratorService &&
+        this.agentRoleRepo
+      ) {
+        const subRoles = await this.agentRoleRepo.find({
+          where: { id: In(selectedRole.teamConfig.subAgentRoleIds), userId },
+        });
+        if (subRoles.length > 0) {
+          const swarmSvc = this.swarmOrchestratorService;
+          stream = this.createOrchestratedStream(async (emitTimeline) => {
+            const res = await swarmSvc.execute({
+              teamRole: selectedRole,
+              subAgentRoles: subRoles,
+              userMessage: createChatDto.message,
+              messages,
+              defaultModelId: chargeModel.modelId,
+              context: { userId, sessionId, userMessage: createChatDto.message },
+              onTimelineEvent: emitTimeline,
+            });
+            return { content: res.content, usage: res.usage };
+          });
+        } else {
+          stream = this.agentStreamExecutorService.executeStream({
+            modelId: chargeModel.modelId,
+            initialMessages: messages,
+            tools: openAiTools.length > 0 ? openAiTools : undefined,
+            options: {
+              temperature: createChatDto.temperature,
+              maxTokens: createChatDto.maxTokens,
+              abortSignal: options?.abortSignal,
+            },
+            context: { userId, sessionId, userMessage: createChatDto.message },
+            toolExecutionRecords,
+          });
+        }
+      } else {
+        stream = this.agentStreamExecutorService.executeStream({
+          modelId: chargeModel.modelId,
+          initialMessages: messages,
+          tools: openAiTools.length > 0 ? openAiTools : undefined,
+          options: {
+            temperature: createChatDto.temperature,
+            maxTokens: createChatDto.maxTokens,
+            abortSignal: options?.abortSignal,
+          },
+          context: { userId, sessionId, userMessage: createChatDto.message },
+          toolExecutionRecords,
+        });
+      }
 
       return {
         stream,
@@ -1197,6 +1445,99 @@ export class ChatService {
     };
   }
 
+  private resolveTraceOrModelCredits(params: {
+    usage?: CompletionUsageStats | null;
+    chargeModel: Pick<
+      ResolvedChatModelConfig,
+      'inputPrice' | 'outputPrice' | 'billingMode' | 'reserveCredits'
+    >;
+    isOrchestrated: boolean;
+  }): number | undefined {
+    if (params.isOrchestrated && this.traceContext) {
+      const traceUsage = this.traceContext.getCurrentUsageSummary();
+      if (traceUsage.estimatedCredits > 0) {
+        return Math.max(1, Math.ceil(traceUsage.estimatedCredits));
+      }
+    }
+    return this.estimateActualChargeCredits(params.usage, params.chargeModel);
+  }
+
+  private createOrchestratedStream(
+    runner: (
+      emitTimeline: (evt: SwarmTimelineEvent) => void,
+    ) => Promise<{ content: string; usage?: CompletionUsageStats }>,
+  ): AsyncIterable<CompletionChunk> {
+    return {
+      async *[Symbol.asyncIterator]() {
+        const queue: CompletionChunk[] = [];
+        let wake: (() => void) | null = null;
+        let finished = false;
+        let runError: unknown = null;
+        let finalOutcome: { content: string; usage?: CompletionUsageStats } | null =
+          null;
+
+        const enqueue = (chunk: CompletionChunk) => {
+          queue.push(chunk);
+          if (wake) {
+            const fn = wake;
+            wake = null;
+            fn();
+          }
+        };
+
+        const outcomeHolder: {
+          value: { content: string; usage?: CompletionUsageStats } | null;
+        } = { value: finalOutcome };
+
+        void runner((timelineEvent) => {
+          enqueue({ type: 'agent_timeline_event', timelineEvent });
+        })
+          .then((outcome) => {
+            outcomeHolder.value = outcome;
+          })
+          .catch((err) => {
+            runError = err;
+          })
+          .finally(() => {
+            finished = true;
+            if (wake) {
+              const fn = wake;
+              wake = null;
+              fn();
+            }
+          });
+
+        while (!finished || queue.length > 0) {
+          if (queue.length > 0) {
+            yield queue.shift()!;
+            continue;
+          }
+          await new Promise<void>((resolve) => {
+            wake = resolve;
+          });
+        }
+
+        if (runError) {
+          throw runError;
+        }
+
+        const resolvedOutcome = outcomeHolder.value;
+        if (resolvedOutcome?.content) {
+          yield {
+            type: 'answer_delta',
+            delta: { content: resolvedOutcome.content },
+          };
+        }
+
+        yield {
+          delta: { content: '' },
+          finish_reason: 'stop',
+          usage: resolvedOutcome?.usage || null,
+        };
+      },
+    };
+  }
+
   async saveStreamMessage(
     userId: string,
     sessionId: string,
@@ -1210,9 +1551,15 @@ export class ChatService {
     durationMs?: number | null,
     sources?: SearchSource[] | null,
     toolCalls?: ToolExecutionRecord[] | null,
+    traceId?: string | null,
+    agentTimeline?: SwarmTimelineEvent[] | null,
   ) {
     const chargeModel = await this.resolveChatModelConfig(model);
-    const actualCredits = this.estimateActualChargeCredits(usage, chargeModel);
+    const actualCredits = this.resolveTraceOrModelCredits({
+      usage,
+      chargeModel,
+      isOrchestrated: Boolean(agentTimeline && agentTimeline.length > 0),
+    });
     const { savedMessage, charge, creditsSnapshot } = await this.persistChatMessage({
       userId,
       sessionId,
@@ -1227,6 +1574,8 @@ export class ChatService {
       durationMs: durationMs || null,
       sources: sources || null,
       toolCalls: toolCalls || null,
+      traceId: traceId ?? null,
+      agentTimeline: agentTimeline ?? null,
     });
 
     this.logger.log(`流式聊天记录已保存: ${savedMessage.id}`);

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { CodeInterpreterPlugin } from './plugins/code-interpreter.plugin';
 import { WebSearchPlugin } from './plugins/web-search.plugin';
 import { UrlFetcherPlugin } from './plugins/url-fetcher.plugin';
@@ -14,6 +14,7 @@ import type {
   ToolRiskEvaluation,
 } from './types/tools.types';
 import { randomUUID } from 'crypto';
+import { TraceContextService } from '../observability/services/trace-context.service';
 
 @Injectable()
 export class ToolRegistryService {
@@ -27,6 +28,8 @@ export class ToolRegistryService {
     private readonly calculator: CalculatorPlugin,
     private readonly weather: WeatherPlugin,
     private readonly clockCalendar: ClockCalendarPlugin,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {
     this.registerPlugin(this.codeInterpreter);
     this.registerPlugin(this.webSearch);
@@ -114,7 +117,26 @@ export class ToolRegistryService {
 
     this.logger.log(`开始执行工具: ${name}, 入参: ${JSON.stringify(args).slice(0, 150)}`);
     const riskEvaluation = this.evaluateToolRisk(name, args, context);
-    const result: ToolExecutionResult = await plugin.execute(args, context);
+    const runTool = async () => {
+      const toolResult = await plugin.execute(args, context);
+      return toolResult;
+    };
+    const result: ToolExecutionResult = this.traceContext
+      ? await this.traceContext.withSpan(
+          {
+            spanType: 'tool',
+            name: `Tool · ${plugin.metadata.title || name}`,
+            input: { name, args, riskLevel: riskEvaluation.level },
+            metadata: { toolName: name, riskLevel: riskEvaluation.level },
+          },
+          async (recorder) => {
+            const toolResult = await runTool();
+            recorder?.setStatus(toolResult.status === 'success' ? 'completed' : 'failed');
+            recorder?.setOutput(toolResult.output ?? toolResult.error ?? null);
+            return toolResult;
+          },
+        )
+      : await runTool();
     this.logger.log(`工具执行完成: ${name}, 状态: ${result.status}, 耗时: ${result.durationMs}ms`);
 
     return {

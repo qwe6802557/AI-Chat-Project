@@ -10,6 +10,7 @@ import {
   UseGuards,
   ForbiddenException,
   Param,
+  Optional,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -24,6 +25,8 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { CreateChatDto, DecideApprovalDto, SteerChatDto } from './dto';
 import { ActiveStreamRegistry } from './services/active-stream.registry';
+import { TraceContextService } from '../observability/services/trace-context.service';
+import type { SwarmTimelineEvent } from './services/swarm-orchestrator.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type {
   CompletionChunk,
@@ -38,6 +41,8 @@ export class ChatController {
   constructor(
     private readonly chatService: ChatService,
     private readonly activeStreamRegistry: ActiveStreamRegistry,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
@@ -172,19 +177,30 @@ export class ChatController {
     let chargeFinalized = false;
     let hasActiveCharge = false;
 
-    try {
-      // 获取流和上下文信息
-      const streamContext = await this.chatService.createStream(createChatDto, {
-        abortSignal: abortController.signal,
-      });
-      const { stream } = streamContext;
-      sessionId = streamContext.sessionId;
-      userId = streamContext.userId;
-      userMessage = streamContext.userMessage;
-      modelId = streamContext.modelId;
-      clientRequestId = streamContext.clientRequestId;
-      attachmentIds = streamContext.attachmentIds;
-      hasActiveCharge = true;
+    const executeStreamCycle = async (activeTraceId: string | null) => {
+      try {
+        // 获取流和上下文信息
+        const streamContext = await this.chatService.createStream(createChatDto, {
+          abortSignal: abortController.signal,
+        });
+        const { stream } = streamContext;
+        sessionId = streamContext.sessionId;
+        userId = streamContext.userId;
+        userMessage = streamContext.userMessage;
+        modelId = streamContext.modelId;
+        clientRequestId = streamContext.clientRequestId;
+        attachmentIds = streamContext.attachmentIds;
+        hasActiveCharge = true;
+
+        if (activeTraceId && !res.writableEnded) {
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'trace_started',
+              sessionId,
+              traceId: activeTraceId,
+            })}\n\n`,
+          );
+        }
 
       if (streamContext.searchResult && !res.writableEnded) {
         res.write(
@@ -219,6 +235,7 @@ export class ChatController {
         | undefined;
       let reasoningBuffer = '';
       let activeFailover: Record<string, unknown> | null = null;
+      const collectedTimeline: SwarmTimelineEvent[] = [];
       let finalCharge:
         | {
             id: string;
@@ -284,13 +301,23 @@ export class ChatController {
               toolCall: chunk.toolCall,
             };
             break;
-          case 'agent_timeline_event':
+          case 'agent_timeline_event': {
+            const timelineEvt = chunk.timelineEvent as SwarmTimelineEvent | undefined;
+            if (timelineEvt?.id) {
+              const idx = collectedTimeline.findIndex((t) => t.id === timelineEvt.id);
+              if (idx >= 0) {
+                collectedTimeline[idx] = timelineEvt;
+              } else {
+                collectedTimeline.push(timelineEvt);
+              }
+            }
             sseData = {
               type: 'agent_timeline_event',
               sessionId,
-              timelineEvent: chunk.timelineEvent,
+              timelineEvent: timelineEvt,
             };
             break;
+          }
           case 'steer_applied':
             sseData = {
               type: 'steer_applied',
@@ -381,20 +408,38 @@ export class ChatController {
       const durationMs = Date.now() - streamStartTime;
 
       if (finalFinishReason || fullMessage) {
-        const finalizeResult = await this.chatService.saveStreamMessage(
-          userId,
-          sessionId,
-          clientRequestId,
-          userMessage,
-          fullMessage,
-          finalReasoning || null,
-          modelId,
-          finalUsage,
-          attachmentIds,
-          durationMs,
-          streamContext.searchResult?.sources || null,
-          streamContext.toolExecutions || null,
-        );
+        const finalizeResult =
+          activeTraceId || collectedTimeline.length > 0
+            ? await this.chatService.saveStreamMessage(
+                userId,
+                sessionId,
+                clientRequestId,
+                userMessage,
+                fullMessage,
+                finalReasoning || null,
+                modelId,
+                finalUsage,
+                attachmentIds,
+                durationMs,
+                streamContext.searchResult?.sources || null,
+                streamContext.toolExecutions || null,
+                activeTraceId,
+                collectedTimeline.length > 0 ? collectedTimeline : null,
+              )
+            : await this.chatService.saveStreamMessage(
+                userId,
+                sessionId,
+                clientRequestId,
+                userMessage,
+                fullMessage,
+                finalReasoning || null,
+                modelId,
+                finalUsage,
+                attachmentIds,
+                durationMs,
+                streamContext.searchResult?.sources || null,
+                streamContext.toolExecutions || null,
+              );
         chargeFinalized = true;
         finalCharge = finalizeResult.charge;
         finalCreditsSnapshot = finalizeResult.creditsSnapshot;
@@ -406,6 +451,7 @@ export class ChatController {
           delta: '',
           finish_reason: finalFinishReason,
           sessionId,
+          traceId: activeTraceId || null,
           message: fullMessage,
           reasoning: finalReasoning || null,
           model: modelId,
@@ -416,6 +462,7 @@ export class ChatController {
           creditsSnapshot: finalCreditsSnapshot,
           sources: streamContext.searchResult?.sources || null,
           toolCalls: streamContext.toolExecutions || null,
+          agentTimeline: collectedTimeline.length > 0 ? collectedTimeline : null,
         });
         res.write(`data: ${finalData}\n\n`);
       }
@@ -441,6 +488,7 @@ export class ChatController {
 
       // 需在首次写入响应体之前设置 HTTP 状态码，避免 ERR_HTTP_HEADERS_SENT
       const errorData = JSON.stringify({
+        traceId: activeTraceId || null,
         error: this.formatStreamErrorMessage(error),
       });
 
@@ -455,6 +503,23 @@ export class ChatController {
         res.write(`data: ${errorData}\n\n`);
         res.end();
       }
+    }
+    };
+
+    if (this.traceContext) {
+      await this.traceContext.runWithTrace(
+        {
+          userId: currentUserId,
+          source: createChatDto.workflowId ? 'workflow_chat' : 'web_chat',
+          workflowId: createChatDto.workflowId || null,
+          roleId: createChatDto.roleId || null,
+          sessionId: createChatDto.sessionId || null,
+          title: createChatDto.message?.slice(0, 80) || 'Web 对话',
+        },
+        async (traceId) => executeStreamCycle(traceId),
+      );
+    } else {
+      await executeStreamCycle(null);
     }
   }
 

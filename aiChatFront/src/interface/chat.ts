@@ -1,14 +1,15 @@
 export interface SwarmTimelineEvent {
   id: string
-  type: 'handoff' | 'subagent_execution' | 'conclude'
+  type: 'handoff' | 'subagent_execution' | 'conclude' | 'dag_node'
   timestamp: number
   fromAgent: string
   toAgent: string
+  nodeId?: string
   modelId?: string
   task?: string
   outputSnippet?: string
   durationMs?: number
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'completed' | 'failed' | 'skipped'
 }
 
 import type { UserCredits } from '@/types/user'
@@ -104,6 +105,8 @@ export interface BackendChatMessage {
   durationMs?: number | null
   sources?: SearchSource[] | null
   toolCalls?: ToolCallItem[] | null
+  traceId?: string | null
+  agentTimeline?: SwarmTimelineEvent[] | null
   createdAt: string
   updatedAt: string
 }
@@ -149,6 +152,8 @@ export interface SendMessageParams {
   webSearch?: boolean
   enabledTools?: string[]
   knowledgeBaseIds?: string[]
+  roleId?: string | null
+  workflowId?: string | null
 }
 
 /**
@@ -199,11 +204,13 @@ export interface ChatMessageResponse {
  */
 export interface StreamChunk {
   type?:
+    | 'trace_started'
     | 'search_start'
     | 'search_sources'
     | 'tool_call_start'
     | 'tool_call_result'
     | 'tool_approval_required'
+    | 'agent_timeline_event'
     | 'tool_start'
     | 'tool_result'
     | 'reasoning_start'
@@ -215,6 +222,9 @@ export interface StreamChunk {
     | 'failover_notice'
     | 'done'
     | 'error'
+  traceId?: string | null
+  timelineEvent?: SwarmTimelineEvent
+  agentTimeline?: SwarmTimelineEvent[] | null
   delta?: string
   finish_reason: string | null
   sessionId?: string

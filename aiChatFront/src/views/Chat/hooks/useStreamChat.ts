@@ -165,6 +165,8 @@ export function useStreamChat() {
       webSearch?: boolean
       enabledTools?: string[]
       knowledgeBaseIds?: string[]
+      roleId?: string | null
+      workflowId?: string | null
     },
   ) => {
     cancelCurrentStream(false)
@@ -178,6 +180,8 @@ export function useStreamChat() {
       webSearch = false,
       enabledTools = toolsStore.enabledTools,
       knowledgeBaseIds,
+      roleId,
+      workflowId,
     } = options || {}
 
     if (!userId) {
@@ -308,12 +312,43 @@ export function useStreamChat() {
           webSearch,
           enabledTools,
           knowledgeBaseIds,
+          ...(roleId !== undefined ? { roleId } : {}),
+          ...(workflowId !== undefined ? { workflowId } : {}),
         },
         {
           onChunk: (chunk: StreamChunk) => {
             if (activeRequestId.value !== requestId) return
 
             switch (chunk.type) {
+              case 'trace_started': {
+                const messageId = ensureAssistantMessage()
+                if (chunk.traceId) {
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    traceId: chunk.traceId,
+                  })
+                }
+                return
+              }
+              case 'agent_timeline_event': {
+                const messageId = ensureAssistantMessage()
+                const evt = chunk.timelineEvent
+                if (evt?.id) {
+                  const currentMsg = conversationStore.currentConversation?.messages.find(
+                    (m) => m.id === messageId,
+                  )
+                  const list = [...(currentMsg?.agentTimeline || [])]
+                  const idx = list.findIndex((item) => item.id === evt.id)
+                  if (idx >= 0) {
+                    list[idx] = evt
+                  } else {
+                    list.push(evt)
+                  }
+                  conversationStore.patchMessageById(sessionId, messageId, {
+                    agentTimeline: list,
+                  })
+                }
+                return
+              }
               case 'tool_call_start':
               case 'tool_call_result':
               case 'tool_approval_required': {
@@ -498,6 +533,8 @@ export function useStreamChat() {
                 durationMs,
                 sources: finalSources,
                 searchStatus: finalSearchStatus,
+                traceId: chunk.traceId || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.traceId : undefined),
+                agentTimeline: chunk.agentTimeline || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.agentTimeline : undefined),
                 toolCalls: chunk.toolCalls || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.toolCalls : undefined),
               })
             } else {
@@ -517,6 +554,8 @@ export function useStreamChat() {
                 durationMs,
                 sources: finalSources,
                 searchStatus: finalSearchStatus,
+                traceId: chunk.traceId || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.traceId : undefined),
+                agentTimeline: chunk.agentTimeline || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.agentTimeline : undefined),
                 toolCalls: chunk.toolCalls || (assistantMessageId ? conversationStore.currentConversation?.messages.find((m) => m.id === assistantMessageId)?.toolCalls : undefined),
               })
             }

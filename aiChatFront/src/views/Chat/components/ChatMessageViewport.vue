@@ -216,6 +216,15 @@
                 <span v-if="formatDuration(message.durationMs)" class="meta-item">
                   {{ formatDuration(message.durationMs) }}
                 </span>
+                <button
+                  v-if="message.traceId"
+                  type="button"
+                  class="meta-trace-btn"
+                  title="查看全链路分布式 Trace 拓扑与瀑布流"
+                  @click="handleOpenTrace(message.traceId)"
+                >
+                  Trace #{{ message.traceId.slice(-8) }}
+                </button>
               </div>
             </div>
             <div v-if="message.role === 'user'" class="user-message-content">
@@ -308,7 +317,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRef, watch, onBeforeUnmount } from 'vue'
+import { computed, inject, ref, toRef, watch, onBeforeUnmount } from 'vue'
+import { routerKey } from 'vue-router'
 import {
   BulbOutlined,
   ThunderboltOutlined,
@@ -352,6 +362,15 @@ defineOptions({
 
 const isSourceDrawerOpen = ref(false)
 const activeDrawerSource = ref<SearchSource | null>(null)
+const router = inject(routerKey, null)
+
+const handleOpenTrace = (traceId: string) => {
+  if (router) {
+    void router.push({ path: '/workflow', query: { tab: 'traces', traceId } })
+  } else {
+    window.location.assign(`/workflow?tab=traces&traceId=${encodeURIComponent(traceId)}`)
+  }
+}
 
 const handleOpenKnowledgeSource = (source: SearchSource) => {
   activeDrawerSource.value = source
@@ -1452,6 +1471,27 @@ $avatar-size: 32px;
               color: #2563eb;
               margin-right: 4px;
             }
+          }
+        }
+
+        .meta-trace-btn {
+          display: inline-flex;
+          align-items: center;
+          padding: 1px 7px;
+          margin-left: 4px;
+          border-radius: 5px;
+          border: 1px solid #dbeafe;
+          background: #eff6ff;
+          color: #2563eb;
+          font-size: 11px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-variant-numeric: tabular-nums;
+          cursor: pointer;
+          transition: background-color 0.15s ease, border-color 0.15s ease;
+
+          &:hover {
+            background: #dbeafe;
+            border-color: #93c5fd;
           }
         }
       }

@@ -31,6 +31,7 @@ const cachedViews = ref([
   'VideoWorkbenchPage',
   'VoiceWorkbenchPage',
   'KnowledgeBaseWorkbench',
+  'WorkflowStudioPage',
 ])
 </script>
 

@@ -148,6 +148,7 @@ export function sendStreamMessage(
       let latestCharge: StreamChunk['charge'] | undefined
       let latestReasoning: StreamChunk['reasoning'] | undefined
       let latestSources: StreamChunk['sources'] | undefined
+      let latestTraceId: string | null | undefined
 
       while (true) {
         if (abortController.signal.aborted) {
@@ -201,6 +202,10 @@ export function sendStreamMessage(
                 latestSources = chunk.sources
               }
 
+              if (chunk.traceId) {
+                latestTraceId = chunk.traceId
+              }
+
               if (chunk.type === 'answer_delta' && chunk.delta) {
                 fullMessage += chunk.delta
               }
@@ -211,6 +216,7 @@ export function sendStreamMessage(
               if (chunk.type === 'done') {
                 callbacks.onComplete({
                   ...chunk,
+                  traceId: chunk.traceId || latestTraceId,
                   message: chunk.message || fullMessage,
                   model: chunk.model || latestModel,
                   usage: chunk.usage || latestUsage,

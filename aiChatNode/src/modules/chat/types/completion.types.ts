@@ -125,6 +125,7 @@ export interface CompletionResponse {
  */
 export interface CompletionChunk {
   type?:
+    | 'trace_started'
     | 'reasoning_start'
     | 'reasoning_delta'
     | 'reasoning_done'
@@ -152,6 +153,7 @@ export interface CompletionChunk {
   finish_reason?: string | null;
   usage?: CompletionUsageStats | null;
   error?: string;
+  traceId?: string;
   toolCall?: StreamingToolCallEvent;
   failover?: FailoverEvent;
   timelineEvent?: any;

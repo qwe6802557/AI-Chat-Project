@@ -158,6 +158,12 @@
               @open="isMemoryVaultOpen = true"
             />
 
+            <AgentOrchestratorCapsule
+              v-model:workflow-id="selectedWorkflowId"
+              v-model:role-id="selectedRoleId"
+              :disabled="loading"
+            />
+
             <span
               v-if="selectedModelReasoningBadgeLabel"
               class="reasoning-badge"
@@ -217,6 +223,7 @@ import KnowledgeBaseCapsule from './KnowledgeBaseCapsule.vue'
 import PluginCenterModal from './PluginCenterModal.vue'
 import MemoryVaultTrigger from './MemoryVaultTrigger.vue'
 import MemoryVaultDrawer from './MemoryVaultDrawer.vue'
+import AgentOrchestratorCapsule from './AgentOrchestratorCapsule.vue'
 import type { Message } from '@/interface/conversation'
 import type { ServerFileInfo } from '@/interface/upload'
 
@@ -276,6 +283,8 @@ const emit = defineEmits<{
       serverFiles?: ServerFileInfo[]
       webSearch?: boolean
       knowledgeBaseIds?: string[]
+      roleId?: string | null
+      workflowId?: string | null
     }
   ]
   'stop-generation': []
@@ -288,6 +297,8 @@ const emit = defineEmits<{
 const inputMessage = ref('')
 const webSearchEnabled = ref(false)
 const selectedKnowledgeBaseIds = ref<string[]>([])
+const selectedRoleId = ref<string | null>(null)
+const selectedWorkflowId = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const messageTextareaRef = ref<{ $el?: HTMLElement } | HTMLElement | null>(null)
 const scrollSignal = ref(0)
@@ -544,6 +555,8 @@ const handleSend = () => {
     serverFiles?: ServerFileInfo[]
     webSearch?: boolean
     knowledgeBaseIds?: string[]
+    roleId?: string | null
+    workflowId?: string | null
   } | undefined
 
   if (hasFiles.value) {
@@ -569,6 +582,14 @@ const handleSend = () => {
     sendOptions = {
       ...(sendOptions || {}),
       knowledgeBaseIds: selectedKnowledgeBaseIds.value,
+    }
+  }
+
+  if (selectedWorkflowId.value !== null || selectedRoleId.value !== null) {
+    sendOptions = {
+      ...(sendOptions || {}),
+      workflowId: selectedWorkflowId.value,
+      roleId: selectedRoleId.value,
     }
   }
 

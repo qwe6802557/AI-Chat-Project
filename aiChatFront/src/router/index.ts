@@ -100,6 +100,15 @@ const router = createRouter({
             requiresAuth: true,
           },
         },
+        {
+          path: 'workflow',
+          name: 'workflow',
+          component: () => import('../views/Workflow/index.vue'),
+          meta: {
+            title: '智能编排与链路观测',
+            requiresAuth: true,
+          },
+        },
       ],
     },
     {

@@ -5,6 +5,7 @@ export interface ChannelStatusInfo {
   instanceName?: string | null;
   roleId?: string | null;
   roleName?: string | null;
+  workflowId?: string | null;
   isEnabled: boolean;
   status: 'disconnected' | 'connecting' | 'connected' | 'error';
   loginStatus?: 'idle' | 'waiting_scan' | 'scanned' | 'logged_in' | 'error';

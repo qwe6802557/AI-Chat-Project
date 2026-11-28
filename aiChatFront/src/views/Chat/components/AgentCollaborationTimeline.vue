@@ -95,6 +95,8 @@ const getStatusText = (status: SwarmTimelineEvent['status']) => {
       return '已就绪'
     case 'failed':
       return '异常阻断'
+    case 'skipped':
+      return '分支跳过'
     default:
       return status
   }

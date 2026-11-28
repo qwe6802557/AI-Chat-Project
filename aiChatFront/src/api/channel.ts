@@ -43,6 +43,7 @@ export interface ChannelInfo {
   instanceName?: string | null
   roleId?: string | null
   roleName?: string | null
+  workflowId?: string | null
   isEnabled: boolean
   status: 'disconnected' | 'connecting' | 'connected' | 'error'
   loginStatus?: 'idle' | 'waiting_scan' | 'scanned' | 'logged_in' | 'error'
@@ -89,6 +90,7 @@ export function createInstance(data: {
   channelType: string
   instanceName?: string
   roleId?: string | null
+  workflowId?: string | null
   credentials?: Record<string, any>
 }) {
   return request.post<never, ResponseData<ChannelInfo>>('/channels/instances', data)
@@ -103,6 +105,7 @@ export function updateInstanceSettings(
   payload: {
     instanceName?: string
     roleId?: string | null
+    workflowId?: string | null
     boundModelId?: string | null
     systemPrompt?: string | null
     credentials?: Record<string, any>

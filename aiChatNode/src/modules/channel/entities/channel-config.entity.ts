@@ -47,6 +47,12 @@ export class ChannelConfig {
   @JoinColumn({ name: 'roleId' })
   role?: AgentRole | null;
 
+  /**
+   * 可选绑定的已发布 DAG 工作流 ID（优先级高于角色协同）
+   */
+  @Column({ type: 'uuid', nullable: true })
+  workflowId: string | null;
+
   @Column({ type: 'boolean', default: false })
   isEnabled: boolean;
 

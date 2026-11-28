@@ -13,6 +13,7 @@ import {
 } from '../utils/chunk-highlight.util';
 import { escapeLikePattern, toPgVectorLiteral } from '../utils/pg-vector.util';
 import type { RetrievalMode } from '../dto/search-knowledge-base.dto';
+import { TraceContextService } from '../../observability/services/trace-context.service';
 
 export type RagHitSource = 'hybrid' | 'dense' | 'sparse';
 
@@ -99,12 +100,44 @@ export class HybridRagService {
     private readonly rerankService?: RerankService,
     @Optional()
     private readonly assetService?: KnowledgeAssetService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
    * 执行 PostgreSQL pgvector + pg_trgm 下推召回、RRF 融合与可选 Rerank 精排
    */
   async search(options: HybridSearchOptions): Promise<RagSearchResult[]> {
+    if (!this.traceContext) {
+      return this.executeSearch(options);
+    }
+    return this.traceContext.withSpan(
+      {
+        spanType: 'rag',
+        name: 'RAG · Hybrid Retrieval',
+        input: {
+          query: options.query,
+          knowledgeBaseIds: options.knowledgeBaseIds,
+          mode: options.mode || 'hybrid',
+          limit: options.limit || 5,
+        },
+      },
+      async (recorder) => {
+        const results = await this.executeSearch(options);
+        recorder?.setOutput({
+          hitCount: results.length,
+          topDocs: results.slice(0, 3).map((r) => ({
+            title: r.documentTitle,
+            score: Number(r.score.toFixed(4)),
+            hitSource: r.hitSource,
+          })),
+        });
+        return results;
+      },
+    );
+  }
+
+  private async executeSearch(options: HybridSearchOptions): Promise<RagSearchResult[]> {
     const {
       userId,
       query,

@@ -52,6 +52,15 @@
           <DatabaseOutlined class="tab-icon" />
           <span>知识库</span>
         </button>
+
+        <button
+          type="button"
+          :class="['mode-tab', { active: currentMode === 'workflow' }]"
+          @click="handleSwitchMode('workflow')"
+        >
+          <ApartmentOutlined class="tab-icon" />
+          <span>智能编排</span>
+        </button>
       </div>
     </div>
 
@@ -142,6 +151,7 @@ import {
   ThunderboltFilled,
   MobileOutlined,
   DatabaseOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
@@ -153,7 +163,7 @@ defineOptions({
 })
 
 const props = defineProps<{
-  activeMode?: 'chat' | 'image' | 'video' | 'audio' | 'voice' | 'knowledge'
+  activeMode?: 'chat' | 'image' | 'video' | 'audio' | 'voice' | 'knowledge' | 'workflow'
 }>()
 
 const route = useRoute()
@@ -174,6 +184,7 @@ const currentMode = computed(() => {
   if (route.path.startsWith('/video')) return 'video'
   if (route.path.startsWith('/voice')) return 'voice'
   if (route.path.startsWith('/knowledge')) return 'knowledge'
+  if (route.path.startsWith('/workflow')) return 'workflow'
   return 'chat'
 })
 
@@ -192,7 +203,7 @@ const creditsRemaining = computed(() => {
   return authStore.userProfile?.credits?.remaining ?? 0
 })
 
-const handleSwitchMode = (mode: 'chat' | 'image' | 'video' | 'voice' | 'knowledge') => {
+const handleSwitchMode = (mode: 'chat' | 'image' | 'video' | 'voice' | 'knowledge' | 'workflow') => {
   if (mode === 'chat' && route.path !== '/chat') {
     router.push('/chat')
   } else if (mode === 'image' && route.path !== '/image') {
@@ -203,6 +214,8 @@ const handleSwitchMode = (mode: 'chat' | 'image' | 'video' | 'voice' | 'knowledg
     router.push('/voice')
   } else if (mode === 'knowledge' && route.path !== '/knowledge') {
     router.push('/knowledge')
+  } else if (mode === 'workflow' && route.path !== '/workflow') {
+    router.push('/workflow')
   }
 }
 

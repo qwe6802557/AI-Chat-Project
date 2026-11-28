@@ -117,6 +117,18 @@ export class ChatMessage {
   toolCalls?: any[] | null;
 
   /**
+   * 关联分布式追踪 Trace ID
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  traceId?: string | null;
+
+  /**
+   * 多智能体 / 工作流协同节点时间线
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  agentTimeline?: any[] | null;
+
+  /**
    * 创建时间
    */
   @CreateDateColumn()

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentCoreProfile } from '../entities/agent-core-profile.entity';
@@ -6,6 +6,7 @@ import { AgentDailyMemory } from '../entities/agent-daily-memory.entity';
 import { MemoryExtractorService } from './memory-extractor.service';
 import { MemoryDistillerService } from './memory-distiller.service';
 import { MemoryVectorStoreService } from './memory-vector-store.service';
+import { TraceContextService } from '../../observability/services/trace-context.service';
 
 export interface RecalledMemoryItem {
   id: string;
@@ -37,12 +38,38 @@ export class MemoryContextService {
     private readonly extractorService: MemoryExtractorService,
     private readonly distillerService: MemoryDistillerService,
     private readonly memoryVectorStore: MemoryVectorStoreService,
+    @Optional()
+    private readonly traceContext?: TraceContextService,
   ) {}
 
   /**
    * 构建分层记忆 Prompt 注入内容 (Layer 3 核心画像常驻 + Layer 2 pgvector+pg_trgm Top-3 召回)
    */
   async buildMemoryInjection(
+    userId: string,
+    currentQuery?: string,
+  ): Promise<MemoryInjectionResult> {
+    if (!this.traceContext) {
+      return this.executeBuildMemoryInjection(userId, currentQuery);
+    }
+    return this.traceContext.withSpan(
+      {
+        spanType: 'memory',
+        name: 'Memory · Context Recall',
+        input: { currentQuery: currentQuery || '' },
+      },
+      async (recorder) => {
+        const res = await this.executeBuildMemoryInjection(userId, currentQuery);
+        recorder?.setOutput({
+          hasCoreProfile: res.hasCoreProfile,
+          recalledCount: res.recalledMemories.length,
+        });
+        return res;
+      },
+    );
+  }
+
+  private async executeBuildMemoryInjection(
     userId: string,
     currentQuery?: string,
   ): Promise<MemoryInjectionResult> {
