@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  Canvas,
   createCanvas,
   DOMMatrix as NapiDOMMatrix,
   ImageData as NapiImageData,
   Path2D as NapiPath2D,
+  SKRSContext2D,
 } from '@napi-rs/canvas';
 import path from 'node:path';
 
@@ -30,8 +32,13 @@ export interface PdfVisualRouteResult {
   pages: PdfRoutedPage[];
 }
 
+interface NodeCanvasContextEntry {
+  canvas: Canvas;
+  context: SKRSContext2D;
+}
+
 class NodeCanvasFactory {
-  create(width: number, height: number) {
+  create(width: number, height: number): NodeCanvasContextEntry {
     const safeWidth = Math.max(1, Math.ceil(width));
     const safeHeight = Math.max(1, Math.ceil(height));
     const canvas = createCanvas(safeWidth, safeHeight);
@@ -39,14 +46,26 @@ class NodeCanvasFactory {
     return { canvas, context };
   }
 
-  reset(canvasAndContext: { canvas: any; context: any }, width: number, height: number) {
+  reset(canvasAndContext: NodeCanvasContextEntry, width: number, height: number) {
+    if (!canvasAndContext?.canvas) {
+      return;
+    }
     canvasAndContext.canvas.width = Math.max(1, Math.ceil(width));
     canvasAndContext.canvas.height = Math.max(1, Math.ceil(height));
   }
 
-  destroy(canvasAndContext: { canvas: any; context: any }) {
-    canvasAndContext.canvas.width = 0;
-    canvasAndContext.canvas.height = 0;
+  destroy(canvasAndContext: NodeCanvasContextEntry) {
+    const entry = canvasAndContext as {
+      canvas: Canvas | null;
+      context: SKRSContext2D | null;
+    };
+    if (!entry?.canvas) {
+      return;
+    }
+    entry.canvas.width = 0;
+    entry.canvas.height = 0;
+    entry.canvas = null;
+    entry.context = null;
   }
 }
 
@@ -143,18 +162,23 @@ export class PdfVisualRouterService {
       require.resolve('pdfjs-dist/package.json'),
     )}/standard_fonts/`;
 
+    const canvasFactory = new NodeCanvasFactory();
+
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(buffer),
       disableWorker: true,
       useSystemFonts: true,
       standardFontDataUrl,
+      // pdfjs-dist v3 的 page.render 会直接使用 getDocument 阶段的 _transport.canvasFactory，
+      // 含嵌入式光栅图片的 PDF 在绘制 CachedCanvases 时依赖此处注入的 @napi-rs/canvas 工厂
+      isOffscreenCanvasSupported: false,
+      canvasFactory,
       verbosity: 0,
     });
 
     const pdfDocument = await loadingTask.promise;
     const totalPages: number = pdfDocument.numPages || 0;
     const pages: PdfRoutedPage[] = [];
-    const canvasFactory = new NodeCanvasFactory();
 
     let visualPagesDetected = 0;
     let visualPagesRendered = 0;
