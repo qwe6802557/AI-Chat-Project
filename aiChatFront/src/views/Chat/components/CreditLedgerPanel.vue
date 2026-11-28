@@ -7,9 +7,6 @@
           <a-radio-button value="expense">扣费支出</a-radio-button>
           <a-radio-button value="income">赠送与返还</a-radio-button>
         </a-radio-group>
-        <span v-if="filterType !== 'all'" class="filter-scope-hint">
-          当前页匹配 {{ filteredItems.length }} / {{ items.length }} 条
-        </span>
       </div>
 
       <div class="action-group">
@@ -206,11 +203,6 @@ const handleTableChange = (pagination: TablePaginationConfig) => {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.filter-scope-hint {
-  font-size: 12px;
-  color: #64748b;
 }
 
 .action-group {

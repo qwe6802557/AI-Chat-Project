@@ -28,15 +28,6 @@
               <span>{{ userAccount.email || '未设置邮箱' }}</span>
               <span class="meta-dot">·</span>
               <span>加入于 {{ formatDate(userAccount.createdAt) }}</span>
-              <button
-                type="button"
-                class="uid-copy-chip"
-                title="点击复制完整用户标识"
-                @click="handleCopyUserId"
-              >
-                <span>ID {{ maskedUserId }}</span>
-                <CopyOutlined />
-              </button>
             </div>
           </div>
         </div>
@@ -379,17 +370,6 @@ const formatToken = (value: number) => {
 
 const userRoleClass = computed(() => userAccount.value.role || 'user')
 
-const maskedUserId = computed(() => {
-  const id = userAccount.value.id || ''
-  if (!id) {
-    return '未生成'
-  }
-  if (id.length <= 12) {
-    return id
-  }
-  return `${id.slice(0, 8)}...${id.slice(-4)}`
-})
-
 const isEditingPhone = ref(false)
 const editingPhone = ref('')
 const phoneInputRef = ref<HTMLInputElement | null>(null)
@@ -634,26 +614,6 @@ watch(
 
 .meta-dot {
   color: #cbd5e1;
-}
-
-.uid-copy-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #475569;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 11px;
-  cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease;
-
-  &:hover {
-    border-color: #1570ef;
-    color: #1570ef;
-  }
 }
 
 .summary-credits {
