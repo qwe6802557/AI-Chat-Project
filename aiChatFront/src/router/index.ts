@@ -1,9 +1,13 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '@/stores'
 
+const isFileProtocol = typeof window !== 'undefined' && window.location.protocol === 'file:'
+
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: isFileProtocol
+    ? createWebHashHistory()
+    : createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/login',

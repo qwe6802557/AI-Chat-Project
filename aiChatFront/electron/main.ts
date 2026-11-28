@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -24,6 +24,7 @@ let win: BrowserWindow | null
  */
 function createWindow() {
   win = new BrowserWindow({
+    title: 'ERJ Chat',
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -77,6 +78,18 @@ function createWindow() {
  * 应用准备就绪
  */
 app.whenReady().then(() => {
+  // 桌面端通过 file:// 访问线上接口时补齐规范 Origin，保证跨域校验与 SSE 流式响应稳定
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['https://aichat.yanggenbwebsite.site/*'] },
+    (details, callback) => {
+      const headers = { ...details.requestHeaders }
+      if (!headers.Origin || headers.Origin === 'null' || headers.Origin.startsWith('file://')) {
+        headers.Origin = 'https://aichat.yanggenbwebsite.site'
+      }
+      callback({ requestHeaders: headers })
+    },
+  )
+
   createWindow()
 
   // macOS 特殊处理：点击 Dock 图标时重新创建窗口

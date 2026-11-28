@@ -66,7 +66,7 @@
 
     <div class="nav-right">
       <a-tooltip title="下载 Android 手机端 APK (联网搜索/极速对话)">
-        <a class="mobile-download-btn" href="/downloads/aichat-latest.apk" target="_blank" download>
+        <a class="mobile-download-btn" :href="mobileDownloadUrl" target="_blank" download>
           <MobileOutlined />
           <span>下载手机端</span>
         </a>
@@ -157,6 +157,7 @@ import {
   ApartmentOutlined,
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
+import { resolveApiAssetUrl } from '@/utils/common'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
 import AccountModal from '@/views/Chat/components/AccountModal.vue'
 import ModelManageModal from './ModelManageModal.vue'
@@ -254,8 +255,10 @@ const handleClearConversations = () => {
   })
 }
 
+const mobileDownloadUrl = computed(() => resolveApiAssetUrl('/downloads/aichat-latest.apk'))
+
 const handleDownloadMobile = () => {
-  window.open('/downloads/aichat-latest.apk', '_blank')
+  window.open(mobileDownloadUrl.value, '_blank')
 }
 
 const handleLogout = () => {

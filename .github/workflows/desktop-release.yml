@@ -1,0 +1,83 @@
+name: Desktop Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'GitHub Release tag to attach installer (e.g. v1.4.0)'
+        required: false
+        default: 'v1.4.0'
+        type: string
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows-installer:
+    name: Build Windows Setup Installer
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    defaults:
+      run:
+        working-directory: aiChatFront
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: 'npm'
+          cache-dependency-path: aiChatFront/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check & tests
+        run: |
+          npm run type-check
+          npm test
+
+      - name: Build Windows NSIS Setup
+        run: npm run build:win
+
+      - name: Collect setup installer artifact
+        id: installer
+        run: |
+          $setup = Get-ChildItem -Path "release" -Recurse -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $setup) { throw "未找到 Windows Setup.exe 安装产物" }
+          $targetName = $setup.Name -replace ' ', '-'
+          Copy-Item $setup.FullName $targetName -Force
+          Write-Host "Setup Path: $targetName ($([math]::Round($setup.Length / 1MB, 2)) MB)"
+          "file=$targetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ERJ-Chat-Windows-Setup
+          path: aiChatFront/${{ steps.installer.outputs.file }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload installer to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          if (-not $tag -and "${{ github.ref_type }}" -eq "tag") {
+            $tag = "${{ github.ref_name }}"
+          }
+          if ($tag) {
+            gh release upload $tag "${{ steps.installer.outputs.file }}" --clobber
+          }

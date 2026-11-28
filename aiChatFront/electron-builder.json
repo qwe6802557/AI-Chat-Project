@@ -1,13 +1,16 @@
 {
   "appId": "com.aichat.app",
   "productName": "ERJ Chat",
-  "copyright": "Copyright © 2024",
+  "copyright": "Copyright © 2026",
+  "compression": "maximum",
   "directories": {
     "output": "release/${version}"
   },
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    "package.json",
+    "!node_modules/**/*"
   ],
   "win": {
     "target": [
@@ -49,15 +52,6 @@
     "icon": "public/favicon.ico",
     "artifactName": "${productName}-${version}-linux.${ext}",
     "category": "Utility"
-  },
-  "extraResources": [
-    {
-      "from": "public",
-      "to": "public",
-      "filter": [
-        "**/*"
-      ]
-    }
-  ]
+  }
 }
 

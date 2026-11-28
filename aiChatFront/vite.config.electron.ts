@@ -5,10 +5,11 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 import electron from 'vite-plugin-electron/simple'
 
 // Electron 模式配置
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: './',
   plugins: [
     vue(),
-    vueDevTools(),
+    ...(command === 'serve' ? [vueDevTools()] : []),
     electron({
       main: {
         // 主进程入口文件
@@ -34,8 +35,11 @@ export default defineConfig({
   },
   // 构建配置
   build: {
+    target: false,
+    minify: 'terser',
     outDir: 'dist',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1200,
   },
-})
+}))
 

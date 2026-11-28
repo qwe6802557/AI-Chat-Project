@@ -47,7 +47,7 @@ export class AppVersionService {
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '64.8 MB',
+      packageSize: '21.9 MB',
       releaseNotes: [
         '移动端全面对齐智能体阶段 4：支持对话切换已发布 DAG 工作流与 Swarm 团队，实时展示 Stitch 浅色自动折叠协同时间线',
         '新增全链路分布式 Trace 观测中心与原生比例 Gantt Span 瀑布流检视，支持脱敏输入输出快照复制',
