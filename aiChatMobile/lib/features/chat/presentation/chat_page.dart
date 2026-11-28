@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/stitch_tokens.dart';
+import '../../orchestration/providers/orchestration_provider.dart';
 import '../providers/chat_provider.dart';
 import 'widgets/chat_assistant_message_bubble.dart';
 import 'widgets/chat_bottom_input_bar.dart';
 import 'widgets/chat_top_header.dart';
 import 'widgets/chat_user_message_bubble.dart';
-import 'widgets/model_switcher_bottom_sheet.dart';
-import 'widgets/plugin_center_bottom_sheet.dart';
 import 'widgets/knowledge_base_bottom_sheet.dart';
+import 'widgets/model_switcher_bottom_sheet.dart';
+import 'widgets/orchestrator_mode_sheet.dart';
+import 'widgets/plugin_center_bottom_sheet.dart';
 import 'widgets/stitch_offline_banner.dart';
 
 /// Stitch AI 智能对话工作台主页面
@@ -129,6 +131,37 @@ class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClie
         return ref.read(chatProvider.notifier).fetchKnowledgeBases();
       },
     );
+  }
+
+  void _openOrchestratorPicker() {
+    final chatState = ref.read(chatProvider);
+    OrchestratorModeSheet.show(
+      context,
+      selectedWorkflowId: chatState.selectedWorkflowId,
+      selectedRoleId: chatState.selectedRoleId,
+      onSelectStandard: () => ref.read(chatProvider.notifier).resetOrchestration(),
+      onSelectWorkflow: (wfId) => ref.read(chatProvider.notifier).selectWorkflow(wfId),
+      onSelectRole: (roleId) => ref.read(chatProvider.notifier).selectRole(roleId),
+      onOpenWorkflowDirectory: () => context.push('/workflows'),
+    );
+  }
+
+  String? _resolveOrchestratorLabel(ChatState chatState) {
+    if (chatState.selectedWorkflowId != null) {
+      final wfs = ref.watch(publishedWorkflowsProvider).valueOrNull ?? const [];
+      for (final wf in wfs) {
+        if (wf.id == chatState.selectedWorkflowId) return wf.name;
+      }
+      return '工作流';
+    }
+    if (chatState.selectedRoleId != null) {
+      final roles = ref.watch(agentRolesProvider).valueOrNull ?? const [];
+      for (final role in roles) {
+        if (role.id == chatState.selectedRoleId) return role.name;
+      }
+      return '智能体';
+    }
+    return null;
   }
 
   Widget _buildEmptyState() {
@@ -263,6 +296,10 @@ class _ChatPageState extends ConsumerState<ChatPage> with AutomaticKeepAliveClie
               isWebSearchEnabled: chatState.isWebSearchEnabled,
               enabledTools: chatState.enabledTools,
               selectedKnowledgeBaseIds: chatState.selectedKnowledgeBaseIds,
+              activeOrchestratorLabel: _resolveOrchestratorLabel(chatState),
+              hasActiveOrchestrator:
+                  chatState.selectedWorkflowId != null || chatState.selectedRoleId != null,
+              onOpenOrchestratorPicker: _openOrchestratorPicker,
               onOpenPluginCenter: _openPluginCenter,
               onOpenKnowledgeBasePicker: _openKnowledgeBasePicker,
               onOpenMemoryVault: () => context.push('/memory-vault'),

@@ -1,6 +1,7 @@
 import '../../../core/constants/api_constants.dart';
 import '../../knowledge_base/domain/chunk_model.dart';
 import 'file_attachment_model.dart';
+import 'swarm_timeline_event_model.dart';
 import 'tool_model.dart';
 
 enum MessageStatus { sending, streaming, done, error, failedOffline }
@@ -142,6 +143,10 @@ class ChatMessageModel {
   final String? searchStatus;
   final List<SearchSourceModel> sources;
   final List<ToolExecutionRecordModel> toolCalls;
+  final List<SwarmTimelineEventModel> agentTimeline;
+  final String? traceId;
+  final int? durationMs;
+  final int? totalTokens;
   final bool? isKnowledgeBaseEnabled;
   final bool? isWebSearchEnabled;
 
@@ -160,6 +165,10 @@ class ChatMessageModel {
     this.searchStatus,
     this.sources = const [],
     this.toolCalls = const [],
+    this.agentTimeline = const [],
+    this.traceId,
+    this.durationMs,
+    this.totalTokens,
     this.isKnowledgeBaseEnabled,
     this.isWebSearchEnabled,
   });
@@ -168,6 +177,7 @@ class ChatMessageModel {
   bool get isAssistant => role == 'assistant';
   bool get hasContent => content.trim().isNotEmpty;
   bool get hasSources => sources.isNotEmpty;
+  bool get hasAgentTimeline => agentTimeline.isNotEmpty;
 
   ChatMessageModel copyWith({
     String? id,
@@ -184,6 +194,10 @@ class ChatMessageModel {
     String? searchStatus,
     List<SearchSourceModel>? sources,
     List<ToolExecutionRecordModel>? toolCalls,
+    List<SwarmTimelineEventModel>? agentTimeline,
+    String? traceId,
+    int? durationMs,
+    int? totalTokens,
     bool? isKnowledgeBaseEnabled,
     bool? isWebSearchEnabled,
   }) {
@@ -202,6 +216,10 @@ class ChatMessageModel {
       searchStatus: searchStatus ?? this.searchStatus,
       sources: sources ?? this.sources,
       toolCalls: toolCalls ?? this.toolCalls,
+      agentTimeline: agentTimeline ?? this.agentTimeline,
+      traceId: traceId ?? this.traceId,
+      durationMs: durationMs ?? this.durationMs,
+      totalTokens: totalTokens ?? this.totalTokens,
       isKnowledgeBaseEnabled: isKnowledgeBaseEnabled ?? this.isKnowledgeBaseEnabled,
       isWebSearchEnabled: isWebSearchEnabled ?? this.isWebSearchEnabled,
     );
@@ -222,6 +240,11 @@ class ChatMessageModel {
     if (searchStatus != null) 'searchStatus': searchStatus,
     'sources': sources.map((s) => s.toJson()).toList(),
     'toolCalls': toolCalls.map((t) => t.toJson()).toList(),
+    if (agentTimeline.isNotEmpty)
+      'agentTimeline': agentTimeline.map((e) => e.toJson()).toList(),
+    if (traceId != null) 'traceId': traceId,
+    if (durationMs != null) 'durationMs': durationMs,
+    if (totalTokens != null) 'totalTokens': totalTokens,
     if (isKnowledgeBaseEnabled != null) 'isKnowledgeBaseEnabled': isKnowledgeBaseEnabled,
     if (isWebSearchEnabled != null) 'isWebSearchEnabled': isWebSearchEnabled,
   };
@@ -245,11 +268,23 @@ class ChatMessageModel {
         .map((t) => ToolExecutionRecordModel.fromJson(t))
         .toList();
 
+    final rawTimeline = json['agentTimeline'] as List? ?? [];
+    final agentTimeline = rawTimeline
+        .whereType<Map<String, dynamic>>()
+        .map((e) => SwarmTimelineEventModel.fromJson(e))
+        .toList();
+
     final statusName = json['status'] as String? ?? 'done';
     final status = MessageStatus.values.firstWhere(
       (e) => e.name == statusName,
       orElse: () => MessageStatus.done,
     );
+
+    final rawUsage = json['usage'];
+    final tokens = (json['totalTokens'] as num?)?.toInt() ??
+        (rawUsage is Map<String, dynamic>
+            ? (rawUsage['totalTokens'] as num?)?.toInt()
+            : null);
 
     return ChatMessageModel(
       id: json['id'] as String? ?? '',
@@ -266,6 +301,10 @@ class ChatMessageModel {
       searchStatus: json['searchStatus'] as String?,
       sources: sources,
       toolCalls: toolCalls,
+      agentTimeline: agentTimeline,
+      traceId: json['traceId'] as String?,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
+      totalTokens: tokens,
       isKnowledgeBaseEnabled: json['isKnowledgeBaseEnabled'] as bool?,
       isWebSearchEnabled: json['isWebSearchEnabled'] as bool?,
     );

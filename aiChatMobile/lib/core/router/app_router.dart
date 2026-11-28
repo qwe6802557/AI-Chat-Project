@@ -12,6 +12,10 @@ import '../../features/profile/presentation/profile_page.dart';
 import '../../features/knowledge_base/presentation/knowledge_base_list_page.dart';
 import '../../features/knowledge_base/presentation/knowledge_base_detail_page.dart';
 import '../../features/memory/presentation/memory_vault_page.dart';
+import '../../features/orchestration/presentation/channel_console_page.dart';
+import '../../features/orchestration/presentation/trace_center_page.dart';
+import '../../features/orchestration/presentation/trace_detail_page.dart';
+import '../../features/orchestration/presentation/workflow_directory_page.dart';
 import '../../features/chat/providers/chat_provider.dart';
 import '../../shared/widgets/animated_branch_fade.dart';
 import '../../shared/widgets/floating_glass_nav_bar.dart';
@@ -84,6 +88,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/memory-vault',
         builder: (context, state) => const MemoryVaultPage(),
+      ),
+      GoRoute(
+        path: '/workflows',
+        builder: (context, state) => const WorkflowDirectoryPage(),
+      ),
+      GoRoute(
+        path: '/traces',
+        builder: (context, state) => const TraceCenterPage(),
+      ),
+      GoRoute(
+        path: '/traces/:traceId',
+        builder: (context, state) {
+          final traceId = state.pathParameters['traceId'] ?? '';
+          return TraceDetailPage(traceId: traceId);
+        },
+      ),
+      GoRoute(
+        path: '/channels',
+        builder: (context, state) => const ChannelConsolePage(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

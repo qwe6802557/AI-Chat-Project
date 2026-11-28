@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/theme/stitch_tokens.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../domain/artifact_model.dart';
 import '../../domain/chat_message_model.dart';
+import 'agent_collaboration_timeline.dart';
 import 'artifact_capsule_card.dart';
 import 'chat_reasoning_card.dart';
 import 'chat_search_source_gallery.dart';
@@ -134,6 +136,12 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                     hasAnswerContent: _getCleanedContent(msg.content).trim().isNotEmpty,
                     isDone: msg.status == MessageStatus.done,
                   ),
+                if (msg.agentTimeline.isNotEmpty)
+                  AgentCollaborationTimeline(
+                    timeline: msg.agentTimeline,
+                    streaming: msg.status == MessageStatus.streaming,
+                    autoCollapseOnComplete: true,
+                  ),
                 if (msg.toolCalls.isNotEmpty)
                   ChatToolExecutionGallery(toolCalls: msg.toolCalls),
                 if (msg.reasoningContent != null && msg.reasoningContent!.isNotEmpty)
@@ -159,9 +167,95 @@ class ChatAssistantMessageBubble extends StatelessWidget {
                             );
                           },
                         ),
+                if (msg.status == MessageStatus.done &&
+                    (msg.traceId != null ||
+                        msg.totalTokens != null ||
+                        msg.durationMs != null))
+                  _buildFooterTelemetry(context),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooterTelemetry(BuildContext context) {
+    final traceId = msg.traceId;
+    final shortTrace = traceId != null && traceId.length > 8
+        ? traceId.substring(traceId.length - 8)
+        : traceId;
+    final durationLabel = msg.durationMs != null && msg.durationMs! > 0
+        ? (msg.durationMs! >= 1000
+              ? '${(msg.durationMs! / 1000).toStringAsFixed(1)}s'
+              : '${msg.durationMs!}ms')
+        : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10.0),
+      child: Wrap(
+        spacing: 8.0,
+        runSpacing: 6.0,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          if (msg.totalTokens != null && msg.totalTokens! > 0)
+            Text(
+              '${msg.totalTokens} tok',
+              style: const TextStyle(
+                fontSize: 11.0,
+                color: Color(0xFF64748B),
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          if (durationLabel != null)
+            Text(
+              '耗时 $durationLabel',
+              style: const TextStyle(
+                fontSize: 11.0,
+                color: Color(0xFF64748B),
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          if (traceId != null && traceId.isNotEmpty)
+            Material(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                onTap: () => context.push('/traces/$traceId'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8.0,
+                    vertical: 2.5,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.timeline_rounded,
+                        size: 12.0,
+                        color: StitchTokens.primary,
+                      ),
+                      const SizedBox(width: 4.0),
+                      Text(
+                        'Trace #$shortTrace',
+                        style: const TextStyle(
+                          fontSize: 11.0,
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'monospace',
+                          color: StitchTokens.primary,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

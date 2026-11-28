@@ -7,6 +7,7 @@ import '../../../core/network/sse_parser.dart';
 import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
+import '../domain/swarm_timeline_event_model.dart';
 import '../domain/tool_model.dart';
 import '../domain/knowledge_base_model.dart';
 import '../presentation/widgets/model_switcher_bottom_sheet.dart';
@@ -153,6 +154,17 @@ class ChatRepository {
                 .map((t) => ToolExecutionRecordModel.fromJson(t))
                 .toList();
 
+            final rawTimeline = m['agentTimeline'] as List? ?? [];
+            final agentTimeline = rawTimeline
+                .whereType<Map<String, dynamic>>()
+                .map((e) => SwarmTimelineEventModel.fromJson(e))
+                .toList();
+
+            final rawUsage = m['usage'];
+            final totalTokens = rawUsage is Map<String, dynamic>
+                ? (rawUsage['totalTokens'] as num?)?.toInt()
+                : null;
+
             result.add(
               ChatMessageModel(
                 id: '${m['id']}_assistant',
@@ -164,6 +176,10 @@ class ChatRepository {
                 sources: sources,
                 searchStatus: sources.isNotEmpty ? 'done' : null,
                 toolCalls: toolCalls,
+                agentTimeline: agentTimeline,
+                traceId: m['traceId'] as String?,
+                durationMs: (m['durationMs'] as num?)?.toInt(),
+                totalTokens: totalTokens,
               ),
             );
           }
@@ -187,6 +203,8 @@ class ChatRepository {
     bool webSearch = false,
     List<String>? enabledTools,
     List<String>? knowledgeBaseIds,
+    String? workflowId,
+    String? roleId,
     CancelToken? cancelToken,
   }) async {
     final response = await _client.dio.post<ResponseBody>(
@@ -202,6 +220,8 @@ class ChatRepository {
           'enabledTools': enabledTools,
         if (knowledgeBaseIds != null && knowledgeBaseIds.isNotEmpty)
           'knowledgeBaseIds': knowledgeBaseIds,
+        if (workflowId != null && workflowId.isNotEmpty) 'workflowId': workflowId,
+        if (roleId != null && roleId.isNotEmpty) 'roleId': roleId,
       },
       options: Options(
         responseType: ResponseType.stream,

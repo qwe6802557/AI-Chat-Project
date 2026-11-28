@@ -196,6 +196,9 @@ export class FeishuDriver implements IChannelDriver {
     this.logger.log(`飞书收到用户消息 [${isGroup ? '群聊' : '单聊'} ${targetId}]: ${cleanText.slice(0, 50)}`);
 
     // 触发 ChannelManager 统一中枢 (校验积分、加载上下文、流式/全量调用大模型、扣除积分、回复)
-    await this.inboundHandler(this.channelType, targetId, cleanText);
+    const reply = await this.inboundHandler(this.channelType, targetId, cleanText);
+    if (reply) {
+      await this.sendMessage(targetId, reply);
+    }
   }
 }

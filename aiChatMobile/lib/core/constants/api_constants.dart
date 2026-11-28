@@ -42,6 +42,14 @@ class ApiConstants {
   static const String chatSessions = '/chat-session';
   static const String chatHistory = '/chat-session/history';
 
+  // 阶段 4：可视化工作流、Trace 观测与 IM 智能助理通道
+  static const String workflows = '/workflows';
+  static const String workflowsPublished = '/workflows/published';
+  static const String traces = '/traces';
+  static const String tracesStats = '/traces/stats';
+  static const String channelRoles = '/channels/roles';
+  static const String channelInstances = '/channels/instances';
+
   // 积分账本与模型配置
   static const String creditsBalance = '/credits/balance';
   static const String creditsRecords = '/credits/records';
@@ -67,7 +75,8 @@ class ApiConstants {
   static const String memoryDistill = '/memory/distill';
 
   // 业务默认值与阈值
-  static const String appVersion = '1.3.1';
+  static const String appVersion = '1.4.0';
+  static const int appBuildNumber = 16;
   static const String defaultChatModel = 'spark-x2.6-4b';
   static const int chatMessageCost = 10;
   static const int imageGenerationCost = 100;

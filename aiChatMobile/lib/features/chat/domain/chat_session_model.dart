@@ -6,6 +6,8 @@ class ChatSessionModel {
   final String? lastModel;
   final int messageCount;
   final List<String> knowledgeBaseIds;
+  final String? activeWorkflowId;
+  final String? activeRoleId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -16,6 +18,8 @@ class ChatSessionModel {
     this.lastModel,
     this.messageCount = 0,
     this.knowledgeBaseIds = const [],
+    this.activeWorkflowId,
+    this.activeRoleId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -33,6 +37,8 @@ class ChatSessionModel {
       lastModel: (json['usageSummary'] as Map<String, dynamic>?)?['lastModel'] as String?,
       messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
       knowledgeBaseIds: kbIds,
+      activeWorkflowId: json['activeWorkflowId'] as String?,
+      activeRoleId: json['activeRoleId'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
     );
@@ -45,6 +51,8 @@ class ChatSessionModel {
     if (lastModel != null) 'usageSummary': {'lastModel': lastModel},
     'messageCount': messageCount,
     'knowledgeBaseIds': knowledgeBaseIds,
+    if (activeWorkflowId != null) 'activeWorkflowId': activeWorkflowId,
+    if (activeRoleId != null) 'activeRoleId': activeRoleId,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };

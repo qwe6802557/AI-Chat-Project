@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,6 +20,7 @@ class UpgradeService {
 
   /// 检查服务端最新发布版本
   Future<AppVersionInfo?> checkUpdate({String currentVersion = ApiConstants.appVersion}) async {
+    if (kIsWeb) return null;
     try {
       final response = await _dio.get(
         '${ApiConstants.baseUrl}/app/version/check',
@@ -84,7 +86,7 @@ class UpgradeService {
 
   /// 检查系统是否允许安装未知来源应用（Android 8.0+ 适配）
   Future<bool> checkInstallPermission() async {
-    if (!Platform.isAndroid) return true;
+    if (kIsWeb || !Platform.isAndroid) return true;
     try {
       final allowed = await _installerChannel.invokeMethod<bool>('checkInstallPermission');
       return allowed ?? true;
@@ -96,7 +98,7 @@ class UpgradeService {
 
   /// 跳转系统“允许安装未知应用”权限设置页
   Future<bool> openInstallPermissionSettings() async {
-    if (!Platform.isAndroid) return false;
+    if (kIsWeb || !Platform.isAndroid) return false;
     try {
       final success = await _installerChannel.invokeMethod<bool>('openInstallPermissionSettings');
       return success ?? false;
@@ -108,7 +110,7 @@ class UpgradeService {
 
   /// 调起应用内原生 Android 安装器直接安装 APK
   Future<bool> installApk(String filePath) async {
-    if (!Platform.isAndroid) return false;
+    if (kIsWeb || !Platform.isAndroid) return false;
     try {
       final success = await _installerChannel.invokeMethod<bool>(
         'installApk',

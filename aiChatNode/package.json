@@ -42,6 +42,7 @@
     "@nestjs/swagger": "^11.2.1",
     "@nestjs/typeorm": "^11.0.0",
     "@types/multer": "^2.0.0",
+    "@wecom/aibot-node-sdk": "^1.0.7",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.7.10",
     "class-transformer": "^0.5.1",

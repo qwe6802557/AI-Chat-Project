@@ -24,6 +24,9 @@ class ChatBottomInputBar extends StatelessWidget {
   final List<String> selectedKnowledgeBaseIds;
   final VoidCallback? onOpenKnowledgeBasePicker;
   final VoidCallback? onOpenMemoryVault;
+  final String? activeOrchestratorLabel;
+  final bool hasActiveOrchestrator;
+  final VoidCallback? onOpenOrchestratorPicker;
 
   const ChatBottomInputBar({
     super.key,
@@ -44,6 +47,9 @@ class ChatBottomInputBar extends StatelessWidget {
     this.selectedKnowledgeBaseIds = const [],
     this.onOpenKnowledgeBasePicker,
     this.onOpenMemoryVault,
+    this.activeOrchestratorLabel,
+    this.hasActiveOrchestrator = false,
+    this.onOpenOrchestratorPicker,
   });
 
   Widget _buildWebSearchPill() {
@@ -196,11 +202,75 @@ class ChatBottomInputBar extends StatelessWidget {
     );
   }
 
+  Widget _buildOrchestratorPill() {
+    final isActive = hasActiveOrchestrator;
+    final label = (activeOrchestratorLabel != null &&
+            activeOrchestratorLabel!.trim().isNotEmpty)
+        ? activeOrchestratorLabel!
+        : '编排模式';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+        onTap: isGenerating ? null : onOpenOrchestratorPicker,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 3.0),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(StitchTokens.radiusFull),
+            border: Border.all(
+              color: isActive ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.account_tree_outlined,
+                size: 13.0,
+                color: isActive ? StitchTokens.primary : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 3.0),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 96.0),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.w500,
+                    color: isActive ? StitchTokens.primary : const Color(0xFF475467),
+                  ),
+                ),
+              ),
+              if (isActive) ...[
+                const SizedBox(width: 4.0),
+                Container(
+                  width: 5.0,
+                  height: 5.0,
+                  decoration: const BoxDecoration(
+                    color: StitchTokens.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildToolCapsules() {
     final activeCount = enabledTools.length;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (onOpenOrchestratorPicker != null) ...[
+          _buildOrchestratorPill(),
+          const SizedBox(width: 6.0),
+        ],
         _buildWebSearchPill(),
         const SizedBox(width: 6.0),
         _buildKnowledgeBasePill(),

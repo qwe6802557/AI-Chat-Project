@@ -194,6 +194,31 @@
               </div>
             </div>
           </div>
+
+          <!-- 企业微信智能机器人 (官方 WebSocket 长连接) -->
+          <div v-if="channel.channelType === 'wecom_bot'" class="config-item-full">
+            <div class="creds-row">
+              <div class="creds-col">
+                <label class="item-label">企微 Bot ID</label>
+                <a-input
+                  v-model:value="wecomBotId"
+                  :placeholder="channel.credentialsMasked?.botId ? `已配置 (${channel.credentialsMasked.botId})，留空保留原值` : '企业微信智能机器人 Bot ID'"
+                  size="small"
+                />
+              </div>
+              <div class="creds-col">
+                <label class="item-label">企微 Bot Secret</label>
+                <a-input-password
+                  v-model:value="wecomSecret"
+                  :placeholder="channel.credentialsMasked?.secret ? '已配置密钥，留空保留原值' : '智能机器人 WebSocket Secret'"
+                  size="small"
+                />
+              </div>
+            </div>
+            <p class="wecom-protocol-hint">
+              采用企微官方 API「使用长连接」模式，只需填写 Bot ID 与 Secret，无需配置公网回调域名或 AES 密钥。
+            </p>
+          </div>
         </div>
 
         <div class="config-footer">
@@ -292,6 +317,8 @@ const feishuAppId = ref('')
 const feishuAppSecret = ref('')
 const dingtalkClientId = ref('')
 const dingtalkClientSecret = ref('')
+const wecomBotId = ref('')
+const wecomSecret = ref('')
 
 const isWeixin = computed(() => props.channel.channelType === 'weixin')
 const isConnected = computed(() => props.channel.status === 'connected')
@@ -449,6 +476,14 @@ const handleSaveSettings = async () => {
       payload.credentials = {
         appId: dingtalkClientId.value,
         appSecret: dingtalkClientSecret.value,
+      }
+    } else if (
+      props.channel.channelType === 'wecom_bot' &&
+      (wecomBotId.value.trim() || wecomSecret.value.trim())
+    ) {
+      payload.credentials = {
+        ...(wecomBotId.value.trim() ? { botId: wecomBotId.value.trim() } : {}),
+        ...(wecomSecret.value.trim() ? { secret: wecomSecret.value.trim() } : {}),
       }
     }
 
@@ -737,6 +772,17 @@ const handleSaveSettings = async () => {
   font-size: 12px;
   font-weight: 500;
   color: #475569;
+}
+
+.wecom-protocol-hint {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #64748b;
 }
 
 .config-footer {

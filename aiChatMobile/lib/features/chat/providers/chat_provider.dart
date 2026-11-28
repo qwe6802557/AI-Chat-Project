@@ -13,6 +13,7 @@ import '../data/file_upload_repository.dart';
 import '../domain/chat_message_model.dart';
 import '../domain/chat_session_model.dart';
 import '../domain/file_attachment_model.dart';
+import '../domain/swarm_timeline_event_model.dart';
 import '../domain/tool_model.dart';
 import '../domain/knowledge_base_model.dart';
 import '../presentation/widgets/model_switcher_bottom_sheet.dart';
@@ -33,6 +34,8 @@ class ChatState {
   final bool isWebSearchEnabled;
   final List<String> enabledTools;
   final List<String> selectedKnowledgeBaseIds;
+  final String? selectedWorkflowId;
+  final String? selectedRoleId;
 
   const ChatState({
     this.activeSessionId,
@@ -48,10 +51,13 @@ class ChatState {
     this.isWebSearchEnabled = true,
     this.enabledTools = const ['web_search_v2'],
     this.selectedKnowledgeBaseIds = const [],
+    this.selectedWorkflowId,
+    this.selectedRoleId,
   });
 
   ChatState copyWith({
     String? activeSessionId,
+    bool clearActiveSessionId = false,
     List<ChatSessionModel>? sessions,
     List<ChatMessageModel>? messages,
     bool? isGenerating,
@@ -64,9 +70,13 @@ class ChatState {
     bool? isWebSearchEnabled,
     List<String>? enabledTools,
     List<String>? selectedKnowledgeBaseIds,
+    String? selectedWorkflowId,
+    bool clearWorkflowId = false,
+    String? selectedRoleId,
+    bool clearRoleId = false,
   }) {
     return ChatState(
-      activeSessionId: activeSessionId ?? this.activeSessionId,
+      activeSessionId: clearActiveSessionId ? null : (activeSessionId ?? this.activeSessionId),
       sessions: sessions ?? this.sessions,
       messages: messages ?? this.messages,
       isGenerating: isGenerating ?? this.isGenerating,
@@ -80,6 +90,10 @@ class ChatState {
       enabledTools: enabledTools ?? this.enabledTools,
       selectedKnowledgeBaseIds:
           selectedKnowledgeBaseIds ?? this.selectedKnowledgeBaseIds,
+      selectedWorkflowId: clearWorkflowId
+          ? null
+          : (selectedWorkflowId ?? this.selectedWorkflowId),
+      selectedRoleId: clearRoleId ? null : (selectedRoleId ?? this.selectedRoleId),
     );
   }
 }
@@ -476,6 +490,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
     state = state.copyWith(
       activeSessionId: sessionId,
       selectedKnowledgeBaseIds: session?.knowledgeBaseIds ?? [],
+      selectedWorkflowId: session?.activeWorkflowId,
+      clearWorkflowId: session?.activeWorkflowId == null,
+      selectedRoleId: session?.activeRoleId,
+      clearRoleId: session?.activeRoleId == null,
     );
 
     // 优先读取本地会话消息快照 (SWR) 秒开
@@ -490,12 +508,34 @@ class ChatNotifier extends StateNotifier<ChatState> {
     } catch (_) {}
   }
 
+  void selectWorkflow(String? workflowId) {
+    state = state.copyWith(
+      selectedWorkflowId: workflowId,
+      clearWorkflowId: workflowId == null,
+      clearRoleId: true,
+    );
+  }
+
+  void selectRole(String? roleId) {
+    state = state.copyWith(
+      selectedRoleId: roleId,
+      clearRoleId: roleId == null,
+      clearWorkflowId: true,
+    );
+  }
+
+  void resetOrchestration() {
+    state = state.copyWith(clearWorkflowId: true, clearRoleId: true);
+  }
+
   Future<void> createNewSession() async {
     state = state.copyWith(
-      activeSessionId: null,
+      clearActiveSessionId: true,
       messages: [],
       pendingAttachments: [],
       selectedKnowledgeBaseIds: [],
+      clearWorkflowId: true,
+      clearRoleId: true,
     );
   }
 
@@ -591,6 +631,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final contentBuffer = StringBuffer();
     final reasoningBuffer = StringBuffer();
     final currentToolCalls = <ToolExecutionRecordModel>[];
+    final currentTimeline = <SwarmTimelineEventModel>[];
+    String? currentTraceId;
+    int? currentDurationMs;
+    int? currentTotalTokens;
     String? currentSearchStatus =
         (state.isWebSearchEnabled || state.selectedKnowledgeBaseIds.isNotEmpty)
             ? 'searching'
@@ -607,11 +651,46 @@ class ChatNotifier extends StateNotifier<ChatState> {
         webSearch: state.isWebSearchEnabled,
         enabledTools: state.enabledTools,
         knowledgeBaseIds: state.selectedKnowledgeBaseIds,
+        workflowId: state.selectedWorkflowId,
+        roleId: state.selectedRoleId,
         cancelToken: _cancelToken,
       );
 
       _streamSubscription = stream.listen(
         (chunk) {
+          if (chunk.traceId != null && chunk.traceId!.isNotEmpty) {
+            currentTraceId = chunk.traceId;
+          }
+
+          if (chunk.type == 'agent_timeline_event' && chunk.rawTimelineEvent != null) {
+            try {
+              final evt = SwarmTimelineEventModel.fromJson(chunk.rawTimelineEvent!);
+              final idx = currentTimeline.indexWhere((e) => e.id == evt.id);
+              if (idx != -1) {
+                currentTimeline[idx] = evt;
+              } else {
+                currentTimeline.add(evt);
+              }
+            } catch (_) {}
+          }
+
+          if (chunk.rawAgentTimeline != null && chunk.rawAgentTimeline!.isNotEmpty) {
+            try {
+              currentTimeline
+                ..clear()
+                ..addAll(chunk.rawAgentTimeline!.map(SwarmTimelineEventModel.fromJson));
+            } catch (_) {}
+          }
+
+          if (chunk.durationMs != null) {
+            currentDurationMs = chunk.durationMs;
+          }
+
+          if (chunk.rawUsage != null) {
+            currentTotalTokens =
+                (chunk.rawUsage!['totalTokens'] as num?)?.toInt() ?? currentTotalTokens;
+          }
+
           if (chunk.type == 'search_start') {
             currentSearchStatus = 'searching';
           } else if (chunk.type == 'search_sources' || (chunk.type == 'done' && chunk.rawSources != null)) {
@@ -684,6 +763,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
                 searchStatus: currentSearchStatus,
                 sources: currentSources ?? msg.sources,
                 toolCalls: List<ToolExecutionRecordModel>.from(currentToolCalls),
+                agentTimeline: List<SwarmTimelineEventModel>.from(currentTimeline),
+                traceId: currentTraceId ?? msg.traceId,
+                durationMs: currentDurationMs ?? msg.durationMs,
+                totalTokens: currentTotalTokens ?? msg.totalTokens,
                 isKnowledgeBaseEnabled: isKbEnabled,
                 isWebSearchEnabled: isWebSearch,
               );

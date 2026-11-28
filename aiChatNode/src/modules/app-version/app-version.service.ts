@@ -41,20 +41,20 @@ export class AppVersionService {
     );
 
     return {
-      latestVersion: '1.3.1',
-      latestVersionCode: 15,
+      latestVersion: '1.4.0',
+      latestVersionCode: 16,
       minSupportedVersion: '1.0.0',
       downloadUrl: isAndroid
         ? `${baseUrl}/downloads/aichat-latest.apk`
         : `${baseUrl}/downloads/aichat-latest.apk`,
-      packageSize: '21.7 MB',
+      packageSize: '64.8 MB',
       releaseNotes: [
-        '下架官方即将淘汰的 Gemini 3.8 Flash 与 Gemini 4 Argon 模型，默认对话模型平滑切换为 Spark-X2.6-4B，并保留通用 Gemini 动态分组能力',
-        '知识库升级支持多模态图文分片预览、PDF 图表异步视觉解析进度展示与点击灯箱放大查看',
-        '加固知识库视觉资产相对路径解析、图片加载失败降级与 320px 窄屏防溢出排版体验',
+        '移动端全面对齐智能体阶段 4：支持对话切换已发布 DAG 工作流与 Swarm 团队，实时展示 Stitch 浅色自动折叠协同时间线',
+        '新增全链路分布式 Trace 观测中心与原生比例 Gantt Span 瀑布流检视，支持脱敏输入输出快照复制',
+        '新增五大 IM 智能助理通道移动控制台，联合 Web 与服务端全面打通企业微信智能机器人 (wecom_bot) WebSocket 长连接',
       ],
       forceUpdate: false,
-      publishedAt: '2026-11-27T16:55:00.000Z',
+      publishedAt: '2026-11-28T10:20:00.000Z',
     };
   }
 

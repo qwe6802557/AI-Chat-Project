@@ -130,6 +130,53 @@ class ProfilePage extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
+                      '智能协同与全渠道台',
+                      style: TextStyle(
+                        fontSize: 15.0,
+                        fontWeight: FontWeight.w600,
+                        color: StitchTokens.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 10.0),
+                    _buildFeatureEntry(
+                      context,
+                      icon: Icons.account_tree_outlined,
+                      iconColor: StitchTokens.primary,
+                      iconBg: const Color(0xFFEFF6FF),
+                      title: '智能编排工作流',
+                      subtitle: '查看 DAG 节点拓扑并应用于当前对话',
+                      onTap: () => context.push('/workflows'),
+                    ),
+                    const Divider(height: 16.0, color: Color(0xFFF1F5F9)),
+                    _buildFeatureEntry(
+                      context,
+                      icon: Icons.timeline_rounded,
+                      iconColor: const Color(0xFF4F46E5),
+                      iconBg: const Color(0xFFEEF2FF),
+                      title: '全链路 Trace 观测',
+                      subtitle: '检索执行链路 KPI、Span 瀑布流与脱敏载荷',
+                      onTap: () => context.push('/traces'),
+                    ),
+                    const Divider(height: 16.0, color: Color(0xFFF1F5F9)),
+                    _buildFeatureEntry(
+                      context,
+                      icon: Icons.hub_outlined,
+                      iconColor: const Color(0xFF0D9488),
+                      iconBg: const Color(0xFFF0FDFA),
+                      title: 'IM 智能助理通道',
+                      subtitle: '企微/飞书/钉钉/QQ/微信长连接巡检、绑定与审计',
+                      onTap: () => context.push('/channels'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16.0),
+              GlassCard(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
                       '应用版本与更新',
                       style: TextStyle(
                         fontSize: 15.0,
@@ -141,10 +188,10 @@ class ProfilePage extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Column(
+                        Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'ERJ Chat 移动客户端',
                               style: TextStyle(
                                 fontSize: 14.0,
@@ -152,10 +199,10 @@ class ProfilePage extends ConsumerWidget {
                                 color: StitchTokens.onSurface,
                               ),
                             ),
-                            SizedBox(height: 2.0),
+                            const SizedBox(height: 2.0),
                             Text(
-                              'v1.0.0 (Build 1) 生产正式版',
-                              style: TextStyle(
+                              'v${ApiConstants.appVersion} (Build ${ApiConstants.appBuildNumber}) 生产正式版',
+                              style: const TextStyle(
                                 fontSize: 12.0,
                                 color: StitchTokens.onSurfaceVariant,
                               ),
@@ -207,6 +254,66 @@ class ProfilePage extends ConsumerWidget {
               const SiteIcpFooter(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureEntry(
+    BuildContext context, {
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10.0),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
+        child: Row(
+          children: [
+            Container(
+              width: 36.0,
+              height: 36.0,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(10.0),
+              ),
+              child: Icon(icon, size: 19.0, color: iconColor),
+            ),
+            const SizedBox(width: 12.0),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14.0,
+                      fontWeight: FontWeight.w600,
+                      color: StitchTokens.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2.0),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: StitchTokens.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18.0,
+              color: Color(0xFF94A3B8),
+            ),
+          ],
         ),
       ),
     );

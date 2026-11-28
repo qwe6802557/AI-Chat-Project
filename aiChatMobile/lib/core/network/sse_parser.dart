@@ -10,9 +10,14 @@ class SseChunk {
   final String? error;
   final String? sessionId;
   final String? searchQuery;
+  final String? traceId;
+  final int? durationMs;
   final List<Map<String, dynamic>>? rawSources;
   final Map<String, dynamic>? rawTool;
   final List<Map<String, dynamic>>? rawToolCalls;
+  final Map<String, dynamic>? rawTimelineEvent;
+  final List<Map<String, dynamic>>? rawAgentTimeline;
+  final Map<String, dynamic>? rawUsage;
 
   const SseChunk({
     this.type,
@@ -22,9 +27,14 @@ class SseChunk {
     this.error,
     this.sessionId,
     this.searchQuery,
+    this.traceId,
+    this.durationMs,
     this.rawSources,
     this.rawTool,
     this.rawToolCalls,
+    this.rawTimelineEvent,
+    this.rawAgentTimeline,
+    this.rawUsage,
   });
 
   factory SseChunk.fromJson(Map<String, dynamic> json) {
@@ -36,6 +46,8 @@ class SseChunk {
       error: (json['error'] ?? json['message']) as String?,
       sessionId: json['sessionId'] as String?,
       searchQuery: json['query'] as String?,
+      traceId: json['traceId'] as String?,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
       rawSources: (json['sources'] as List?)
           ?.whereType<Map<String, dynamic>>()
           .toList(),
@@ -43,6 +55,15 @@ class SseChunk {
       rawToolCalls: (json['toolCalls'] as List?)
           ?.whereType<Map<String, dynamic>>()
           .toList(),
+      rawTimelineEvent: json['timelineEvent'] is Map<String, dynamic>
+          ? json['timelineEvent'] as Map<String, dynamic>
+          : null,
+      rawAgentTimeline: (json['agentTimeline'] as List?)
+          ?.whereType<Map<String, dynamic>>()
+          .toList(),
+      rawUsage: json['usage'] is Map<String, dynamic>
+          ? json['usage'] as Map<String, dynamic>
+          : null,
     );
   }
 }

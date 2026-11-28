@@ -225,4 +225,28 @@ describe('ChannelManagerService (Multi-tenant & Credits)', () => {
       expect(channels.length).toBeGreaterThan(0);
     });
   });
+
+  describe('wecom_bot & getInstanceStatus parity', () => {
+    it('should instantiate WecomDriver and include workflowId in getInstanceStatus', async () => {
+      (mockChannelRepo.findOne as jest.Mock).mockResolvedValue({
+        id: 'conf-wecom-1',
+        userId: mockUserId,
+        channelType: 'wecom_bot',
+        name: '企微智能机器人',
+        instanceName: '企微研发助理',
+        workflowId: 'wf-uuid-999',
+        roleId: 'role-uuid-1',
+        isEnabled: false,
+        status: 'disconnected',
+        credentials: { botId: 'bot_123456', secret: 'secret_abc' },
+      });
+
+      const status = await service.getInstanceStatus(mockUserId, 'conf-wecom-1');
+
+      expect(status.channelType).toBe('wecom_bot');
+      expect(status.workflowId).toBe('wf-uuid-999');
+      expect(status.credentialsMasked?.botId).toContain('***');
+      expect(status.credentialsMasked?.secret).toBe('********');
+    });
+  });
 });

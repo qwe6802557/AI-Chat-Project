@@ -235,6 +235,9 @@ export class DingtalkDriver implements IChannelDriver {
 
     this.logger.log(`钉钉收到用户消息 [${isGroup ? '群聊' : '单聊'} ${targetId}]: ${cleanText.slice(0, 50)}`);
 
-    await this.inboundHandler(this.channelType, targetId, cleanText);
+    const reply = await this.inboundHandler(this.channelType, targetId, cleanText);
+    if (reply) {
+      await this.sendMessage(targetId, reply);
+    }
   }
 }

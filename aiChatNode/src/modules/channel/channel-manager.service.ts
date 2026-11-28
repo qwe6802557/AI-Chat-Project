@@ -21,6 +21,7 @@ import { WeixinDriver } from './drivers/weixin.driver';
 import { QqDriver } from './drivers/qq.driver';
 import { FeishuDriver } from './drivers/feishu.driver';
 import { DingtalkDriver } from './drivers/dingtalk.driver';
+import { WecomDriver } from './drivers/wecom.driver';
 import { AIClientService } from '../chat/services/ai-client.service';
 import { AgentExecutorService } from '../chat/services/agent-executor.service';
 import { SwarmOrchestratorService } from '../chat/services/swarm-orchestrator.service';
@@ -296,9 +297,24 @@ export class ChannelManagerService implements OnModuleInit {
           await this.updateInstanceSettings(config.userId, config.id, { credentials: creds });
         },
       );
+    } else if (config.channelType === 'wecom_bot') {
+      driver = new WecomDriver(
+        (_ch, fromId, content, contextToken) =>
+          this.handleInboundMessage(config.id, 'wecom_bot', fromId, content, contextToken),
+        async (creds) => {
+          await this.updateInstanceSettings(config.userId, config.id, { credentials: creds });
+        },
+      );
     }
 
     if (driver) {
+      if ('configure' in driver && typeof (driver as any).configure === 'function') {
+        (driver as any).configure({
+          boundModelId: config.role?.boundModelId || config.boundModelId,
+          systemPrompt: config.role?.systemPrompt || config.systemPrompt,
+          credentials: config.credentials,
+        });
+      }
       this.drivers.set(key, driver);
     }
     return driver;
@@ -455,6 +471,8 @@ export class ChannelManagerService implements OnModuleInit {
       if (driver) {
         const liveStatus = await driver.getStatus();
         const isConnected = conf.isEnabled && liveStatus.status === 'connected';
+        const liveMasked = liveStatus.credentialsMasked || {};
+        const hasLiveMasked = Object.values(liveMasked).some((v) => Boolean(v));
         results.push({
           ...liveStatus,
           id: conf.id,
@@ -468,7 +486,7 @@ export class ChannelManagerService implements OnModuleInit {
           status: isConnected ? 'connected' : conf.isEnabled ? liveStatus.status : 'disconnected',
           boundModelId: effectiveModelId,
           systemPrompt: effectiveSystemPrompt,
-          credentialsMasked: liveStatus.credentialsMasked || this.maskCredentials(conf.credentials),
+          credentialsMasked: hasLiveMasked ? liveMasked : this.maskCredentials(conf.credentials),
         });
       } else {
         results.push({
@@ -652,6 +670,8 @@ export class ChannelManagerService implements OnModuleInit {
     if (driver) {
       const liveStatus = await driver.getStatus();
       const isConnected = conf.isEnabled && liveStatus.status === 'connected';
+      const liveMasked = liveStatus.credentialsMasked || {};
+      const hasLiveMasked = Object.values(liveMasked).some((v) => Boolean(v));
       return {
         ...liveStatus,
         id: conf.id,
@@ -660,10 +680,12 @@ export class ChannelManagerService implements OnModuleInit {
         instanceName: conf.instanceName || conf.name,
         roleId: conf.roleId || null,
         roleName: conf.role?.name || null,
+        workflowId: conf.workflowId || null,
         isEnabled: conf.isEnabled,
         status: isConnected ? 'connected' : conf.isEnabled ? liveStatus.status : 'disconnected',
         boundModelId: effectiveModelId,
         systemPrompt: effectiveSystemPrompt,
+        credentialsMasked: hasLiveMasked ? liveMasked : this.maskCredentials(conf.credentials),
       };
     }
 
@@ -674,10 +696,12 @@ export class ChannelManagerService implements OnModuleInit {
       instanceName: conf.instanceName || conf.name,
       roleId: conf.roleId || null,
       roleName: conf.role?.name || null,
+      workflowId: conf.workflowId || null,
       isEnabled: conf.isEnabled,
       status: conf.status,
       boundModelId: effectiveModelId,
       systemPrompt: effectiveSystemPrompt,
+      credentialsMasked: this.maskCredentials(conf.credentials),
     };
   }
 
