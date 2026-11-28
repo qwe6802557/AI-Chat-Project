@@ -2,85 +2,192 @@
   <component
     :is="inline ? 'div' : 'a-modal'"
     v-bind="containerProps"
-    :class="['account-modal', { 'account-inline': inline, 'account-page-layout': layoutMode === 'page' }]"
+    :class="['account-modal-host', { 'account-inline-surface': inline }]"
+    @update:open="handleModalOpenChange"
     @cancel="handleClose"
   >
-    <div class="account-shell">
-      <aside class="identity-rail">
-        <div class="rail-top">
-          <span class="rail-kicker">Account Center</span>
-          <span :class="['role-pill', userRoleClass]">
-            {{ getRoleDisplayName(userAccount.role || 'user') }}
-          </span>
-        </div>
-
-        <div class="avatar-stage">
+    <div class="account-workbench">
+      <!-- 顶部紧凑身份与额度摘要条 -->
+      <section class="account-summary-strip">
+        <div class="summary-identity">
           <AvatarUploader
+            :size="56"
             :avatar="userAccount.avatar"
             @upload-success="handleAvatarChange"
           />
+
+          <div class="identity-details">
+            <div class="identity-title-row">
+              <h3 class="summary-username">{{ userAccount.username }}</h3>
+              <a-tag :color="userRoleClass === 'admin' ? 'blue' : 'default'" class="role-tag">
+                {{ getRoleDisplayName(userAccount.role || 'user') }}
+              </a-tag>
+            </div>
+
+            <div class="identity-meta-row">
+              <span>{{ userAccount.email || '未设置邮箱' }}</span>
+              <span class="meta-dot">·</span>
+              <span>加入于 {{ formatDate(userAccount.createdAt) }}</span>
+              <button
+                type="button"
+                class="uid-copy-chip"
+                title="点击复制完整用户标识"
+                @click="handleCopyUserId"
+              >
+                <span>ID {{ maskedUserId }}</span>
+                <CopyOutlined />
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div class="identity-copy">
-          <h2 class="username">{{ userAccount.username }}</h2>
-          <p class="identity-meta">{{ userAccount.email || '未设置邮箱' }}</p>
-          <p class="identity-subtitle">加入于 {{ formatDate(userAccount.createdAt) }}</p>
-        </div>
-
-        <div class="credit-spotlight">
-          <span class="spotlight-label">剩余积分</span>
-          <strong class="spotlight-value">{{ userAccount.credits.remaining.toLocaleString() }}</strong>
-          <p class="spotlight-description">
-            总积分 {{ userAccount.credits.total.toLocaleString() }}，已消耗
-            {{ userAccount.credits.consumed.toLocaleString() }}
-          </p>
+        <div class="summary-credits">
+          <div class="credits-header-row">
+            <span class="credits-title">可用积分</span>
+            <span class="credits-percent-badge">已用 {{ creditsPercent }}%</span>
+          </div>
+          <div class="credits-figure-row">
+            <strong class="credits-remaining">{{ userAccount.credits.remaining.toLocaleString() }}</strong>
+            <span class="credits-subtext">
+              总额 {{ userAccount.credits.total.toLocaleString() }} · 已消耗
+              {{ userAccount.credits.consumed.toLocaleString() }}
+              <template v-if="userAccount.credits.reserved">
+                · 预占 {{ userAccount.credits.reserved.toLocaleString() }}
+              </template>
+            </span>
+          </div>
           <a-progress
             :percent="creditsPercent"
             :show-info="false"
-            stroke-color="#0f172a"
-            trail-color="rgba(15, 23, 42, 0.08)"
+            stroke-color="#1570ef"
+            trail-color="#e2e8f0"
+            :stroke-width="6"
           />
-          <span class="spotlight-footnote">已使用 {{ creditsPercent }}%</span>
         </div>
+      </section>
 
-        <div class="rail-stats">
-          <div
-            v-for="metric in railMetrics"
-            :key="metric.label"
-            class="rail-stat"
+      <!-- 中部 Segmented 分段导航 + 刷新工具条 -->
+      <div class="account-tab-bar">
+        <a-segmented
+          v-model:value="activeTab"
+          :options="tabOptions"
+          size="middle"
+        />
+
+        <div class="tab-bar-actions">
+          <span class="session-quick-meta">
+            会话 {{ conversationStatsSummary.totalSessions.toLocaleString() }} ·
+            Token {{ formatToken(conversationStatsSummary.totalTokens) }}
+          </span>
+          <a-button
+            size="small"
+            class="refresh-account-btn"
+            :loading="ledgerLoading"
+            @click="handleRefreshAccount"
           >
-            <span class="rail-stat-label">{{ metric.label }}</span>
-            <strong class="rail-stat-value">{{ metric.value }}</strong>
-          </div>
+            <template #icon><ReloadOutlined /></template>
+            刷新
+          </a-button>
         </div>
-      </aside>
+      </div>
 
-      <section class="account-main">
-        <header class="main-header">
-          <div>
-            <p class="main-kicker">我的账户</p>
-            <h3>资料与使用概览</h3>
-          </div>
-          <p class="main-description">
-            保持联系方式为最新，并查看当前账户在会话与积分层面的使用情况。
-          </p>
-        </header>
+      <!-- 主工作区内容面板 -->
+      <div class="account-tab-stage">
+        <!-- Tab 1: 用量与概览 -->
+        <section v-show="activeTab === 'overview'" class="overview-grid">
+          <ChatStatsPanel
+            :summary="conversationStatsSummary"
+            :model-breakdown="modelUsageBreakdown"
+          />
 
-        <section class="surface-panel profile-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <PhoneOutlined class="panel-icon" />
+          <article class="surface-card recent-ledger-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <WalletOutlined class="card-icon" />
+                <div>
+                  <h4>最近积分流水</h4>
+                  <p>展示最近 4 条积分变动动态</p>
+                </div>
+              </div>
+              <a-button
+                type="link"
+                size="small"
+                class="view-all-ledger-btn"
+                @click="activeTab = 'ledger'"
+              >
+                查看全部 ({{ ledgerTotal }})
+                <RightOutlined />
+              </a-button>
+            </div>
+
+            <div v-if="ledgerLoading && recentCreditLedger.length === 0" class="card-state">
+              正在加载最近积分流水...
+            </div>
+            <div v-else-if="recentCreditLedger.length === 0" class="card-state">
+              暂无积分流水
+            </div>
+            <div v-else class="preview-ledger-list">
+              <div
+                v-for="item in previewLedgerItems"
+                :key="item.id"
+                class="preview-ledger-row"
+              >
+                <div class="preview-row-copy">
+                  <strong class="preview-row-title">{{ item.title }}</strong>
+                  <span class="preview-row-meta">
+                    <template v-if="item.description">{{ item.description }} · </template>
+                    {{ formatLedgerTime(item.createdAt) }}
+                  </span>
+                </div>
+                <div class="preview-row-metrics">
+                  <strong :class="['mono-num', 'preview-amount', getLedgerAmountClass(item.amount)]">
+                    {{ formatLedgerAmount(item.amount) }}
+                  </strong>
+                  <span class="mono-num preview-balance">
+                    余额 {{ item.balanceAfter.toLocaleString() }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <!-- Tab 2: 积分流水（分页与筛选表格） -->
+        <section v-show="activeTab === 'ledger'" class="surface-card ledger-tab-card">
+          <CreditLedgerPanel
+            :items="recentCreditLedger"
+            :loading="ledgerLoading"
+            :total="ledgerTotal"
+            :page="ledgerPage"
+            :page-size="ledgerPageSize"
+            @page-change="handleLedgerPageChange"
+          />
+        </section>
+
+        <!-- Tab 3: 账号资料与安全 -->
+        <section v-show="activeTab === 'profile'" class="surface-card profile-tab-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <IdcardOutlined class="card-icon" />
               <div>
                 <h4>基础资料</h4>
-                <p>用于展示账户识别信息与常用联系方式</p>
+                <p>维护联系方式并核对账号识别标识</p>
               </div>
             </div>
           </div>
 
           <div class="profile-grid">
-            <div class="profile-row editable">
-              <div class="profile-meta">
-                <span class="profile-label">手机号</span>
+            <div class="profile-field">
+              <div class="field-copy">
+                <span class="field-label">用户名</span>
+                <strong class="field-value">{{ userAccount.username || '未知用户' }}</strong>
+              </div>
+              <UserOutlined class="field-icon" />
+            </div>
+
+            <div class="profile-field editable">
+              <div class="field-copy">
+                <span class="field-label">手机号</span>
                 <template v-if="isEditingPhone">
                   <a-input
                     ref="phoneInputRef"
@@ -93,156 +200,72 @@
                     @keydown.escape="handlePhoneCancel"
                   />
                 </template>
-                <strong v-else class="profile-value">{{ formatPhone(userAccount.phone) }}</strong>
+                <strong v-else class="field-value">{{ formatPhone(userAccount.phone) }}</strong>
               </div>
 
               <a-button
                 v-if="isEditingPhone"
                 type="link"
                 size="small"
-                class="inline-action"
                 @click="handlePhoneSave"
               >
                 保存
               </a-button>
-              <EditOutlined v-else class="action-icon" @click="startEditPhone" />
-            </div>
-
-            <div class="profile-row">
-              <div class="profile-meta">
-                <span class="profile-label">邮箱</span>
-                <strong class="profile-value">{{ userAccount.email || '未设置' }}</strong>
-              </div>
-              <MailOutlined class="row-icon" />
-            </div>
-
-            <div class="profile-row">
-              <div class="profile-meta">
-                <span class="profile-label">角色</span>
-                <strong class="profile-value">{{ getRoleDisplayName(userAccount.role || 'user') }}</strong>
-              </div>
-              <span :class="['role-pill', 'compact', userRoleClass]">
-                {{ userAccount.role === 'admin' ? 'Admin' : 'User' }}
-              </span>
-            </div>
-
-            <div class="profile-row">
-              <div class="profile-meta">
-                <span class="profile-label">注册时间</span>
-                <strong class="profile-value">{{ formatDate(userAccount.createdAt) }}</strong>
-              </div>
-              <CalendarOutlined class="row-icon" />
-            </div>
-
-            <div class="profile-row full-width">
-              <div class="profile-meta">
-                <span class="profile-label">用户标识</span>
-                <strong class="profile-value monospace">{{ maskedUserId }}</strong>
-              </div>
-              <IdcardOutlined class="row-icon" />
-            </div>
-          </div>
-        </section>
-
-        <section class="summary-grid">
-          <article class="surface-panel usage-panel">
-            <div class="panel-header">
-              <div class="panel-title">
-                <WalletOutlined class="panel-icon" />
-                <div>
-                  <h4>积分使用</h4>
-                  <p>当前账户额度与使用进度</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="usage-main">
-              <div class="usage-primary">
-                <span class="usage-label">可用额度</span>
-                <strong class="usage-value">{{ userAccount.credits.remaining.toLocaleString() }}</strong>
-              </div>
-
-              <div class="usage-breakdown">
-                <div class="breakdown-item">
-                  <span>总积分</span>
-                  <strong>{{ userAccount.credits.total.toLocaleString() }}</strong>
-                </div>
-                <div class="breakdown-item">
-                  <span>已消耗</span>
-                  <strong class="consumed">{{ userAccount.credits.consumed.toLocaleString() }}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="usage-progress">
-              <a-progress
-                :percent="creditsPercent"
-                :show-info="false"
-                stroke-color="#1570ef"
-                trail-color="#eaecf0"
-              />
-              <span class="progress-text">积分消耗进度 {{ creditsPercent }}%</span>
-            </div>
-          </article>
-
-          <ChatStatsPanel :summary="conversationStatsSummary" />
-        </section>
-
-        <section class="surface-panel ledger-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <WalletOutlined class="panel-icon" />
-              <div>
-                <h4>最近积分流水</h4>
-                <p>展示最近的积分赠送、扣费和释放记录</p>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="ledgerLoading" class="ledger-state">
-            正在加载最近积分流水...
-          </div>
-          <div v-else-if="recentCreditLedger.length === 0" class="ledger-state empty">
-            暂无积分流水
-          </div>
-          <div v-else class="ledger-list">
-            <article
-              v-for="item in recentCreditLedger"
-              :key="item.id"
-              class="ledger-item"
-            >
-              <div class="ledger-main">
-                <div class="ledger-copy">
-                  <strong class="ledger-title">{{ item.title }}</strong>
-                  <span v-if="item.description" class="ledger-description">
-                    {{ item.description }}
-                  </span>
-                  <span class="ledger-time">{{ formatLedgerTime(item.createdAt) }}</span>
-                </div>
-                <div class="ledger-metrics">
-                  <strong :class="['ledger-amount', getLedgerAmountClass(item.amount)]">
-                    {{ formatLedgerAmount(item.amount) }}
-                  </strong>
-                  <span class="ledger-balance">
-                    余额 {{ item.balanceAfter.toLocaleString() }}
-                  </span>
-                </div>
-              </div>
-            </article>
-
-            <div v-if="ledgerHasMore" class="ledger-actions">
               <a-button
-                type="default"
-                :loading="ledgerLoadingMore"
-                class="ledger-more-btn"
-                @click="handleLoadMoreLedger"
+                v-else
+                type="link"
+                size="small"
+                @click="startEditPhone"
               >
-                查看更多
+                <template #icon><EditOutlined /></template>
+                修改
+              </a-button>
+            </div>
+
+            <div class="profile-field">
+              <div class="field-copy">
+                <span class="field-label">绑定邮箱</span>
+                <strong class="field-value">{{ userAccount.email || '未设置' }}</strong>
+              </div>
+              <MailOutlined class="field-icon" />
+            </div>
+
+            <div class="profile-field">
+              <div class="field-copy">
+                <span class="field-label">账户角色</span>
+                <strong class="field-value">{{ getRoleDisplayName(userAccount.role || 'user') }}</strong>
+              </div>
+              <a-tag :color="userRoleClass === 'admin' ? 'blue' : 'default'" class="role-tag">
+                {{ userAccount.role === 'admin' ? 'Admin' : 'User' }}
+              </a-tag>
+            </div>
+
+            <div class="profile-field">
+              <div class="field-copy">
+                <span class="field-label">注册时间</span>
+                <strong class="field-value mono-num">{{ formatDate(userAccount.createdAt) }}</strong>
+              </div>
+              <CalendarOutlined class="field-icon" />
+            </div>
+
+            <div class="profile-field">
+              <div class="field-copy">
+                <span class="field-label">用户标识 (UID)</span>
+                <strong class="field-value mono-num uid-full">{{ userAccount.id || '未生成' }}</strong>
+              </div>
+              <a-button
+                type="link"
+                size="small"
+                :disabled="!userAccount.id"
+                @click="handleCopyUserId"
+              >
+                <template #icon><CopyOutlined /></template>
+                复制
               </a-button>
             </div>
           </div>
         </section>
-      </section>
+      </div>
     </div>
   </component>
 </template>
@@ -252,14 +275,18 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   CalendarOutlined,
+  CopyOutlined,
   EditOutlined,
   IdcardOutlined,
   MailOutlined,
-  PhoneOutlined,
+  ReloadOutlined,
+  RightOutlined,
+  UserOutlined,
   WalletOutlined,
 } from '@ant-design/icons-vue'
 import AvatarUploader from './AvatarUploader.vue'
 import ChatStatsPanel from './ChatStatsPanel.vue'
+import CreditLedgerPanel from './CreditLedgerPanel.vue'
 import { getCurrentUserAccount } from '@/api/user'
 import { useConversationStore } from '@/stores'
 import { useAuthStore } from '@/stores/auth'
@@ -267,7 +294,10 @@ import type { RecentCreditLedgerItem } from '@/types/user'
 import { ROLE_DISPLAY_MAP } from '@/types/user'
 import { formatDate, formatPhone } from '@/utils/common'
 import logger from '@/utils/logger'
-import { buildConversationStatsSummary } from '../utils/conversationInsights'
+import {
+  buildConversationStatsSummary,
+  buildModelUsageBreakdown,
+} from '../utils/conversationInsights'
 
 defineOptions({
   name: 'AccountModal',
@@ -283,12 +313,24 @@ const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
 
+type AccountTabKey = 'overview' | 'ledger' | 'profile'
+const activeTab = ref<AccountTabKey>('overview')
+const tabOptions = [
+  { label: '用量与概览', value: 'overview' },
+  { label: '积分流水', value: 'ledger' },
+  { label: '账号资料', value: 'profile' },
+]
+
 const authStore = useAuthStore()
 const conversationStore = useConversationStore()
 const ledgerLoading = ref(false)
-const ledgerLoadingMore = ref(false)
 const recentCreditLedger = ref<RecentCreditLedgerItem[]>([])
+const ledgerPage = ref(1)
+const ledgerPageSize = 10
+const ledgerTotal = ref(0)
+
 const isVisible = computed(() => props.inline || !!props.open)
+
 const containerProps = computed(() => {
   if (props.inline) {
     return {}
@@ -296,15 +338,14 @@ const containerProps = computed(() => {
 
   return {
     open: props.open,
+    title: '个人账户中心',
     footer: null,
     closable: true,
     centered: true,
-    width: '90%',
+    destroyOnClose: true,
+    width: '1020px',
   }
 })
-const ledgerPage = ref(1)
-const ledgerPageSize = 10
-const ledgerHasMore = ref(false)
 
 const userAccount = computed(() => authStore.getUserAccount())
 
@@ -314,6 +355,12 @@ const conversationStatsSummary = computed(() =>
     conversationStore.conversations,
   ),
 )
+
+const modelUsageBreakdown = computed(() =>
+  buildModelUsageBreakdown(conversationStore.conversations, 4),
+)
+
+const previewLedgerItems = computed(() => recentCreditLedger.value.slice(0, 4))
 
 const creditsPercent = computed(() => {
   const { total, consumed } = userAccount.value.credits
@@ -329,21 +376,6 @@ const formatToken = (value: number) => {
   }
   return value.toLocaleString()
 }
-
-const railMetrics = computed(() => [
-  {
-    label: '总会话',
-    value: conversationStatsSummary.value.totalSessions.toLocaleString(),
-  },
-  {
-    label: '总 Token',
-    value: formatToken(conversationStatsSummary.value.totalTokens),
-  },
-  {
-    label: '主力模型',
-    value: conversationStatsSummary.value.topModel || '暂无',
-  },
-])
 
 const userRoleClass = computed(() => userAccount.value.role || 'user')
 
@@ -400,25 +432,29 @@ const handleAvatarChange = (avatarUrl: string) => {
   authStore.setUserAvatar(avatarUrl)
 }
 
-const fetchAccountDetails = async (options?: {
-  page?: number
-  append?: boolean
-}) => {
+const handleCopyUserId = async () => {
+  const userId = userAccount.value.id
+  if (!userId) return
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(userId)
+      message.success('已复制用户标识')
+      return
+    }
+  } catch {
+    // 剪贴板不可用时走降级提示
+  }
+  message.info(`用户标识：${userId}`)
+}
+
+const fetchAccountDetails = async (page: number = 1) => {
   if (!authStore.isAuthenticated) {
     recentCreditLedger.value = []
-    ledgerHasMore.value = false
+    ledgerTotal.value = 0
     return
   }
 
-  const page = options?.page || 1
-  const append = options?.append === true
-
-  if (append) {
-    ledgerLoadingMore.value = true
-  } else {
-    ledgerLoading.value = true
-  }
-
+  ledgerLoading.value = true
   try {
     const response = await getCurrentUserAccount({
       ledgerPage: page,
@@ -430,40 +466,29 @@ const fetchAccountDetails = async (options?: {
 
     const ledgerPageData = response.data.recentLedger
     const items = ledgerPageData?.items || []
-
-    recentCreditLedger.value = append
-      ? [...recentCreditLedger.value, ...items]
-      : items
+    recentCreditLedger.value = items
     ledgerPage.value = ledgerPageData?.page || page
-    ledgerHasMore.value = !!ledgerPageData?.hasMore
+    ledgerTotal.value = ledgerPageData?.total ?? items.length
   } catch (error) {
     logger.error('加载账户详情失败:', error)
     message.warning('加载积分流水失败，请稍后重试')
   } finally {
-    if (append) {
-      ledgerLoadingMore.value = false
-    } else {
-      ledgerLoading.value = false
-    }
+    ledgerLoading.value = false
   }
 }
 
-const handleLoadMoreLedger = () => {
-  if (ledgerLoading.value || ledgerLoadingMore.value || !ledgerHasMore.value) {
-    return
-  }
+const handleRefreshAccount = () => {
+  void fetchAccountDetails(ledgerPage.value || 1)
+}
 
-  void fetchAccountDetails({
-    page: ledgerPage.value + 1,
-    append: true,
-  })
+const handleLedgerPageChange = (nextPage: number) => {
+  void fetchAccountDetails(nextPage)
 }
 
 const formatLedgerTime = (value: string): string => {
   if (!value) {
     return '未知时间'
   }
-
   try {
     return new Date(value).toLocaleString('zh-CN', {
       year: 'numeric',
@@ -478,12 +503,8 @@ const formatLedgerTime = (value: string): string => {
 }
 
 const formatLedgerAmount = (amount: number): string => {
-  if (amount > 0) {
-    return `+${amount.toLocaleString()}`
-  }
-  if (amount < 0) {
-    return amount.toLocaleString()
-  }
+  if (amount > 0) return `+${amount.toLocaleString()}`
+  if (amount < 0) return amount.toLocaleString()
   return '0'
 }
 
@@ -506,942 +527,426 @@ const handleClose = () => {
   emit('update:open', false)
 }
 
-watch(isVisible, (newValue) => {
-  if (newValue) {
-    ledgerPage.value = 1
-    ledgerHasMore.value = false
-    recentCreditLedger.value = []
-    void fetchAccountDetails({ page: 1, append: false })
-    return
+const handleModalOpenChange = (nextOpen: boolean) => {
+  if (!props.inline) {
+    emit('update:open', nextOpen)
   }
+}
 
-  if (!newValue) {
+watch(
+  isVisible,
+  (newValue) => {
+    if (newValue) {
+      activeTab.value = 'overview'
+      ledgerPage.value = 1
+      ledgerTotal.value = 0
+      recentCreditLedger.value = []
+      void fetchAccountDetails(1)
+      return
+    }
+
     isEditingPhone.value = false
     editingPhone.value = ''
     ledgerLoading.value = false
-    ledgerLoadingMore.value = false
     ledgerPage.value = 1
-    ledgerHasMore.value = false
+    ledgerTotal.value = 0
     recentCreditLedger.value = []
-  }
-}, { immediate: true })
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped lang="scss">
-$color-primary: #1570ef;
-$color-ink: #101828;
-$color-muted: #667085;
-$color-border: rgba(15, 23, 42, 0.08);
-$color-surface: rgba(255, 255, 255, 0.96);
-$color-shadow: rgba(15, 23, 42, 0.12);
-
-.account-modal {
-  :deep(.ant-modal) {
-    width: min(860px, calc(100vw - 24px)) !important;
-    max-width: calc(100vw - 24px);
-  }
-
-  :deep(.ant-modal-content) {
-    border-radius: 28px;
-    padding: 0;
-    overflow: hidden;
-    background: linear-gradient(180deg, #fbfcfe 0%, #f4f6fa 100%);
-    box-shadow: 0 28px 64px rgba(15, 23, 42, 0.2);
-    max-height: calc(100dvh - 28px);
-  }
-
-  :deep(.ant-modal-body) {
-    padding: 0;
-    max-height: calc(100dvh - 28px);
-    overflow: hidden;
-  }
-
-  :deep(.ant-modal-close) {
-    top: 18px;
-    right: 18px;
-    width: 38px;
-    height: 38px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(15, 23, 42, 0.06);
-    transition: background 0.2s ease, border-color 0.2s ease;
-
-    &:hover {
-      background: #ffffff;
-      border-color: rgba(15, 23, 42, 0.12);
-    }
-
-    .ant-modal-close-x {
-      width: 38px;
-      height: 38px;
-      line-height: 38px;
-      font-size: 16px;
-      color: $color-ink;
-    }
-  }
-}
-
-.account-inline {
-  display: block;
-}
-
-.account-page-layout {
+.account-inline-surface {
+  max-width: 1020px;
   width: 100%;
-  min-height: 0;
-
-  .account-shell {
-    grid-template-columns: 252px minmax(0, 1fr);
-    height: 100%;
-    min-height: 0;
-    max-height: none;
-    border-radius: 30px;
-    overflow: hidden;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    background: linear-gradient(180deg, #fcfdff 0%, #f5f7fb 100%);
-    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.12);
-  }
-
-  .identity-rail {
-    gap: 12px;
-    padding: 18px 18px 16px;
-    background:
-      radial-gradient(circle at top left, rgba(21, 112, 239, 0.18), transparent 34%),
-      linear-gradient(180deg, #f8fafd 0%, #eef2f7 100%);
-  }
-
-  .credit-spotlight {
-    padding: 12px 14px;
-
-    .spotlight-value {
-      font-size: 30px;
-    }
-
-    .spotlight-description {
-      margin: 6px 0 8px;
-    }
-  }
-
-  .rail-stats {
-    gap: 2px;
-  }
-
-  .rail-stat {
-    padding: 8px 0;
-  }
-
-  .account-main {
-    display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    grid-template-areas:
-      'header header'
-      'profile ledger'
-      'summary ledger';
-    align-content: stretch;
-    gap: 12px;
-    padding: 18px;
-    overflow: hidden;
-  }
-
-  .main-header {
-    grid-area: header;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
-    gap: 12px;
-    align-items: center;
-  }
-
-  .main-header h3 {
-    font-size: 22px;
-  }
-
-  .main-description {
-    font-size: 12px;
-    line-height: 1.55;
-  }
-
-  .profile-panel {
-    grid-area: profile;
-  }
-
-  .summary-grid {
-    grid-area: summary;
-    gap: 10px;
-    min-height: 0;
-    align-self: stretch;
-  }
-
-  .ledger-panel {
-    grid-area: ledger;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    overflow: hidden;
-  }
-
-  .surface-panel {
-    padding: 14px 16px;
-    border-radius: 18px;
-    box-shadow: none;
-    background: rgba(255, 255, 255, 0.9);
-  }
-
-  .panel-header {
-    margin-bottom: 12px;
-  }
-
-  .profile-grid {
-    gap: 8px;
-  }
-
-  .profile-row {
-    min-height: 56px;
-    padding: 10px 12px;
-  }
-
-  .usage-main {
-    grid-template-columns: minmax(0, 1fr) minmax(168px, 0.86fr);
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .usage-primary .usage-value {
-    font-size: 28px;
-  }
-
-  .ledger-state {
-    height: 100%;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .ledger-list {
-    min-height: 0;
-    overflow: auto;
-    padding-right: 4px;
-  }
-
-  .ledger-panel {
-    .ledger-list {
-      gap: 8px;
-    }
-
-    .ledger-item {
-      padding: 10px 12px;
-      border-radius: 14px;
-    }
-
-    .ledger-main {
-      align-items: flex-start;
-    }
-
-    .ledger-copy {
-      gap: 2px;
-    }
-
-    .ledger-amount {
-      font-size: 15px;
-    }
-  }
-
-  :deep(.chat-stats-panel) {
-    height: 100%;
-    padding: 14px 16px;
-    border-radius: 18px;
-    box-shadow: none;
-    background: rgba(249, 250, 251, 0.92);
-  }
-
-  :deep(.chat-stats-panel .stats-header) {
-    margin-bottom: 10px;
-  }
-
-  :deep(.chat-stats-panel .hero-figure) {
-    padding: 12px 0;
-    margin-bottom: 6px;
-  }
-
-  :deep(.chat-stats-panel .hero-main .hero-value) {
-    font-size: 26px;
-  }
-
-  :deep(.chat-stats-panel .hero-side .hero-side-value) {
-    font-size: 18px;
-  }
-
-  :deep(.chat-stats-panel .stats-list) {
-    gap: 4px;
-    margin-bottom: 8px;
-  }
-
-  :deep(.chat-stats-panel .stats-row) {
-    padding: 7px 0;
-  }
+  margin: 0 auto;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
 }
 
-.account-shell {
-  display: grid;
-  grid-template-columns: 286px minmax(0, 1fr);
-  min-height: min(568px, calc(100dvh - 28px));
-  max-height: calc(100dvh - 28px);
-}
-
-.identity-rail {
-  position: relative;
+.account-workbench {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 22px 20px;
-  background:
-    radial-gradient(circle at top left, rgba(21, 112, 239, 0.2), transparent 34%),
-    linear-gradient(180deg, #f7f9fc 0%, #edf2f8 100%);
-  border-right: 1px solid rgba(15, 23, 42, 0.06);
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.45), transparent 48%);
-    pointer-events: none;
-  }
+  gap: 14px;
+  min-height: 460px;
 }
 
-.rail-top,
-.identity-copy,
-.credit-spotlight,
-.rail-stats {
-  position: relative;
-  z-index: 1;
-}
-
-.rail-top {
+.account-summary-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
-.rail-kicker {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: $color-muted;
-  text-transform: uppercase;
-}
-
-.role-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid transparent;
-
-  &.admin {
-    background: rgba(21, 112, 239, 0.1);
-    color: $color-primary;
-    border-color: rgba(21, 112, 239, 0.12);
-  }
-
-  &.user {
-    background: rgba(15, 23, 42, 0.06);
-    color: $color-ink;
-    border-color: rgba(15, 23, 42, 0.08);
-  }
-
-  &.compact {
-    min-width: 64px;
-  }
-}
-
-.avatar-stage {
+.summary-identity {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
 }
 
-.identity-copy {
+.identity-details {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
-.username {
+.identity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summary-username {
   margin: 0;
-  font-size: 28px;
-  line-height: 1;
+  font-size: 18px;
+  line-height: 1.25;
   font-weight: 700;
-  color: $color-ink;
+  color: #0f172a;
 }
 
-.identity-meta,
-.identity-subtitle {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: $color-muted;
+.role-tag {
+  margin-inline-end: 0;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
 }
 
-.credit-spotlight {
-  padding: 14px 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.76);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(10px);
-
-  .spotlight-label {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: $color-muted;
-    text-transform: uppercase;
-  }
-
-  .spotlight-value {
-    display: block;
-    font-size: 34px;
-    line-height: 0.95;
-    font-weight: 700;
-    color: $color-ink;
-  }
-
-  .spotlight-description {
-    margin: 8px 0 10px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: $color-muted;
-  }
-
-  .spotlight-footnote {
-    display: block;
-    margin-top: 6px;
-    font-size: 11px;
-    color: $color-muted;
-  }
-
-  :deep(.ant-progress-inner) {
-    border-radius: 999px;
-  }
-
-  :deep(.ant-progress-bg) {
-    height: 6px !important;
-  }
-}
-
-.rail-stats {
-  display: grid;
+.identity-meta-row {
+  display: flex;
+  align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #64748b;
 }
 
-.rail-stat {
+.meta-dot {
+  color: #cbd5e1;
+}
+
+.uid-copy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+
+  &:hover {
+    border-color: #1570ef;
+    color: #1570ef;
+  }
+}
+
+.summary-credits {
+  min-width: 280px;
+  flex: 0 1 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  :deep(.ant-progress) {
+    line-height: 1;
+  }
+}
+
+.credits-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.credits-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.credits-percent-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1570ef;
+  background: rgba(21, 112, 239, 0.08);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.credits-figure-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-
-  &:last-child {
-    border-bottom: none;
-  }
+  flex-wrap: wrap;
 }
 
-.rail-stat-label {
-  font-size: 12px;
-  color: $color-muted;
-}
-
-.rail-stat-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: $color-ink;
-  text-align: right;
-}
-
-.account-main {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 22px 22px 20px;
-  overflow: auto;
-}
-
-.main-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  gap: 14px;
-  align-items: end;
-}
-
-.main-kicker {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: $color-muted;
-  text-transform: uppercase;
-}
-
-.main-header h3 {
-  margin: 0;
-  font-size: 24px;
+.credits-remaining {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 22px;
   line-height: 1.1;
   font-weight: 700;
-  color: $color-ink;
+  color: #0f172a;
 }
 
-.main-description {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: $color-muted;
+.credits-subtext {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: #64748b;
 }
 
-.surface-panel {
+.account-tab-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tab-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.session-quick-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.account-tab-stage {
+  min-height: 330px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.surface-card {
   padding: 16px 18px;
-  border-radius: 20px;
-  background: $color-surface;
-  border: 1px solid $color-border;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
 }
 
-.panel-header {
-  margin-bottom: 14px;
+.recent-ledger-card {
+  display: flex;
+  flex-direction: column;
 }
 
-.panel-title {
+.card-header {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 
   h4 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    color: $color-ink;
+    color: #0f172a;
   }
 
   p {
-    margin: 4px 0 0;
+    margin: 2px 0 0;
     font-size: 12px;
-    line-height: 1.5;
-    color: $color-muted;
+    color: #64748b;
   }
 }
 
-.panel-icon {
-  width: 18px;
-  height: 18px;
+.card-icon {
+  font-size: 16px;
   margin-top: 3px;
-  color: $color-primary;
+  color: #1570ef;
   flex-shrink: 0;
+}
+
+.view-all-ledger-btn {
+  padding-inline: 0;
+  font-size: 12.5px;
+}
+
+.card-state {
+  flex: 1;
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.preview-ledger-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-ledger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #f1f5f9;
+}
+
+.preview-row-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.preview-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0f172a;
+}
+
+.preview-row-meta {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-row-metrics {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mono-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-amount {
+  font-size: 13.5px;
+  font-weight: 600;
+
+  &.positive {
+    color: #15803d;
+  }
+
+  &.negative {
+    color: #b91c1c;
+  }
+
+  &.neutral {
+    color: #64748b;
+  }
+}
+
+.preview-balance {
+  font-size: 11.5px;
+  color: #64748b;
 }
 
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
-.profile-row {
+.profile-field {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   min-height: 62px;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(249, 250, 251, 0.84);
-  border: 1px solid rgba(15, 23, 42, 0.05);
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-
-  &:hover {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.1);
-    transform: translateY(-1px);
-  }
-
-  &.full-width {
-    grid-column: 1 / -1;
-  }
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
 }
 
-.profile-meta {
+.field-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
-.profile-label {
-  font-size: 11px;
-  color: $color-muted;
+.field-label {
+  font-size: 11.5px;
+  color: #64748b;
 }
 
-.profile-value {
+.field-value {
   font-size: 14px;
-  line-height: 1.35;
   font-weight: 600;
-  color: $color-ink;
-  word-break: break-word;
+  color: #0f172a;
+  word-break: break-all;
 
-  &.monospace {
-    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  &.uid-full {
     font-size: 12px;
+    font-weight: 500;
+    color: #334155;
   }
+}
+
+.field-icon {
+  font-size: 16px;
+  color: #94a3b8;
+  flex-shrink: 0;
 }
 
 .phone-input {
-  width: 150px;
-  height: 34px;
-  border-radius: 10px;
-
-  &:focus {
-    border-color: $color-primary;
-    box-shadow: 0 0 0 3px rgba(21, 112, 239, 0.1);
-  }
+  width: 160px;
+  height: 30px;
 }
 
-.row-icon,
-.action-icon {
-  flex-shrink: 0;
-  font-size: 18px;
-  color: $color-muted;
-}
-
-.action-icon {
-  cursor: pointer;
-  transition: color 0.2s ease;
-
-  &:hover {
-    color: $color-primary;
-  }
-}
-
-.inline-action {
-  padding-inline: 0;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-}
-
-.ledger-panel {
-  .ledger-list {
-    display: grid;
-    gap: 10px;
+@media (max-width: 768px) {
+  .account-summary-strip {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .ledger-actions {
-    display: flex;
-    justify-content: center;
-    padding-top: 4px;
-  }
-
-  .ledger-more-btn {
-    min-width: 120px;
-    border-radius: 999px;
-  }
-
-  .ledger-item {
-    padding: 12px 14px;
-    border-radius: 16px;
-    background: rgba(249, 250, 251, 0.84);
-    border: 1px solid rgba(15, 23, 42, 0.05);
-    transition: background 0.2s ease, border-color 0.2s ease;
-
-    &:hover {
-      background: #ffffff;
-      border-color: rgba(15, 23, 42, 0.1);
-    }
-  }
-
-  .ledger-main {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-  }
-
-  .ledger-copy {
+  .summary-credits {
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex: none;
   }
 
-  .ledger-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: $color-ink;
-  }
-
-  .ledger-description,
-  .ledger-time,
-  .ledger-balance {
-    font-size: 12px;
-    line-height: 1.5;
-    color: $color-muted;
-  }
-
-  .ledger-metrics {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-  }
-
-  .ledger-amount {
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1;
-
-    &.positive {
-      color: #1570ef;
-    }
-
-    &.negative {
-      color: #d97706;
-    }
-
-    &.neutral {
-      color: $color-ink;
-    }
-  }
-}
-
-.ledger-state {
-  padding: 18px 0 6px;
-  text-align: center;
-  font-size: 13px;
-  color: $color-muted;
-
-  &.empty {
-    padding-bottom: 2px;
-  }
-}
-
-.usage-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(180px, 0.9fr);
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.usage-primary {
-  .usage-label {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: $color-muted;
-    text-transform: uppercase;
-  }
-
-  .usage-value {
-    display: block;
-    font-size: 32px;
-    line-height: 0.95;
-    font-weight: 700;
-    color: $color-ink;
-  }
-}
-
-.usage-breakdown {
-  display: grid;
-  gap: 8px;
-}
-
-.breakdown-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: rgba(249, 250, 251, 0.84);
-  border: 1px solid rgba(15, 23, 42, 0.05);
-
-  span {
-    font-size: 12px;
-    color: $color-muted;
-  }
-
-  strong {
-    font-size: 14px;
-    font-weight: 700;
-    color: $color-ink;
-
-    &.consumed {
-      color: #d97706;
-    }
-  }
-}
-
-.usage-progress {
-  .progress-text {
-    display: block;
-    margin-top: 6px;
-    text-align: right;
-    font-size: 12px;
-    color: $color-muted;
-  }
-
-  :deep(.ant-progress-inner) {
-    border-radius: 999px;
-  }
-
-  :deep(.ant-progress-bg) {
-    height: 6px !important;
-  }
-}
-
-@media (max-width: 1180px), (max-height: 780px) {
-  .account-page-layout {
-    .account-shell {
-      grid-template-columns: 1fr;
-    }
-
-    .account-main {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto auto minmax(260px, 1fr);
-      grid-template-areas:
-        'header'
-        'profile'
-        'summary'
-        'ledger';
-      overflow: auto;
-    }
-
-    .main-header,
-    .summary-grid,
-    .usage-main {
-      grid-template-columns: 1fr;
-    }
-
-    .ledger-panel {
-      min-height: 260px;
-    }
-  }
-}
-
-@media (max-width: 920px) {
-  .account-shell {
-    grid-template-columns: 1fr;
-    max-height: calc(100dvh - 28px);
-  }
-
-  .identity-rail {
-    border-right: none;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-  }
-
-  .main-header,
-  .summary-grid,
-  .usage-main {
-    grid-template-columns: 1fr;
-  }
-
-  .ledger-panel .ledger-main {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .ledger-panel .ledger-metrics {
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 640px) {
-  .account-shell {
-    min-height: auto;
-  }
-
-  .identity-rail,
-  .account-main {
-    padding: 18px 18px 16px;
-  }
-
-  .surface-panel {
-    padding: 15px 16px;
-    border-radius: 20px;
-  }
-
+  .overview-grid,
   .profile-grid {
     grid-template-columns: 1fr;
-  }
-
-  .profile-row.full-width {
-    grid-column: auto;
-  }
-
-  .username {
-    font-size: 26px;
-  }
-
-  .credit-spotlight .spotlight-value,
-  .usage-primary .usage-value {
-    font-size: 28px;
-  }
-
-  .phone-input {
-    width: 100%;
-  }
-}
-
-@media (max-height: 820px) {
-  .account-shell {
-    grid-template-columns: 264px minmax(0, 1fr);
-    min-height: min(520px, calc(100dvh - 24px));
-    max-height: calc(100dvh - 24px);
-  }
-
-  .identity-rail {
-    gap: 12px;
-    padding: 18px 16px;
-  }
-
-  .account-main {
-    gap: 10px;
-    padding: 18px 18px 16px;
-  }
-
-  .username {
-    font-size: 24px;
-  }
-
-  .credit-spotlight .spotlight-value,
-  .usage-primary .usage-value {
-    font-size: 26px;
-  }
-
-  .main-header h3 {
-    font-size: 22px;
-  }
-
-  .surface-panel {
-    padding: 14px 16px;
-  }
-
-  .profile-row {
-    min-height: 56px;
-    padding: 10px 12px;
-  }
-
-  .hero-spotlight,
-  .credit-spotlight {
-    padding: 12px 14px;
   }
 }
 </style>

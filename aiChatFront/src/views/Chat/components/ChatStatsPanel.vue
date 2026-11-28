@@ -41,14 +41,31 @@
       </div>
     </div>
 
-    <div class="stats-progress">
-      <a-progress
-        :percent="billablePercent"
-        :show-info="false"
-        stroke-color="#1570ef"
-        trail-color="#eaecf0"
-      />
-      <span class="progress-text">有成本记录的会话占比 {{ billablePercent }}%</span>
+    <div v-if="modelBreakdown && modelBreakdown.length > 0" class="model-breakdown">
+      <div class="breakdown-header">
+        <span>常用模型消耗分布</span>
+        <span class="breakdown-hint">按已加载会话</span>
+      </div>
+      <div class="breakdown-bars">
+        <div
+          v-for="item in modelBreakdown"
+          :key="item.model"
+          class="breakdown-row"
+        >
+          <div class="breakdown-meta">
+            <code class="breakdown-model">{{ item.model }}</code>
+            <span class="breakdown-figures">
+              {{ item.sessions }} 会话 · {{ formatToken(item.tokens) }} tok · {{ item.percentage }}%
+            </span>
+          </div>
+          <div class="breakdown-track">
+            <div
+              class="breakdown-fill"
+              :style="{ width: `${Math.max(item.percentage, 3)}%` }"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -57,6 +74,7 @@
 import { computed } from 'vue'
 import { PieChartOutlined } from '@ant-design/icons-vue'
 import type { ConversationStatsSummary } from '@/interface/conversation'
+import type { ModelUsageBreakdownItem } from '../utils/conversationInsights'
 
 defineOptions({
   name: 'ChatStatsPanel',
@@ -64,6 +82,7 @@ defineOptions({
 
 interface Props {
   summary: ConversationStatsSummary
+  modelBreakdown?: ModelUsageBreakdownItem[]
 }
 
 const props = defineProps<Props>()
@@ -91,10 +110,11 @@ const formatToken = (value: number) => {
 .chat-stats-panel {
   height: 100%;
   padding: 16px 18px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
 }
 
 .stats-header {
@@ -102,33 +122,32 @@ const formatToken = (value: number) => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .stats-title {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
 
   h4 {
     margin: 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    color: #101828;
+    color: #0f172a;
   }
 
   p {
-    margin: 4px 0 0;
+    margin: 2px 0 0;
     font-size: 12px;
-    line-height: 1.5;
-    color: #667085;
+    line-height: 1.45;
+    color: #64748b;
   }
 }
 
 .stats-icon {
-  width: 18px;
-  height: 18px;
-  margin-top: 4px;
+  font-size: 16px;
+  margin-top: 3px;
   color: #1570ef;
   flex-shrink: 0;
 }
@@ -137,12 +156,14 @@ const formatToken = (value: number) => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  max-width: 180px;
+  height: 24px;
+  max-width: 170px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.05);
-  color: #344054;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -152,51 +173,53 @@ const formatToken = (value: number) => {
 }
 
 .hero-figure {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 12px;
-  padding: 14px 0 16px;
-  margin-bottom: 8px;
-  border-top: 1px solid rgba(15, 23, 42, 0.06);
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  padding: 12px 0;
+  margin-bottom: 4px;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .hero-main {
   .hero-label {
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    color: #667085;
-    text-transform: uppercase;
+    font-weight: 600;
+    color: #64748b;
   }
 
   .hero-value {
     display: block;
-    font-size: 30px;
-    line-height: 0.95;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 24px;
+    line-height: 1.05;
     font-weight: 700;
-    color: #101828;
+    color: #0f172a;
   }
 }
 
 .hero-side {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   align-items: flex-end;
   text-align: right;
 
   .hero-side-label {
     font-size: 11px;
-    color: #667085;
-    margin-bottom: 6px;
+    color: #64748b;
+    margin-bottom: 4px;
   }
 
   .hero-side-value {
-    font-size: 22px;
-    line-height: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    line-height: 1.05;
     font-weight: 700;
     color: #1570ef;
   }
@@ -204,86 +227,110 @@ const formatToken = (value: number) => {
 
 .stats-list {
   display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding: 10px 0 4px;
 }
 
 .stats-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-
-  &:last-child {
-    border-bottom: none;
-  }
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f1f5f9;
 
   span {
     font-size: 12px;
-    color: #667085;
+    color: #64748b;
   }
 
   strong {
-    font-size: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
     font-weight: 600;
-    color: #101828;
+    color: #0f172a;
     text-align: right;
   }
 }
 
-.stats-progress {
-  .progress-text {
-    display: block;
-    margin-top: 4px;
-    text-align: right;
-    font-size: 11px;
-    color: #667085;
-  }
+.model-breakdown {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
 
-  :deep(.ant-progress-inner) {
-    border-radius: 999px;
-  }
+.breakdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
 
-  :deep(.ant-progress-bg) {
-    height: 6px !important;
-  }
+.breakdown-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.breakdown-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.breakdown-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdown-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.breakdown-model {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdown-figures {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.breakdown-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.breakdown-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #1570ef;
+  transition: width 0.24s ease;
 }
 
 @media (max-width: 640px) {
-  .chat-stats-panel {
-    padding: 14px 16px;
-    border-radius: 20px;
-  }
-
-  .stats-header,
-  .hero-figure {
+  .stats-list {
     grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .stats-header {
-    gap: 10px;
-  }
-
-  .hero-side {
-    align-items: flex-start;
-    text-align: left;
-  }
-}
-
-@media (max-height: 820px) {
-  .chat-stats-panel {
-    padding: 14px 16px;
-  }
-
-  .hero-main .hero-value {
-    font-size: 26px;
-  }
-
-  .hero-side .hero-side-value {
-    font-size: 20px;
   }
 }
 </style>

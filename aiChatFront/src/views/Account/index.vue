@@ -109,9 +109,10 @@ watch(
   min-height: 0;
   padding: 10px 16px 16px;
   display: flex;
+  overflow: auto;
+  align-items: flex-start;
 
-  :deep(.account-inline) {
-    flex: 1;
+  :deep(.account-inline-surface) {
     min-height: 0;
   }
 }

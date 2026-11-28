@@ -101,3 +101,60 @@ export const buildConversationStatsSummary = (
     topModel,
   }
 }
+
+export interface ModelUsageBreakdownItem {
+  model: string
+  tokens: number
+  sessions: number
+  percentage: number
+}
+
+/**
+ * 统计各模型在已加载会话中的消耗分布（按 Token 优先，零 Token 时回退按会话次数占比）
+ */
+export const buildModelUsageBreakdown = (
+  conversations: Conversation[],
+  limit: number = 4,
+): ModelUsageBreakdownItem[] => {
+  const usageMap = new Map<string, { tokens: number; sessions: number }>()
+
+  conversations.forEach((conversation) => {
+    const model = getLastModel(conversation)
+    if (!model) return
+    const current = usageMap.get(model) || { tokens: 0, sessions: 0 }
+    usageMap.set(model, {
+      tokens: current.tokens + getTokenTotal(conversation),
+      sessions: current.sessions + 1,
+    })
+  })
+
+  if (usageMap.size === 0) return []
+
+  const entries = Array.from(usageMap.entries()).map(([model, stats]) => ({
+    model,
+    tokens: stats.tokens,
+    sessions: stats.sessions,
+  }))
+
+  const totalTokens = entries.reduce((sum, item) => sum + item.tokens, 0)
+  const totalSessions = entries.reduce((sum, item) => sum + item.sessions, 0)
+
+  entries.sort((a, b) => {
+    if (b.tokens !== a.tokens) return b.tokens - a.tokens
+    if (b.sessions !== a.sessions) return b.sessions - a.sessions
+    return a.model.localeCompare(b.model)
+  })
+
+  return entries.slice(0, Math.max(1, limit)).map((item) => {
+    const percentage = totalTokens > 0
+      ? Math.round((item.tokens / totalTokens) * 100)
+      : totalSessions > 0
+        ? Math.round((item.sessions / totalSessions) * 100)
+        : 0
+
+    return {
+      ...item,
+      percentage,
+    }
+  })
+}

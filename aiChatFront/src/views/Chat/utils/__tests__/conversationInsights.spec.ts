@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildConversationStatsSummary,
+  buildModelUsageBreakdown,
   filterConversations,
   sortConversations,
 } from '../conversationInsights'
@@ -87,5 +88,43 @@ describe('conversationInsights', () => {
       totalEstimatedCost: 1.62,
       topModel: 'GPT-5.4',
     })
+  })
+
+  it('builds model usage breakdown sorted by token usage descending', () => {
+    expect(buildModelUsageBreakdown(conversations)).toEqual([
+      { model: 'GPT-5.4', tokens: 400, sessions: 1, percentage: 73 },
+      { model: 'GLM-5', tokens: 150, sessions: 1, percentage: 27 },
+    ])
+
+    const zeroTokenConversations: Conversation[] = [
+      createConversation('z1', {
+        lastModel: 'spark-x2.6',
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        totalEstimatedCost: 0,
+        totalChargedCredits: 0,
+      }),
+      createConversation('z2', {
+        lastModel: 'spark-x2.6',
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        totalEstimatedCost: 0,
+        totalChargedCredits: 0,
+      }),
+      createConversation('z3', {
+        lastModel: 'glm-4',
+        totalPromptTokens: 0,
+        totalCompletionTokens: 0,
+        totalTokens: 0,
+        totalEstimatedCost: 0,
+        totalChargedCredits: 0,
+      }),
+    ]
+    expect(buildModelUsageBreakdown(zeroTokenConversations)).toEqual([
+      { model: 'spark-x2.6', tokens: 0, sessions: 2, percentage: 67 },
+      { model: 'glm-4', tokens: 0, sessions: 1, percentage: 33 },
+    ])
   })
 })

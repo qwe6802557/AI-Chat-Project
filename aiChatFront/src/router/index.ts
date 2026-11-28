@@ -116,7 +116,7 @@ const router = createRouter({
       name: 'account',
       component: () => import('../views/Account/index.vue'),
       meta: {
-        title: 'My Account',
+        title: '个人账户中心',
         requiresAuth: true,
       },
     },

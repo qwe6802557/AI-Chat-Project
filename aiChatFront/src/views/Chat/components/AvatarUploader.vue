@@ -1,14 +1,15 @@
 <template>
   <div class="avatar-uploader">
     <div
-      class="avatar-container"
+      :class="['avatar-container', { compact: avatarSize <= 64 }]"
+      :style="{ width: `${avatarSize}px`, height: `${avatarSize}px` }"
       @click="triggerUpload"
       @mouseenter="showOverlay = true"
       @mouseleave="showOverlay = false"
     >
       <!-- 头像显示 -->
       <a-avatar
-        :size="80"
+        :size="avatarSize"
         :src="currentAvatar"
         class="avatar"
       >
@@ -49,7 +50,10 @@ defineOptions({
 
 const props = defineProps<{
   avatar?: string | null
+  size?: number
 }>()
+
+const avatarSize = computed(() => props.size ?? 80)
 
 const emit = defineEmits<{
   'update:avatar': [url: string]
@@ -114,10 +118,24 @@ const handleFileChange = async (event: Event) => {
     .avatar {
       width: 100%;
       height: 100%;
-      background: #5B5BD6;
+      background: #1570ef;
 
       :deep(.anticon) {
         font-size: 32px;
+      }
+    }
+
+    &.compact {
+      .avatar :deep(.anticon) {
+        font-size: 24px;
+      }
+
+      .avatar-overlay .overlay-icon {
+        font-size: 16px;
+      }
+
+      .avatar-overlay .overlay-text {
+        font-size: 10px;
       }
     }
 

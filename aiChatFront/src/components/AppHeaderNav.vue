@@ -121,6 +121,9 @@
       </a-dropdown>
     </div>
 
+    <!-- 个人账户中心弹窗 -->
+    <AccountModal v-model:open="showAccountModal" />
+
     <!-- 模型管理控制台弹窗 (超管) -->
     <ModelManageModal v-if="isAdmin" v-model:open="showModelManageModal" />
 
@@ -155,6 +158,7 @@ import {
 } from '@ant-design/icons-vue'
 import { useAuthStore, useConversationStore } from '@/stores'
 import AboutModal from '@/views/Chat/components/AboutModal.vue'
+import AccountModal from '@/views/Chat/components/AccountModal.vue'
 import ModelManageModal from './ModelManageModal.vue'
 import AssistantChannelModal from './AssistantChannelModal.vue'
 
@@ -170,6 +174,7 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const conversationStore = useConversationStore()
+const showAccountModal = ref(false)
 const showAboutModal = ref(false)
 const showModelManageModal = ref(false)
 const showAssistantModal = ref(false)
@@ -219,13 +224,8 @@ const handleSwitchMode = (mode: 'chat' | 'image' | 'video' | 'voice' | 'knowledg
   }
 }
 
-const handleOpenAccount = async () => {
-  await router.push({
-    name: 'account',
-    query: {
-      from: route.fullPath,
-    },
-  })
+const handleOpenAccount = () => {
+  showAccountModal.value = true
 }
 
 const handleClearConversations = () => {
