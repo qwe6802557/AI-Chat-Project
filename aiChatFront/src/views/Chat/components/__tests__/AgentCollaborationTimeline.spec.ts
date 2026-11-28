@@ -95,4 +95,55 @@ describe('AgentCollaborationTimeline', () => {
     await wrapper.find('.timeline-header').trigger('click')
     expect(wrapper.find('.timeline-body').exists()).toBe(false)
   })
+
+  it('starts collapsed when completed under auto-collapse mode and auto-collapses when streaming finishes', async () => {
+    const completedTimeline: SwarmTimelineEvent[] = [
+      {
+        id: 'swarm_done',
+        type: 'dag_node',
+        timestamp: Date.now(),
+        fromAgent: 'DAG 引擎',
+        toAgent: '主分析智能体',
+        durationMs: 2400,
+        status: 'completed',
+      },
+    ]
+
+    const historicalWrapper = mount(AgentCollaborationTimeline, {
+      props: {
+        timeline: completedTimeline,
+        streaming: false,
+        defaultExpanded: false,
+        autoCollapseOnComplete: true,
+      },
+    })
+    expect(historicalWrapper.find('.timeline-body').exists()).toBe(false)
+    expect(historicalWrapper.text()).toContain('1 节点')
+    expect(historicalWrapper.text()).toContain('2.4s')
+
+    const liveWrapper = mount(AgentCollaborationTimeline, {
+      props: {
+        timeline: [
+          {
+            ...completedTimeline[0],
+            status: 'running',
+            durationMs: undefined,
+          },
+        ],
+        streaming: true,
+        defaultExpanded: true,
+        autoCollapseOnComplete: true,
+      },
+    })
+    expect(liveWrapper.find('.timeline-body').exists()).toBe(true)
+
+    await liveWrapper.setProps({
+      timeline: completedTimeline,
+      streaming: false,
+    })
+    expect(liveWrapper.find('.timeline-body').exists()).toBe(false)
+
+    await liveWrapper.find('.timeline-header').trigger('click')
+    expect(liveWrapper.find('.timeline-body').exists()).toBe(true)
+  })
 })

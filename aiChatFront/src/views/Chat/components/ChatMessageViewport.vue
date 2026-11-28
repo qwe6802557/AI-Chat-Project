@@ -85,6 +85,9 @@
             <AgentCollaborationTimeline
               v-if="message.role === 'assistant' && message.agentTimeline && message.agentTimeline.length > 0"
               :timeline="message.agentTimeline"
+              :streaming="Boolean(message.streaming)"
+              :default-expanded="Boolean(message.streaming)"
+              :auto-collapse-on-complete="true"
             />
             <ToolExecutionCard
               v-if="message.role === 'assistant' && message.toolCalls && message.toolCalls.length > 0"
