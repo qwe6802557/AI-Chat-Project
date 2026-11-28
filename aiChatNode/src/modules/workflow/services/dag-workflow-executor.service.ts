@@ -886,11 +886,14 @@ export class DagWorkflowExecutorService {
       return preferred.trim();
     }
     try {
-      const models = await this.aiModelService.findActiveModels(true);
+      const models = await this.aiModelService.findActiveModels(true, 'chat');
+      const chatModels = models.filter(
+        (m) => m.category === 'chat' && m.isActive,
+      );
       const picked =
-        models.find((m) => m.isDefault && m.isActive) ||
-        models.find((m) => m.category === 'chat' && m.isActive) ||
-        models[0];
+        chatModels.find((m) => m.isDefault) ||
+        chatModels[0] ||
+        models.find((m) => m.isDefault && m.isActive);
       return picked?.modelId || 'GLM-5';
     } catch {
       return 'GLM-5';

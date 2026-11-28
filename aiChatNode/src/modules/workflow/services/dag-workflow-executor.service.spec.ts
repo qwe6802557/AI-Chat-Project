@@ -84,12 +84,18 @@ describe('DagWorkflowExecutorService & Validator', () => {
       findActiveModels: jest.fn(() =>
         Promise.resolve([
           {
+            modelId: 'edge-tts',
+            isDefault: true,
+            isActive: true,
+            category: 'voice',
+          },
+          {
             modelId: 'GLM-5',
             isDefault: true,
             isActive: true,
             category: 'chat',
-          } as any,
-        ]),
+          },
+        ] as Awaited<ReturnType<AiModelService['findActiveModels']>>),
       ),
     };
     mockRoleRepo = {
