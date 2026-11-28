@@ -421,4 +421,52 @@ const handleLogout = () => {
   border-radius: 8px;
   padding: 4px;
 }
+
+.mode-tab,
+.brand-text,
+.credits-badge,
+.mobile-download-btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 960px) {
+  .brand-text,
+  .mobile-download-btn {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header-nav {
+    padding: 0 10px;
+    gap: 8px;
+  }
+
+  .nav-center {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-center::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mode-tab {
+    padding: 4px 10px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .nav-right {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .credits-badge,
+  .user-name-tag {
+    display: none;
+  }
+}
 </style>
